@@ -15,7 +15,7 @@
 - Render-triangle interpolation used for tracks / foot placement.
 - Powder compression, raised rims, persistent world coordinates and bounded storage.
 - Alignment of the aerial-derived mask with the DEM.
-- A bounded steering controller reaches all checkpoints on all three imported trail lines within four simulated minutes.
+- A bounded steering controller reaches all checkpoints on all three imported trail lines within four simulated minutes, in both packed and powder snow.
 
 Route traversal verifies the simplified ground controller on the checked-in DEM, not field accuracy, beginner usability, or a full browser-session completion.
 

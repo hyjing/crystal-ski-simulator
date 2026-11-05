@@ -20,17 +20,17 @@ test('gravity accelerates a stationary skier down a slope',()=>{
   const s=simulate(skier(),neutral);assert.ok(s.z>8);assert.ok(s.vz>5);assert.equal(s.vx,0);
 });
 
-test('a bounded steering controller can reach every checkpoint on each real-terrain route',()=>{
+test('all real-terrain routes finish in both packed and powder snow',()=>{
   const terrain=createTerrain(JSON.parse(readFileSync(new URL('../public/data/crystal-dem.json',import.meta.url))));
-  for(const route of getRoutes(terrain,trailData)){
+  for(const snow of ['packed','soft'])for(const route of getRoutes(terrain,trailData)){
     const s=createSkier(route.points[0],route.points[1]);let next=1;
     for(let i=0;i<120*240&&next<route.points.length;i++){
       const p=route.points[next];let angle=Math.atan2(p.x-s.x,p.z-s.z)-s.heading;
       angle=Math.atan2(Math.sin(angle),Math.cos(angle));
-      stepSkier(s,{steer:clamp(-angle*2,-1,1),edge:s.speed>15||Math.abs(angle)>1?1:0},terrain,1/120);
+      stepSkier(s,{steer:clamp(-angle*2,-1,1),edge:s.speed>15||Math.abs(angle)>1?1:0},terrain,1/120,snow);
       if(Math.hypot(s.x-p.x,s.z-p.z)<65)next++;
     }
-    assert.equal(next,route.points.length,`${route.name} must finish within four simulated minutes`);
+    assert.equal(next,route.points.length,`${snow}: ${route.name} must finish within four simulated minutes`);
   }
 });
 test('flat terrain does not generate motion',()=>{
