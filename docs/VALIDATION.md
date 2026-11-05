@@ -1,30 +1,33 @@
-# Validation — v0.1
+# Validation — v0.2
 
 ## Automated
 
-`npm test` covers projected downhill gravity, flat-ground rest, braking, mirrored steering, snow drag, numerical stability, route projection, elevation-grid integrity, and route completion.
+`npm test` checks:
 
-The route regression uses bounded steering and braking through the same physics controller as the app. All checkpoints must be reached sequentially within four simulated minutes. On the included DEM, packed-snow runs complete in approximately:
+- Downhill gravity and stationary flat-ground behavior.
+- No pedal brake from pressing edge alone in a straight run.
+- Speed reduction from a completed turn / lateral skid.
+- Tuck reduces aerodynamic drag without creating forward thrust.
+- Mirrored steering, soft-snow drag, bounded finite simulation.
+- Kinetic energy does not exceed released gravitational energy on a constant slope.
+- Trail projection, DEM integrity and named OSM coordinate placement.
+- Render-triangle interpolation used for tracks / foot placement.
+- A bounded steering controller reaches all checkpoints on all three imported trail lines within four simulated minutes.
 
-| Prototype route | Controller time |
-| --- | --- |
-| Ridge to Valley | 144 seconds |
-| Open Bowl | 119 seconds |
-| Lower Traverse | 80 seconds |
+Route traversal verifies the simplified ground controller on the checked-in DEM, not field accuracy, beginner usability, or a full browser-session completion.
 
-This checks terrain traversability with the simplified controller. It does not establish official trail alignment, beginner usability, collision-free traversal away from the reference corridor, or a full browser-session completion.
+`npm run build` compiles the static app. The app bundles Three.js and uses local elevation / trail data. The expected renderer bundle size warning is informational.
 
-`npm run build` produces the static application. The renderer bundle includes Three.js; no terrain API is contacted during play.
+## Browser QA
 
-## Interactive browser checks
+Interactive checks cover loading the snow shader / context terrain, moving on terrain, visible twin ski tracks, steering, tuck input, restarting, pause, overview and keyboard controls. Browser console is checked for shader / runtime errors.
 
-- DEM loads and renders in WebGL.
-- Starting a session changes the route panel to live telemetry.
-- Unbraked motion increases speed and lowers elevation.
-- Holding Space reduces speed substantially.
-- Turning responds to keyboard input.
-- R resets to the current checkpoint and updates elevation / position.
-- Follow / overview switching changes the camera mode.
-- Pause opens the session dialog.
+The HUD reports current FPS and averaged per-frame CPU physics cost. This is not a sustained benchmark across named hardware, browsers or mobile devices.
 
-No sustained frame-rate benchmark on named hardware has been performed.
+## Remaining fidelity limits
+
+- No measured snow friction / edge calibration or flight / landing physics.
+- OSM lines may not coincide precisely with winter snow and grooming.
+- Snow tracks are lit surface ribbons with rim shading, not actual displaced snow volume.
+- Procedural trees still need accurate forest boundaries and more detailed assets.
+- The surrounding 120 m DEM reproduces large mountain form, not detailed glaciers or cliffs.

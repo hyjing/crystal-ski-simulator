@@ -17,22 +17,22 @@
       <div id="routes" class="routes"></div>
       <div class="snow-row"><span>雪面设定</span><div class="segmented" role="group" aria-label="雪面"><button data-snow="packed" class="selected">硬实雪</button><button data-snow="soft">软雪</button></div></div>
       <button id="start" class="start">开始滑行 <span>DROP IN ↗</span></button>
-      <p class="data-note"><span class="tiny-dot"></span>真实 USGS 高程 · 约 20m 采样<br><span>演示线路 / 程序树林，并非官方雪道复刻</span></p>
+      <p class="data-note"><span class="tiny-dot"></span>真实 USGS 高程 · 约 20m 采样<br><span>OSM 雪道路线 / 程序树林，非官方测绘复刻</span></p>
     </section>
     <div id="loading" class="loading">正在载入真实山体…</div>
     <section id="session" class="session hidden" aria-label="滑行数据">
       <div class="session-top"><span class="live-dot"></span><span id="session-name">RIDGE TO VALLEY</span><button id="pause" class="icon-btn">暂停 Ⅱ</button></div>
       <div class="speed"><span id="speed">0</span><span class="unit">KM/H</span></div>
       <div class="metrics"><div><span id="altitude">—</span><small>海拔 M</small></div><div><span id="slope">—</span><small>坡度 °</small></div><div><span id="timer">0:00</span><small>滑行时间</small></div></div>
-      <div class="progress"><div id="progress"></div></div><div class="session-foot"><span id="distance">0 m</span><button id="leave">返回选线 ↗</button></div>
+      <div class="stance-row"><span id="stance">直滑</span><small id="performance">— FPS</small></div><div class="progress"><div id="progress"></div></div><div class="session-foot"><span id="distance">0 m</span><button id="leave">返回选线 ↗</button></div><button id="restart" class="restart">↻ 重新开始 <kbd>N</kbd></button>
     </section>
-    <div class="terrain-caption"><span class="crosshair">＋</span><span>CRYSTAL MOUNTAIN<span>WGS 84 / UTM 10N · 3DEP ELEVATION</span></span></div>
-    <aside class="map-panel"><div class="map-heading"><span>THE MOUNTAIN</span><span>N ↑</span></div><canvas id="minimap" width="280" height="210" aria-label="线路和玩家位置地图"></canvas><div class="map-footer"><span><i></i> <span id="map-label">RIDGE TO VALLEY</span></span><button id="overview" title="切换俯瞰镜头">俯瞰 <kbd>O</kbd></button></div></aside>
-    <div id="controls" class="controls"><span><kbd>A</kbd><kbd>D</kbd> 转弯</span><span><kbd>SPACE</kbd> 刹车</span><span><kbd>R</kbd> 重置</span><span><kbd>ESC</kbd> 暂停</span></div>
+    <div class="terrain-caption"><span class="crosshair">＋</span><span>CRYSTAL MOUNTAIN<span>USGS 3DEP · <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">© OpenStreetMap contributors</a></span></span></div>
+    <aside class="map-panel"><div class="map-heading"><span>THE MOUNTAIN</span><span>N ↑</span></div><canvas id="minimap" width="280" height="210" aria-label="线路和玩家位置地图"></canvas><div class="map-footer"><span><i></i> <span id="map-label">RIDGE TO VALLEY</span></span><button id="overview" title="切换俯瞰镜头">俯瞰 <kbd>O</kbd></button></div><a class="map-attribution" href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">© OpenStreetMap contributors · USGS 3DEP</a></aside>
+    <div id="controls" class="controls"><span><kbd>A</kbd><kbd>D</kbd> 转弯</span><span><kbd>W</kbd> 收身</span><span><kbd>SPACE</kbd> 立刃</span><span><kbd>R</kbd> 重置</span><span><kbd>ESC</kbd> 暂停</span></div>
     <div id="toast" class="toast" role="status"></div>
-    <div class="touch-controls" id="touch"><button data-key="KeyA" aria-label="左转">←</button><button data-key="Space">刹车</button><button data-key="KeyD" aria-label="右转">→</button></div>
+    <div class="touch-controls" id="touch"><button data-key="KeyA" aria-label="左转">←</button><button data-key="KeyW">收身</button><button data-key="Space">立刃</button><button data-key="KeyD" aria-label="右转">→</button></div>
   </main>
-  <dialog id="help-dialog"><button class="close-dialog" aria-label="关闭">×</button><div class="eyebrow">YOUR FIRST RUN</div><h2>让转弯控制速度。</h2><p>顺着坡面会加速，横切和刹车可以减速。跟着荧光路标朝山谷前进，也可以自由探索坡面。</p><dl><dt>A / D 或 ← / →</dt><dd>左右转弯</dd><dt>空格 / ↓</dt><dd>刹车</dd><dt>R</dt><dd>返回最近检查点</dd><dt>O</dt><dd>跟随 / 俯瞰镜头</dd><dt>Esc / P</dt><dd>暂停与继续</dd></dl><p class="muted">真实高程地形；雪面、树林及线路为原型内容。独立项目，与 Crystal Mountain Resort 无关联。</p><button class="start close-help">明白了，去滑雪 ↗</button></dialog>
+  <dialog id="help-dialog"><button class="close-dialog" aria-label="关闭">×</button><div class="eyebrow">YOUR FIRST RUN</div><h2>让转弯控制速度。</h2><p>顺坡加速，连续转弯与横切控速。长按转弯完成弯形；配合空格加强立刃和侧滑减速。跟着荧光路标朝山谷前进，也可以自由探索坡面。</p><dl><dt>A / D 或 ← / →</dt><dd>左右转弯</dd><dt>空格 / ↓</dt><dd>加强立刃（配合转弯）</dd><dt>W / ↑</dt><dd>收身，降低空气阻力</dd><dt>N</dt><dd>从起点重新开始</dd><dt>R</dt><dd>返回最近检查点</dd><dt>O</dt><dd>跟随 / 俯瞰镜头</dd><dt>Esc / P</dt><dd>暂停与继续</dd></dl><p class="muted">真实高程 + OSM 雪道参考；雪面和树林为程序内容。独立项目，与 Crystal Mountain Resort 无关联。</p><button class="start close-help">明白了，去滑雪 ↗</button></dialog>
   <dialog id="result"><div class="eyebrow">LINE COMPLETE</div><h2>Nice line.</h2><p>山谷到了。再换一种节奏？</p><div id="result-stats" class="result-stats"></div><button id="again" class="start">再滑一次 ↗</button><button id="choose" class="secondary">选择其他线路</button></dialog>
   <dialog id="pause-dialog"><div class="eyebrow">TAKE A BREATH</div><h2>山还在那里。</h2><p>准备好了，就继续这一趟。</p><button id="resume" class="start">继续滑行 ↗</button><button id="pause-restart" class="secondary">从起点重新开始</button><button id="pause-exit" class="secondary">返回选线</button></dialog>
   <script type="module" src="/src/main.js"></script>
