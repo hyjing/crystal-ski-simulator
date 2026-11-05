@@ -18,6 +18,7 @@ Steering used two slow exponential filters, followed by a camera filter with a 2
 - Tighten follow camera and body response while retaining smoothing.
 - Cap default device-pixel ratio at 1.25 instead of 1.75. This changes canvas raster resolution, not terrain dimensions or DOM text.
 - If sustained frame P95 exceeds 24 ms, reduce raster scale in small steps, down to 0.85. Keep all terrain, trees and snow interaction.
+- Prewarm direct and post-processing shaders while the loading UI is visible, avoiding a first-toggle compilation hitch during play.
 - Disable peripheral blur by default. When blur has zero strength, bypass the entire post-processing chain. The user can still enable it.
 - FPS tooltip now includes raw frame interval P95, maximum interval, count of intervals >25 ms, CPU powder / physics time and raster scale. Unlike average FPS, this can expose brief hitches.
 

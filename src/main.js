@@ -59,7 +59,7 @@ async function init(){
   fetch(`${import.meta.env.BASE_URL}data/context-dem.json`).then(r=>{if(!r.ok)throw new Error('context DEM');return r.json();}).then(data=>addContextTerrain(scene,data,terrain)).catch(()=>toast('远山数据载入失败，近处地形仍可滑行'));
   $('routes').innerHTML=routes.map((r,i)=>`<button class="route ${i===0?'active':''}" data-route="${r.id}" aria-pressed="${i===0}" style="--route:${r.color}"><span class="route-dot"></span><span class="route-text"><span class="route-name">${r.name}</span><span class="route-sub">${r.subtitle} · ${r.label}</span></span><span class="route-stat">${(r.length/1000).toFixed(1)} km<small>↓ ${Math.round(r.drop)} m</small></span></button>`).join('');
   document.querySelectorAll('[data-route]').forEach(b=>b.addEventListener('click',()=>selectRoute(b.dataset.route)));
-  selectRoute(route.id); $('loading').classList.add('hidden'); $('start').disabled=false;
+  selectRoute(route.id);speedRenderer.prepare();$('loading').classList.add('hidden'); $('start').disabled=false;
   requestAnimationFrame(animate);
 }
 

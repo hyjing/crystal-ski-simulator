@@ -20,6 +20,11 @@ export class SpeedRenderer{
     if(strength<.0001){this.renderer.render(this.scene,this.camera);return;}
     this.blur.uniforms.strength.value=strength;this.composer.render();
   }
+  prepare(){
+    // Compile both paths while the loading UI is visible, before any ski run.
+    this.blur.uniforms.strength.value=.001;this.composer.render();
+    this.blur.uniforms.strength.value=0;this.renderer.render(this.scene,this.camera);
+  }
   resize(w,h){this.composer.setSize(w,h);}
   setPixelRatio(ratio){this.composer.setPixelRatio(ratio);}
 }
