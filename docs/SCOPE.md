@@ -1,11 +1,13 @@
 # Development scope
 
-## v0.2 — feedback iteration
+## v0.3 — feedback iteration
 
 - [x] Real local + surrounding USGS elevation grids
 - [x] Green Valley, Lucky Shot section and Tinkerbell from OSM coordinates
 - [x] PBR snow relief / roughness, stronger side lighting and dynamic local shadows
-- [x] Twin terrain-conforming ski tracks, bounded persistent buffer and snow spray
+- [x] Near-field powder displacement, compressed grooves / raised rims, bounded world field and snow spray
+- [x] NAIP aerial minimap, vegetation likelihood and generated snow-covered fir assets
+- [x] OSM-positioned lift / building proxies and optional peripheral speed blur
 - [x] Turn / edge speed control; remove pedal braking
 - [x] SI-unit mass / friction / air-drag parameters and tuck posture
 - [x] Realistic skier scale, closer camera and speed-dependent field of view
@@ -23,4 +25,4 @@
 
 ## Outside this prototype
 
-Complete resort recreation, multiplayer, live weather / snow conditions, avalanche simulation, articulated leg biomechanics, volumetric snow, VR and snowboarding.
+Complete resort recreation, multiplayer, live weather / snow conditions, avalanche simulation, articulated leg biomechanics, granular volumetric snow, VR and snowboarding.

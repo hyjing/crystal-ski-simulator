@@ -2,7 +2,9 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { createTerrain, getRoutes } from '../src/terrain.js';
-import { createSkier, stepSkier, nearestOnRoute, clamp } from '../src/physics.js';
+import { createSkier, stepSkier, nearestOnRoute, clamp, PHYSICS } from '../src/physics.js';
+import {PowderField} from '../src/powder.js';
+import {forestLikelihood} from '../src/resort.js';
 
 const flat={gradient:()=>({x:0,z:0})};
 const slope={gradient:()=>({x:0,z:-.3})};
@@ -34,9 +36,15 @@ test('a bounded steering controller can reach every checkpoint on each real-terr
 test('flat terrain does not generate motion',()=>{
   const s=simulate(skier(),neutral,5,flat);assert.equal(s.speed,0);assert.equal(s.distance,0);
 });
-test('edge input alone does not act as an artificial brake in a straight run',()=>{
-  const straight=simulate(skier(),neutral,8),edged=simulate(skier(),{steer:0,edge:1},8);
-  assert.ok(Math.abs(edged.speed-straight.speed)<.01);
+test('edge alone enters an arc on the last selected side, with no flat-ground thrust',()=>{
+  const s=skier();s.vz=15;simulate(s,{steer:0,edge:1},2,flat);
+  assert.ok(s.x<0&&s.heading<-.5);assert.ok(s.edgeAngle>.8);
+  assert.equal(simulate(skier(),{steer:0,edge:1},3,flat).speed,0);
+});
+test('pressing the edge gives a materially tighter turn than flat-ski yaw',()=>{
+  const a=skier(),b=skier();a.vz=b.vz=18;
+  simulate(a,{steer:1,edge:0},2,flat);simulate(b,{steer:1,edge:1},2,flat);
+  assert.ok(Math.abs(b.heading)>Math.abs(a.heading)*1.8);
 });
 test('completing a turn controls speed through sideways skid and cross-slope travel',()=>{
   const direct=skier(),turned=skier();direct.vz=turned.vz=15;
@@ -81,7 +89,38 @@ test('soft snow has more drag than packed snow',()=>{
 });
 test('long-running physics stays finite and bounded',()=>{
   const s=simulate(skier(),neutral,300,{gradient:()=>({x:.1,z:-1.5})});
-  for(const v of Object.values(s))assert.ok(Number.isFinite(v));assert.ok(Math.hypot(s.vx,s.vz)<=42.0001);
+  for(const v of Object.values(s))assert.ok(Number.isFinite(v));assert.ok(Math.hypot(s.vx,s.vz)<=PHYSICS.maxHorizontalSpeed+.0001);
+});
+
+test('powder compression persists in world coordinates, piles snow at the rim and clears on restart',()=>{
+  const field=new PowderField();field.stamp(20,-10,.5,.16);
+  assert.ok(field.get(20,-10)<-.12);assert.ok(field.get(20.75,-10)>0);assert.equal(field.get(-40,20),0);
+  field.stamp(20,-10,.5,.08);assert.ok(field.get(20,-10)<-.12);
+  field.clear();assert.equal(field.get(20,-10),0);
+});
+
+test('powder storage remains bounded across long runs',()=>{
+  const field=new PowderField(1500);for(let i=0;i<300;i++)field.stamp(i,0,.5,.15);
+  assert.ok(field.cells.size<=1500);assert.ok(field.get(299,0)<0);
+});
+
+test('aerial-derived landcover aligns with the elevation grid and excludes samples outside it',()=>{
+  const t=createTerrain(JSON.parse(readFileSync(new URL('../public/data/crystal-dem.json',import.meta.url))));
+  const mask=JSON.parse(readFileSync(new URL('../public/data/crystal-landcover.json',import.meta.url)));
+  assert.equal(mask.values.length,t.width*t.height);assert.equal(mask.extent.spatialReference.wkid,t.epsg);
+  const p=t.world(100,150);assert.equal(forestLikelihood(t,mask,p.x,p.z),mask.values[150*t.width+100]);
+  assert.equal(forestLikelihood(t,mask,1e6,1e6),0);
+});
+
+test('resort data includes named lifts and closed building footprints',()=>{
+  const data=JSON.parse(readFileSync(new URL('../public/data/crystal-infrastructure.json',import.meta.url)));
+  assert.ok(data.features.some(f=>f.properties.aerialway==='chair_lift'&&f.properties.name==='Green Valley'));
+  assert.ok(data.features.some(f=>f.properties.name==='Summit House'));
+  for(const feature of data.features){
+    if(feature.geometry.type==='Polygon'){
+      const ring=feature.geometry.coordinates[0];assert.deepEqual(ring[0],ring.at(-1));assert.ok(ring.length>=4);
+    }
+  }
 });
 test('route projection gives correct progress and off-route distance',()=>{
   const result=nearestOnRoute({x:4,z:6},[{x:0,z:0},{x:0,z:10},{x:10,z:10}]);

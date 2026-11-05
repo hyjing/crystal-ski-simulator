@@ -24,7 +24,7 @@ npm run preview
 | Input | Action |
 | --- | --- |
 | A / D or Left / Right | Hold to complete a turn and control speed |
-| Space or Down | Stronger edge engagement; combine with a turn to skid / slow |
+| Space or Down | Roll onto an edge and enter an arc on the last selected side |
 | W or Up | Tuck: lower posture and aerodynamic drag |
 | N / visible Restart button | Restart the entire run, clearing time, distance and tracks |
 | R | Return to the latest checkpoint; preserve session stats |
@@ -32,16 +32,19 @@ npm run preview
 | Esc / P | Pause / resume |
 | H | Help |
 
-Space alone is deliberately **not a pedal brake**. Skiing across the slope reduces downhill acceleration; turning and lateral skid dissipate energy. Tucking reduces drag and cannot accelerate a stationary skier on flat ground.
+Space enters a turn rather than applying pedal-style direct deceleration. A / D select its direction. Skiing across the slope reduces downhill acceleration; turning and lateral skid dissipate energy. Tucking reduces drag and cannot accelerate a stationary skier on flat ground.
 
-## v0.2 changes
+## v0.3 changes
 
-- PBR snow micro-normal, albedo and roughness maps, broad surface variation, directional sunlight and local dynamic shadows.
-- Two ski grooves follow the rendered terrain triangles, with subtle displaced-rim shading. Sliding produces short-lived snow spray. Tracks remain for the current run, including checkpoint resets, with a bounded 8,500-segment ring buffer. This is a surface effect, not volumetric snow deformation.
-- Three real named OSM trail geometries replace the invented demo lines: **Green Valley**, **Lucky Shot**, and **Tinkerbell**.
-- Real surrounding mountains, including the geographic area containing Mount Rainier, use another georeferenced USGS DEM. Their visibility depends on camera direction and foreground occlusion.
-- Steering / edge control, mass-based aerodynamic drag, adjustable snow friction, tuck posture and calibrated skier scale.
-- Visible Restart button, N shortcut, stance indicator and frame-rate readout. Hover the FPS number for the averaged per-frame CPU physics time, excluding rendering.
+- **Powder is the default.** The near-field tessellated snow layer compresses under the skis and forms displaced rims, with world-coordinate imprints retained in a bounded field. Loose snow spray accompanies sliding / edge engagement. Hard snow remains selectable.
+- Snow grain uses irregular multiscale noise, replacing the repeating ribbed appearance.
+- Space now rolls the skis into an arc on the last selected side; A / D choose left / right. A 19 m nominal sidecut and lean-dependent turning limit make high edge angles produce a materially tighter turn. Ski roll, body lean and a degree readout expose the result.
+- More speed-dependent field of view and optional peripheral blur. Tuck CdA is 0.25; the horizontal safety cap is 55 m/s. Gravity and drag continue to determine actual speed; no artificial engine thrust is added.
+- A georeferenced public-domain NAIP aerial image is available in the minimap. An aerial-derived RGB vegetation likelihood replaces invented forest-density waves.
+- Generated snow-covered fir alpha cards replace cone trees. Instanced chairs / pylons and lodge proxies follow OSM lift lines / building footprints.
+- Resort-sized named trail signs replace oversized game flags and the floating guide ribbon.
+
+See [assets and generation prompt](docs/ASSETS.md) for provenance, limitations and import commands.
 
 ## Data, attribution and accuracy
 
@@ -70,7 +73,7 @@ Both exports are Float32 GeoTIFF in EPSG:32610, resampled bilinearly. Pixel-cent
 
 Coordinates are converted from WGS84 to UTM 10N and placed directly on the USGS grid. Names were cross-checked against the [official resort trail map](https://www.crystalmountainresort.com/the-mountain/trail-maps). OSM geometry is community mapping, not verified resort survey data. The first Green Valley connection falls on a locally opposing bare-earth slope, so spawning begins at the second source node without altering the retained source data.
 
-Snow, vegetation and skier are procedural. A [Crystal Mountain skier's photo](https://www.ingridbackstrom.com/thoughts-from-a-skier-mom-blog/2019/1/6/the-great-family-ski-road-trip-part-2-crystal-mountain) informed the cold-shadow / warm-sun contrast and snow-laden conifer direction; its photography is not bundled or redistributed. Tree positions are not surveyed vegetation boundaries. No official logos, photographs, or map artwork are redistributed.
+Snow and the skier use authored procedural models; the fir texture is generated and vegetation placement is constrained by aerial imagery. A [Crystal Mountain skier's photo](https://www.ingridbackstrom.com/thoughts-from-a-skier-mom-blog/2019/1/6/the-great-family-ski-road-trip-part-2-crystal-mountain) informed the cold-shadow / warm-sun contrast and snow-laden conifer direction; its photography is not bundled or redistributed. Tree positions are not surveyed vegetation boundaries. No official logos, photographs, or map artwork are redistributed.
 
 This independent prototype is not affiliated with Crystal Mountain Resort and is not an on-mountain navigation tool.
 
@@ -84,7 +87,7 @@ This independent prototype is not affiliated with Crystal Mountain Resort and is
 - Tuck lowers CdA instead of adding thrust.
 - Ski heading differs from velocity; lateral grip and skidding dissipate energy during turns.
 
-Parameters are explicit prototype assumptions: 85 kg combined mass, 1.0 kg/m³ air density, CdA 0.65 upright / 0.28 tucked, friction 0.025 packed / 0.06 soft. They are **not measured or field-calibrated**. A 42 m/s horizontal safety cap remains. No airborne motion, ragdoll, ski flex, independent leg forces or measured edge-contact model is simulated.
+Parameters are explicit prototype assumptions: 85 kg combined mass, 1.0 kg/m³ air density, CdA 0.65 upright / 0.25 tucked, friction 0.025 packed / 0.06 soft. They are **not measured or field-calibrated**. A 55 m/s horizontal safety cap remains. No airborne motion, ragdoll, ski flex, independent leg forces or measured edge-contact model is simulated.
 
 The FPS readout is an observation of the current browser, not a hardware performance guarantee. Snow and trees use bounded geometry / instancing; physics is one constrained skier, not a forest of dynamic rigid bodies.
 
@@ -96,6 +99,8 @@ python3 scripts/fetch-dem.py
 python3 scripts/fetch-dem.py --context
 # Standard library only for trails
 python3 scripts/fetch-trails.py
+python3 scripts/fetch-trails.py --infrastructure
+python3 scripts/fetch-aerial.py
 ```
 
 The app uses checked-in JSON at runtime; terrain and trails do not require live external APIs. Google Fonts is optional with system font fallbacks.

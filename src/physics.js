@@ -1,8 +1,8 @@
 export const clamp = (x, a, b) => Math.max(a, Math.min(b, x));
 // Prototype SI parameters; not measured ski/snow coefficients.
-export const PHYSICS={mass:85,gravity:9.81,airDensity:1.0,uprightCdA:.65,tuckCdA:.28,packedFriction:.025,softFriction:.06};
+export const PHYSICS={mass:85,gravity:9.81,airDensity:1.0,uprightCdA:.65,tuckCdA:.25,packedFriction:.025,softFriction:.06,maxHorizontalSpeed:55};
 export function createSkier(point, next) {
-  return { x: point.x, z: point.z, vx: 0, vz: 0, heading: Math.atan2(next.x-point.x,next.z-point.z), speed: 0, distance: 0, turn: 0, edge: 0, slip: 0, tuck: 0 };
+  return { x: point.x, z: point.z, vx: 0, vz: 0, heading: Math.atan2(next.x-point.x,next.z-point.z), speed: 0, distance: 0, turn: 0, edge: 0, edgeAngle:0, lastTurn:1, slip: 0, tuck: 0 };
 }
 
 // Ground-constrained skiing: projected gravity, aerodynamic drag, and edge grip.
@@ -11,10 +11,20 @@ export function stepSkier(s, input, terrain, dt, snow = 'packed') {
   dt = clamp(dt,0,1/30);
   const speed = Math.hypot(s.vx,s.vz);
   const edge = clamp(input.edge || 0,0,1);
-  s.turn += (clamp(input.steer,-1,1)-s.turn)*(1-Math.exp(-dt*6));
+  if(Math.abs(input.steer)>.1)s.lastTurn=Math.sign(input.steer);
+  // Rolling onto an edge bends a sidecut ski into an arc, even without yaw input.
+  // A/D select its direction; Space alone uses the last chosen side.
+  const steering=Math.abs(input.steer)>.05?clamp(input.steer,-1,1):edge*s.lastTurn;
+  s.turn += (steering-s.turn)*(1-Math.exp(-dt*6));
   s.edge = edge;
   s.tuck += (clamp(input.tuck||0,0,1)-s.tuck)*(1-Math.exp(-dt*5));
-  s.heading -= s.turn * (0.55 + Math.min(speed/15,.65)) * (1+edge*.35) * (1-s.tuck*.18) * dt;
+  s.edgeAngle += ((.31+edge*.60)*Math.abs(s.turn)-s.edgeAngle)*(1-Math.exp(-dt*8));
+  const radius=19*Math.cos(s.edgeAngle);
+  const balancedRate=PHYSICS.gravity*Math.tan(s.edgeAngle)/Math.max(speed,2);
+  const sidecutRate=speed/Math.max(8,radius);
+  const pivotRate=Math.max(0,1-speed/4)*.65;
+  const yawRate=pivotRate+Math.min(sidecutRate,balancedRate);
+  s.heading -= Math.sign(s.turn)*yawRate*(1-s.tuck*.12)*dt;
   const fx = Math.sin(s.heading), fz = Math.cos(s.heading);
   const rx = fz, rz = -fx;
   const g = terrain.gradient(s.x,s.z);
@@ -22,7 +32,7 @@ export function stepSkier(s, input, terrain, dt, snow = 'packed') {
   s.vx += -PHYSICS.gravity*g.x/norm*dt;
   s.vz += -PHYSICS.gravity*g.z/norm*dt;
   const forward = s.vx*fx+s.vz*fz, lateral=s.vx*rx+s.vz*rz;
-  const grip = (snow === 'packed' ? 3.1 : 2.3) + Math.abs(s.turn)*1.4 + edge*6;
+  const grip = (snow === 'packed' ? 1.4 : 1.0) + Math.abs(s.turn)*.8 + edge*7;
   const side = lateral*Math.exp(-grip*dt);
   // No pedal-style deceleration. Cross-slope turns reduce downhill gravity;
   // lateral skid and stronger edge engagement dissipate energy in the snow.
@@ -36,7 +46,7 @@ export function stepSkier(s, input, terrain, dt, snow = 'packed') {
   const along=Math.sign(forward)*Math.max(0,Math.abs(forward)-resistance*dt);
   s.vx=fx*along+rx*side; s.vz=fz*along+rz*side;
   const v=Math.hypot(s.vx,s.vz);
-  if(v>42){s.vx*=42/v; s.vz*=42/v;}
+  if(v>PHYSICS.maxHorizontalSpeed){s.vx*=PHYSICS.maxHorizontalSpeed/v; s.vz*=PHYSICS.maxHorizontalSpeed/v;}
   const dx=s.vx*dt,dz=s.vz*dt;
   s.x+=dx; s.z+=dz; s.distance+=Math.hypot(dx,dz);
   const slopeAlong=terrain.gradient(s.x,s.z);

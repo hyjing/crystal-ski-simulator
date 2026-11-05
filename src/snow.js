@@ -4,8 +4,14 @@ import * as THREE from 'three';
 export function createSnowMaterial(width,depth,renderer){
   const size=256,heights=new Float32Array(size*size);let seed=71;
   const rng=()=>{seed=(Math.imul(seed,1664525)+1013904223)|0;return (seed>>>0)/4294967296;};
+  const grids=[16,32,64].map(n=>({n,values:Float32Array.from({length:n*n},rng)}));
+  const noise=(x,z,grid)=>{
+    const u=x/size*grid.n,v=z/size*grid.n,ix=Math.floor(u),iz=Math.floor(v),fx=u-ix,fz=v-iz;
+    const a=grid.values[iz*grid.n+ix],b=grid.values[iz*grid.n+(ix+1)%grid.n],c=grid.values[((iz+1)%grid.n)*grid.n+ix],d=grid.values[((iz+1)%grid.n)*grid.n+(ix+1)%grid.n];
+    const tx=fx*fx*(3-2*fx),tz=fz*fz*(3-2*fz);return (a*(1-tx)+b*tx)*(1-tz)+(c*(1-tx)+d*tx)*tz;
+  };
   for(let z=0;z<size;z++)for(let x=0;x<size;x++){
-    heights[z*size+x]=rng()*.16+Math.sin(x*.19+Math.sin(z*.055)*2)*.055+Math.sin(x*.047+z*.025)*.16;
+    heights[z*size+x]=rng()*.08+noise(x,z,grids[0])*.18+noise(x,z,grids[1])*.075+noise(x,z,grids[2])*.04;
   }
   const normal=new Uint8Array(size*size*4),albedo=new Uint8Array(size*size*4),rough=new Uint8Array(size*size*4);
   for(let z=0;z<size;z++)for(let x=0;x<size;x++){
@@ -51,12 +57,12 @@ export class SnowEffects {
     this.geometry.setAttribute('position',this.positions);this.geometry.setAttribute('color',this.colors);this.geometry.setAttribute('normal',this.normals);this.geometry.setDrawRange(0,0);
     this.mesh=new THREE.Mesh(this.geometry,new THREE.MeshStandardMaterial({vertexColors:true,roughness:.97,side:THREE.DoubleSide,transparent:true,opacity:.78,depthWrite:false,polygonOffset:true,polygonOffsetFactor:-2,polygonOffsetUnits:-2}));
     this.mesh.receiveShadow=true;this.mesh.frustumCulled=false;this.mesh.renderOrder=1;scene.add(this.mesh);
-    this.particleCount=360;this.particleCursor=0;this.particles=Array.from({length:this.particleCount},()=>({life:0}));
+    this.particleCount=540;this.particleCursor=0;this.particles=Array.from({length:this.particleCount},()=>({life:0}));
     const particleGeometry=new THREE.BufferGeometry();this.particlePositions=new THREE.BufferAttribute(new Float32Array(this.particleCount*3).fill(-1e5),3).setUsage(THREE.DynamicDrawUsage);
     this.particleAlphas=new THREE.BufferAttribute(new Float32Array(this.particleCount),1).setUsage(THREE.DynamicDrawUsage);
     particleGeometry.setAttribute('position',this.particlePositions);particleGeometry.setAttribute('snowAlpha',this.particleAlphas);
     const canvas=document.createElement('canvas');canvas.width=canvas.height=64;const ctx=canvas.getContext('2d');const radial=ctx.createRadialGradient(32,32,0,32,32,32);radial.addColorStop(0,'#ffffffdf');radial.addColorStop(.35,'#ffffff89');radial.addColorStop(1,'#ffffff00');ctx.fillStyle=radial;ctx.fillRect(0,0,64,64);
-    const sprayMaterial=new THREE.PointsMaterial({map:new THREE.CanvasTexture(canvas),color:'#edf5ff',size:1.1,transparent:true,depthWrite:false,opacity:.65});
+    const sprayMaterial=new THREE.PointsMaterial({map:new THREE.CanvasTexture(canvas),color:'#edf5ff',size:.55,transparent:true,depthWrite:false,opacity:.42});
     sprayMaterial.onBeforeCompile=shader=>{
       shader.vertexShader=shader.vertexShader.replace('#include <common>','#include <common>\nattribute float snowAlpha; varying float vSnowAlpha;').replace('#include <begin_vertex>','#include <begin_vertex>\nvSnowAlpha=snowAlpha;');
       shader.fragmentShader=shader.fragmentShader.replace('#include <common>','#include <common>\nvarying float vSnowAlpha;').replace('#include <map_particle_fragment>','#include <map_particle_fragment>\ndiffuseColor.a *= vSnowAlpha;');
@@ -101,12 +107,12 @@ export class SnowEffects {
         }
         this.previous=current;
       }
-      const intensity=Math.min(1,skier.slip*.2+Math.abs(skier.turn)*.35)*(snow==='soft'?1.6:1);
+      const intensity=Math.min(1,(snow==='soft'?.18:0)+skier.slip*.2+skier.edge*.5+Math.abs(skier.turn)*.25)*(snow==='soft'?1.5:1);
       const emit=Math.min(12,Math.floor(skier.speed*intensity*dt*35));
       for(let i=0;i<emit;i++){
         const p=this.particles[this.particleCursor++%this.particleCount],side=Math.random()<.5?-1:1;
-        Object.assign(p,{x:skier.x+Math.cos(skier.heading)*side*.5,z:skier.z-Math.sin(skier.heading)*side*.5,y:this.height(skier.x,skier.z)+.25,
-          vx:-skier.vx*.1+Math.cos(skier.heading)*side*(1+intensity*3),vz:-skier.vz*.1-Math.sin(skier.heading)*side*(1+intensity*3),vy:1+Math.random()*intensity*4,life:.55+Math.random()*.5,maxLife:1.1});
+        Object.assign(p,{x:skier.x+Math.cos(skier.heading)*side*.23,z:skier.z-Math.sin(skier.heading)*side*.23,y:this.height(skier.x,skier.z)+.08,
+          vx:-skier.vx*.12+Math.cos(skier.heading)*side*(.5+intensity*2.3),vz:-skier.vz*.12-Math.sin(skier.heading)*side*(.5+intensity*2.3),vy:.3+Math.random()*intensity*2.5,life:.45+Math.random()*.65,maxLife:1.1});
       }
     }
     // Pausing also freezes airborne snow.
