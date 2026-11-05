@@ -7,3 +7,7 @@
 .map-attribution{display:block;text-align:center;padding:0 4px 7px;font-size:7px;color:#6e7e75;letter-spacing:.1px}.terrain-caption a{text-decoration:underline;text-underline-offset:2px}
 
 .map-heading button{border:1px solid #b7c6ab;background:#edf3e7;border-radius:3px;padding:3px 7px;font-size:8px;color:#38563b;cursor:pointer}.map-heading{gap:7px}.map-heading>span:first-child{flex:1}@media(max-width:700px){nav{gap:10px}.icon-btn{font-size:10px}.map-heading button{font-size:7px;padding:3px 4px}.brand{font-size:16px}}
+
+.scenery-caption{position:fixed;left:42px;bottom:70px;color:#173d3c;padding:22px 26px;background:#f5f8efde;border:1px solid #ffffff90;border-radius:7px;backdrop-filter:blur(12px);max-width:320px}.scenery-caption>span{font-size:9px;letter-spacing:1.7px}.scenery-caption h2{font-size:35px;margin:10px 0}.scenery-caption p{font-size:12px;line-height:1.8;color:#526e69}.scenery-caption button{background:none;border:0;border-bottom:1px solid #718b75;padding:9px 0;font-size:11px;color:inherit}.icon-btn:disabled{opacity:.45;cursor:progress}@media(max-width:700px){.scenery-caption{left:16px;bottom:110px;padding:16px;max-width:230px}.scenery-caption h2{font-size:28px}.scenery-caption p{font-size:10px}nav{gap:8px}}
+
+.scenery-view .controls,.scenery-view .terrain-caption{display:none}.scenery-view .scenery-caption{bottom:32px}@media(max-width:700px){.scenery-view .map-panel{display:none}.scenery-view .scenery-caption{bottom:24px;max-width:220px}.scenery-caption h2{margin:6px 0}.scenery-caption p{margin:8px 0}}

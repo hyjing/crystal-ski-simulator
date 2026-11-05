@@ -1,25 +1,70 @@
 import * as THREE from 'three';
 
-export function addContextTerrain(scene,context,local){
-  const w=context.width,h=context.height,s=context.spacing;
+// All terrain shares the local tile's UTM origin and metric vertical datum.
+export function gridBounds(grid,local){
   const centerE=local.originUTM[0]+(local.width-1)*local.spacing/2;
   const centerN=local.originUTM[1]-(local.height-1)*local.spacing/2;
-  const halfX=(local.width-1)*local.spacing/2,halfZ=(local.height-1)*local.spacing/2;
-  const positions=new Float32Array(w*h*3),colors=new Float32Array(w*h*3),indices=[];
-  const forest=new THREE.Color('#586b6b'),snow=new THREE.Color('#dae6ed'),rock=new THREE.Color('#849698');
-  for(let z=0;z<h;z++)for(let x=0;x<w;x++){
-    const i=z*w+x,e=context.heights[i],px=context.originUTM[0]+x*s-centerE,pz=centerN-context.originUTM[1]+z*s;
-    positions.set([px,e-1210,pz],i*3);
-    const c=forest.clone().lerp(snow,THREE.MathUtils.smoothstep(e,1250,2100));
-    const steep=Math.abs((context.heights[i+1]||e)-e)/s;
-    if(steep>1)c.lerp(rock,.4);c.toArray(colors,i*3);
-    if(x<w-1&&z<h-1){
-      if(Math.abs(px+s/2)<halfX-220&&Math.abs(pz+s/2)<halfZ-220)continue;
-      indices.push(i,i+w,i+1,i+1,i+w,i+w+1);
-    }
+  return {west:grid.originUTM[0]-centerE,east:grid.originUTM[0]+(grid.width-1)*grid.spacing-centerE,
+    north:centerN-grid.originUTM[1],south:centerN-grid.originUTM[1]+(grid.height-1)*grid.spacing};
+}
+
+function winterMaterial(texture){
+  if(!texture)return new THREE.MeshStandardMaterial({color:'#c1cdd6',roughness:1});
+  texture.colorSpace=THREE.SRGBColorSpace;texture.anisotropy=4;
+  const material=new THREE.MeshStandardMaterial({map:texture,roughness:1});
+  material.onBeforeCompile=shader=>{
+    shader.vertexShader=shader.vertexShader.replace('#include <common>','#include <common>\nvarying float vElevation; varying float vSteep;')
+      .replace('#include <begin_vertex>','#include <begin_vertex>\nvElevation=position.y+1200.; vSteep=1.-abs(normal.y);');
+    shader.fragmentShader=shader.fragmentShader.replace('#include <common>','#include <common>\nvarying float vElevation; varying float vSteep;')
+      .replace('#include <map_fragment>',`#ifdef USE_MAP
+        vec4 aerial=texture2D(map,vMapUv);
+        float luma=dot(aerial.rgb,vec3(.2126,.7152,.0722));
+        // Preserve the photographed glacier channels and rock, with authored winter snow.
+        float snow=smoothstep(1150.,2150.,vElevation)*(1.-smoothstep(.18,.62,vSteep)*.82);
+        vec3 winterSnow=vec3(.84,.90,.97)*(.52+.48*sqrt(luma));
+        vec3 winterForest=aerial.rgb*vec3(.65,.76,.83);
+        float cover=snow*mix(.87,.25,smoothstep(2300.,3300.,vElevation));
+        diffuseColor.rgb*=mix(winterForest,winterSnow,cover);
+      #endif`);
+  };
+  material.customProgramCacheKey=()=> 'georeferenced-winter-aerial-v1';
+  return material;
+}
+
+function addGrid(scene,grid,local,texture,exclude=[]){
+  const bounds=gridBounds(grid,local),step=2;
+  const cols=Math.ceil((grid.width-1)/step)+1,rows=Math.ceil((grid.height-1)/step)+1;
+  const positions=new Float32Array(cols*rows*3),uvs=new Float32Array(cols*rows*2),indices=[];
+  for(let z=0;z<rows;z++)for(let x=0;x<cols;x++){
+    const gx=Math.min(x*step,grid.width-1),gz=Math.min(z*step,grid.height-1),i=z*cols+x;
+    const px=bounds.west+gx*grid.spacing,pz=bounds.north+gz*grid.spacing;
+    positions.set([px,grid.heights[gz*grid.width+gx]-1200,pz],i*3);
+    // Image bounds are pixel edges; DEM coordinates are pixel centers.
+    uvs.set([(gx+.5)/grid.width,1-(gz+.5)/grid.height],i*2);
+    if(x===cols-1||z===rows-1)continue;
+    const cx=px+grid.spacing*step/2,cz=pz+grid.spacing*step/2;
+    if(exclude.some(b=>cx>b.west&&cx<b.east&&cz>b.north&&cz<b.south))continue;
+    indices.push(i,i+cols,i+1,i+1,i+cols,i+cols+1);
   }
-  const geometry=new THREE.BufferGeometry();geometry.setAttribute('position',new THREE.BufferAttribute(positions,3));geometry.setAttribute('color',new THREE.BufferAttribute(colors,3));geometry.setIndex(indices);geometry.computeVertexNormals();
-  scene.add(new THREE.Mesh(geometry,new THREE.MeshStandardMaterial({vertexColors:true,roughness:1})));
+  const geometry=new THREE.BufferGeometry();geometry.setAttribute('position',new THREE.BufferAttribute(positions,3));
+  geometry.setAttribute('uv',new THREE.BufferAttribute(uvs,2));geometry.setIndex(indices);geometry.computeVertexNormals();geometry.computeBoundingSphere();
+  const mesh=new THREE.Mesh(geometry,winterMaterial(texture));mesh.name='USGS distant terrain';scene.add(mesh);return mesh;
+}
+
+export function addContextTerrain(scene,context,local,texture,rainier){
+  const halfX=(local.width-1)*local.spacing/2,halfZ=(local.height-1)*local.spacing/2;
+  const exclude=[{west:-halfX+180,east:halfX-180,north:-halfZ+180,south:halfZ-180}];
+  if(rainier){const b=gridBounds(rainier,local),inset=context.spacing*2;exclude.push({west:b.west+inset,east:b.east-inset,north:b.north+inset,south:b.south-inset});}
+  return addGrid(scene,context,local,texture,exclude);
+}
+
+export function addRainierTerrain(scene,grid,local,texture){
+  const mesh=addGrid(scene,grid,local,texture);mesh.name='Mount Rainier / USGS + NAIP';
+  const b=gridBounds(grid,local);
+  // Avoid argument spreading the large DEM when locating the real summit.
+  let summit=0;for(let j=1;j<grid.heights.length;j++)if(grid.heights[j]>grid.heights[summit])summit=j;
+  const peak=new THREE.Vector3(b.west+(summit%grid.width)*grid.spacing,grid.heights[summit]-1200,b.north+Math.floor(summit/grid.width)*grid.spacing);
+  scene.userData.rainierPeak=peak;return mesh;
 }
 
 export function addAlpineSky(scene){

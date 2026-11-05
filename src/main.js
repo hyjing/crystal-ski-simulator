@@ -3,7 +3,7 @@ import './style.css';
 import { createTerrain, getRoutes } from './terrain.js';
 import { createSkier, stepSkier, nearestOnRoute, clamp } from './physics.js';
 import { createSnowMaterial, SnowEffects } from './snow.js';
-import { addContextTerrain, addAlpineSky } from './scenery.js';
+import { addContextTerrain, addRainierTerrain, addAlpineSky } from './scenery.js';
 import {PowderSurface} from './powder.js';
 import {SpeedRenderer} from './postprocessing.js';
 import {addForest,addResort} from './resort.js';
@@ -16,7 +16,7 @@ let lastTime=0, accumulator=0, pausedFrom='running', soundOn=false, audio, noise
 let frameTime=1/60,physicsMs=0;
 let powderMs=0,frameSamples=[],frameP95=0,frameMax=0,slowFrames=0;
 let renderScale=Math.min(devicePixelRatio,1.25),qualityClock=0;
-let demoCapture,recordedInput=null;
+let demoCapture,recordedInput=null,sceneryFrom='intro',sceneryView=false;
 let treePositions=[], trailPoints=[], mapBackground, snowEffects, sun, powder, speedRenderer, aerialImage, mapLayer='terrain', resortUpdate=()=>{};
 const baseElevation=1200, fixedStep=1/120;
 const forward = new THREE.Vector3(), targetCamera = new THREE.Vector3(), lookTarget = new THREE.Vector3();
@@ -36,7 +36,7 @@ async function init(){
   const trailResponse=await fetch(`${import.meta.env.BASE_URL}data/crystal-trails.json`);
   if(!trailResponse.ok)throw new Error('无法载入雪道数据');
   routes=getRoutes(terrain,await trailResponse.json());route=routes[0];
-  scene=new THREE.Scene(); scene.background=new THREE.Color('#cbdce9'); scene.fog=new THREE.Fog('#cbdce9',6500,35000);
+  scene=new THREE.Scene(); scene.background=new THREE.Color('#cbdce9'); scene.fog=new THREE.Fog('#cbdce9',12000,65000);
   camera=new THREE.PerspectiveCamera(58,innerWidth/innerHeight,1,65000);
   renderer=new THREE.WebGLRenderer({antialias:true, powerPreference:'high-performance'});
   renderer.setSize(innerWidth,innerHeight); renderer.setPixelRatio(renderScale);
@@ -56,8 +56,19 @@ async function init(){
   createAthlete();snowEffects=new SnowEffects(scene,{...terrain,surface:(x,z)=>powder.surface(x,z)});createMapBackground();
   speedRenderer=new SpeedRenderer(renderer,scene,camera);
   aerialImage=new Image();aerialImage.onload=()=>drawMap();aerialImage.src=`${import.meta.env.BASE_URL}data/crystal-aerial.jpg`;
-  // The distant horizon is another georeferenced USGS grid, not an invented backdrop.
-  fetch(`${import.meta.env.BASE_URL}data/context-dem.json`).then(r=>{if(!r.ok)throw new Error('context DEM');return r.json();}).then(data=>addContextTerrain(scene,data,terrain)).catch(()=>toast('远山数据载入失败，近处地形仍可滑行'));
+  // Load real far terrain progressively; retain the coarse grid if detailed assets fail.
+  fetch(`${import.meta.env.BASE_URL}data/context-dem.json`).then(r=>{if(!r.ok)throw new Error('context DEM');return r.json();}).then(async context=>{
+    let coarse=addContextTerrain(scene,context,terrain);
+    try{
+      const [rainier,contextMap,rainierMap]=await Promise.all([
+        fetch(`${import.meta.env.BASE_URL}data/rainier-dem.json`).then(r=>{if(!r.ok)throw new Error('Rainier DEM');return r.json();}),
+        new THREE.TextureLoader().loadAsync(`${import.meta.env.BASE_URL}data/context-aerial.jpg`),
+        new THREE.TextureLoader().loadAsync(`${import.meta.env.BASE_URL}data/rainier-aerial.jpg`)
+      ]);
+      addContextTerrain(scene,context,terrain,contextMap,rainier);addRainierTerrain(scene,rainier,terrain,rainierMap);
+      scene.remove(coarse);coarse.geometry.dispose();coarse.material.dispose();$('scenery').disabled=false;
+    }catch(error){console.warn('Detailed scenery unavailable',error);toast('高清远景暂未载入，已保留基础远山');}
+  }).catch(()=>toast('远山数据载入失败，近处地形仍可滑行'));
   $('routes').innerHTML=routes.map((r,i)=>`<button class="route ${i===0?'active':''}" data-route="${r.id}" aria-pressed="${i===0}" style="--route:${r.color}"><span class="route-dot"></span><span class="route-text"><span class="route-name">${r.name}</span><span class="route-sub">${r.subtitle} · ${r.label}</span></span><span class="route-stat">${(r.length/1000).toFixed(1)} km<small>↓ ${Math.round(r.drop)} m</small></span></button>`).join('');
   document.querySelectorAll('[data-route]').forEach(b=>b.addEventListener('click',()=>selectRoute(b.dataset.route)));
   selectRoute(route.id);speedRenderer.prepare();$('loading').classList.add('hidden'); $('start').disabled=false;
@@ -216,7 +227,11 @@ function updateAthlete(dt){
 
 function updateCamera(dt,snap=false){
   const p=athlete.position;
-  if(mode==='intro'){
+  if(sceneryView){
+    // A viewpoint on the actual west-facing summit ridge, looking toward the real peak.
+    const x=-2010,z=220;targetCamera.set(x,yAt(x,z)+28,z);
+    lookTarget.copy(scene.userData.rainierPeak);lookTarget.y-=550;
+  }else if(mode==='intro'){
     // View from the valley back toward the ridge. The panel occupies the left third.
     const mid=route.points[Math.floor(route.points.length/2)];
     targetCamera.set(mid.x+780,yAt(mid.x,mid.z)+670,mid.z+680);
@@ -230,8 +245,8 @@ function updateCamera(dt,snap=false){
     lookTarget.copy(p).addScaledVector(forward,12);lookTarget.y+=1.1;
   }
   const a=snap?1:1-Math.exp(-dt*(mode==='intro'?2:12));
-  camera.position.lerp(targetCamera,a);displayLook.lerp(lookTarget,a);camera.lookAt(displayLook);if(mode!=='intro'&&view==='follow')camera.rotateZ(-skier.turn*skier.edge*.022);
-  const fov=58+(mode==='intro'?0:Math.min(skier.speed*.45,17)+skier.tuck*4);
+  camera.position.lerp(targetCamera,a);displayLook.lerp(lookTarget,a);camera.lookAt(displayLook);if(!sceneryView&&mode!=='intro'&&view==='follow')camera.rotateZ(-skier.turn*skier.edge*.022);
+  const fov=sceneryView?46:58+(mode==='intro'?0:Math.min(skier.speed*.45,17)+skier.tuck*4);
   camera.fov=THREE.MathUtils.lerp(camera.fov,fov,a);camera.updateProjectionMatrix();
 }
 
@@ -321,6 +336,20 @@ $('pause').addEventListener('click',pauseRun);$('resume').addEventListener('clic
 $('restart').addEventListener('click',()=>{startRun();toast('已从起点重新开始');});
 $('pause-dialog').addEventListener('cancel',e=>{e.preventDefault();resumeRun();});
 $('result').addEventListener('cancel',e=>{e.preventDefault();goIntro();});
+
+function toggleScenery(){
+  if(!scene?.userData.rainierPeak||document.querySelector('dialog[open]'))return;
+  sceneryView=!sceneryView;document.body.classList.toggle('scenery-view',sceneryView);keys.clear();accumulator=0;
+  if(sceneryView){sceneryFrom=mode;mode='scenery';}
+  else mode=sceneryFrom;
+  $('intro').classList.toggle('hidden',mode!=='intro');$('session').classList.toggle('hidden',!['running','paused'].includes(mode));
+  $('touch').classList.toggle('active',mode==='running');$('scenery-caption').classList.toggle('hidden',!sceneryView);
+  $('scenery').innerHTML=sceneryView?'返回 <kbd>V</kbd>':'观景 <kbd>V</kbd>';$('scenery').setAttribute('aria-pressed',sceneryView);
+  updateCamera(0,true);
+}
+$('scenery').addEventListener('click',toggleScenery);
+$('scenery-return').addEventListener('click',toggleScenery);
+
 function openHelp(){pausedFrom=mode;if(mode==='running')mode='help';keys.clear();$('help-dialog').showModal();}
 function closeHelp(){ $('help-dialog').close();if(mode==='help')mode=pausedFrom;keys.clear();}
 $('help').addEventListener('click',openHelp);document.querySelectorAll('.close-dialog,.close-help').forEach(b=>b.addEventListener('click',closeHelp));
@@ -337,6 +366,8 @@ document.querySelectorAll('[data-key]').forEach(b=>{
 addEventListener('keydown',e=>{
   if(['Space','ArrowLeft','ArrowRight','ArrowDown','ArrowUp'].includes(e.code))e.preventDefault();
   if(e.repeat)return;
+  if(e.code==='KeyV'){toggleScenery();return;}
+  if(e.code==='Escape'&&sceneryView){toggleScenery();return;}
   if(e.code==='Escape'||e.code==='KeyP'){if(mode==='running'){e.preventDefault();pauseRun();}else if(mode==='paused'){e.preventDefault();resumeRun();}return;}
   if(e.code==='KeyH'&&!document.querySelector('dialog[open]')){openHelp();return;}
   if(e.code==='KeyO'&&!document.querySelector('dialog[open]')){$('overview').click();return;}

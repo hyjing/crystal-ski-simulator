@@ -37,3 +37,10 @@ The HUD reports FPS, raw frame interval P95 / maximum, hitch count, raster scale
 - Forest placement follows an aerial-derived heuristic; individual tree positions / heights are not surveyed. Crossed fir alpha cards are a visual approximation.
 - OSM infrastructure positions use approximate authored appearance and support heights.
 - The surrounding 120 m DEM reproduces large mountain form, not detailed glaciers or cliffs.
+
+## Distant scenery update — November 4, 2026
+
+- 26 automated tests pass, including summit registration against Rainier's geographic position, aerial/DEM bounds alignment, and a far-terrain triangle budget below the previous mesh.
+- Browser checks: the new winter shader compiles without console warnings/errors; scenic view works at narrow and 1280 × 720 desktop layouts; returning restores the active run rather than resetting its position/time.
+- New real-frame screenshot: `docs/media/crystal-rainier.png`. The existing README video predates this scenery update.
+- Texture registration and the DEM are real; winter cover, local viewing height and the snow shader remain authored approximations. No new instrumented GPU benchmark was performed.

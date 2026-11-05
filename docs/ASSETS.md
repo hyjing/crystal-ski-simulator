@@ -35,3 +35,14 @@ Locations reference OSM geometry. Lift support height, chairs, cable sag, speeds
 - Patch boundaries feather back into the base terrain. No granular particle mass-conservation, subsurface fracture or snow-water content is modeled.
 - Far session trails retain lightweight ribbons; near powder supplies the actual mesh deformation.
 - Peripheral speed effect: a seven-tap radial post-process preserving the center and DOM HUD. It is a speed cue, not per-object velocity-buffer motion blur. Users can disable it.
+
+## Mount Rainier and surrounding mountain textures
+
+- `public/data/rainier-dem.json`: USGS 3DEP, 513 × 481, approximately 36.18 m export spacing, EPSG:32610, metric heights. This is resampled export spacing, not a claim of survey resolution. The render uses every second sample (~72.36 m) for a distant mesh.
+- `public/data/rainier-aerial.jpg`: 2048 × 1920 public-domain USGS / USDA NAIP RGB orthoimagery, georegistered to the same DEM pixel edges.
+- `public/data/context-aerial.jpg`: 2048 × 1708 NAIP imagery for the existing surrounding terrain. Its rendered grid uses every second sample (~240.73 m) to keep the total far-terrain triangle count below the previous context mesh.
+- Adjacent `*-aerial.json` files preserve the exported UTM bounds, image dimensions, source URL and retrieval date. Reproduce with `python3 scripts/fetch-scenery.py` (Pillow required).
+- Sources: [USGS 3DEP](https://elevation.nationalmap.gov/arcgis/rest/services/3DEPElevation/ImageServer), [USGS / USDA NAIP](https://imagery.nationalmap.gov/arcgis/rest/services/USGSNAIPImagery/ImageServer). Retrieved November 4, 2026, Pacific time. Exact source acquisition dates are not established.
+- NAIP is snow-free-season aerial reference, not a winter satellite photograph. The shader adds authored snow cover by elevation and slope, retaining more of the photographed glacier / rock pattern at high elevation. Shadows in the imagery are baked into the reference and are not a fully relightable photogrammetry material.
+- The mountain retains its real southwest bearing, summit height and distance. `V` opens a scenic camera on the west-facing local ridge and suspends the skiing simulation; returning preserves the run. This view uses a 46-degree vertical field of view.
+- New textures total ~1.36 MiB compressed. These are static meshes and maps, with no extra shadow passes or post-processing. Triangle-budget validation does not establish identical GPU performance on all devices.

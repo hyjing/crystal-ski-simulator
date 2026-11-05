@@ -112,3 +112,7 @@ python3 scripts/fetch-aerial.py
 The app uses checked-in JSON at runtime; terrain and trails do not require live external APIs. Google Fonts is optional with system font fallbacks.
 
 See `docs/SCOPE.md` and `docs/VALIDATION.md` for remaining work and verification limits.
+
+## Distant scenery update
+
+Mount Rainier now has a separate georeferenced 36.18 m DEM export and NAIP texture. The surrounding grid also uses NAIP imagery with an elevation/slope-based winter treatment. `src/scenery.js` renders decimated static meshes with a shared winter shader; the combined far terrain stays below the original context mesh triangle count. `V` switches to a summit-ridge scenic view and suspends physics until returning. See [asset provenance](ASSETS.md#mount-rainier-and-surrounding-mountain-textures) for export bounds and limitations.

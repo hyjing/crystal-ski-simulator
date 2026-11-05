@@ -36,3 +36,5 @@ ffmpeg -ss 6 -t 6 -i crystal-demo.mp4 \
 The README uses GIF for a reliable inline animation and links the full MP4 separately. Media files stay in the repository so they do not depend on an external video host. The source WebM is an intermediate and is not committed.
 
 Elevation, map and generated-asset attribution remains in [ASSETS.md](../ASSETS.md). © OpenStreetMap contributors; USGS / USDA NAIP.
+
+`crystal-rainier.png` is an additional live browser screenshot of the later distant-scenery update. It is not part of the original v0.3.1 video; that video remains a record of the previous build.
