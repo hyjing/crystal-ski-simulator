@@ -24,7 +24,7 @@ for x,z,score in candidates:
  e=extent['xmin']+(x+.5)*sx;n=extent['ymax']-(z+.5)*sy;gx=int(e//cell);gz=int(n//cell)
  if any((e-a)**2+(n-b)**2<minimum**2 for dx in [-1,0,1] for dz in [-1,0,1] for a,b in cells.get((gx+dx,gz+dz),[])):continue
  accepted.append([x,z,round(.72+(score/255)*.45,3)]);cells.setdefault((gx,gz),[]).append((e,n))
- if len(accepted)>=20000:break
+ if len(accepted)>=60000:break
 Image.frombytes('L',(w,h),bytes(mask)).filter(ImageFilter.GaussianBlur(1)).save(ROOT/'crystal-canopy.png')
 output=dict(source='USGS / USDA NAIP',sourceUrl=meta['sourceUrl'],image='crystal-aerial.jpg',imageSize=[w,h],extent=extent,method='RGB vegetation + local canopy-texture maxima; approximate tree centers and artistic heights, not a tree survey',minimumSpacing=minimum,pixels=accepted)
 (ROOT/'crystal-vegetation.json').write_text(json.dumps(output,separators=(',',':')))

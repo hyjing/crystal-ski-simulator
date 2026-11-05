@@ -16,7 +16,7 @@ export function addDetailedGround(scene,terrain,renderer,canopy,extent){
           vec2 canopyUV=vec2((vSnowPosition.x-forestBounds.x)/forestBounds.z,1.-(vSnowPosition.z-forestBounds.y)/forestBounds.w);
           float forest=texture2D(canopyMap,canopyUV).r;
           float distanceFade=smoothstep(75.,420.,distance(cameraPosition.xz,vSnowPosition.xz));
-          diffuseColor.rgb=mix(diffuseColor.rgb,vec3(.12,.20,.19),forest*distanceFade*.78);
+          diffuseColor.rgb=mix(diffuseColor.rgb,vec3(.12,.20,.19),forest*distanceFade*.62);
         `);
     };
     material.customProgramCacheKey=()=> 'georeferenced-ground-canopy-v1';

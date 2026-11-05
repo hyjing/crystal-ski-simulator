@@ -3,6 +3,7 @@ import {mergeGeometries} from 'three/addons/utils/BufferGeometryUtils.js';
 import {lonLatToUTM,pointAlongRoute} from './terrain.js';
 import {isDetailedLodge} from './stations.js';
 import {installDetailedTrees} from './trees.js';
+import {pisteHalfWidth} from './pistes.js';
 
 export function geographicPoint(terrain,[lon,lat]){
   const p=lonLatToUTM(lon,lat);
@@ -21,11 +22,11 @@ export function addForest(scene,terrain,routes,landcover,texture,vegetation,stat
   let seed=84;const rng=()=>{seed=(Math.imul(seed,1664525)+1013904223)|0;return(seed>>>0)/4294967296;};
   const candidates=[];
   // Index all route segments once; hundreds of ways should not multiply forest startup work.
-  const cells=new Map(),cellSize=100,clearance=5;
+  const cells=new Map(),cellSize=100;
   for(const route of routes)for(let i=1;i<route.points.length;i++){
-    const a=route.points[i-1],b=route.points[i],segment={a,b};
-    for(let x=Math.floor((Math.min(a.x,b.x)-clearance)/cellSize);x<=Math.floor((Math.max(a.x,b.x)+clearance)/cellSize);x++)
-      for(let z=Math.floor((Math.min(a.z,b.z)-clearance)/cellSize);z<=Math.floor((Math.max(a.z,b.z)+clearance)/cellSize);z++){
+    const a=route.points[i-1],b=route.points[i],width=Math.max(5,pisteHalfWidth(route.name,route.difficulty)-2),segment={a,b,width};
+    for(let x=Math.floor((Math.min(a.x,b.x)-width)/cellSize);x<=Math.floor((Math.max(a.x,b.x)+width)/cellSize);x++)
+      for(let z=Math.floor((Math.min(a.z,b.z)-width)/cellSize);z<=Math.floor((Math.max(a.z,b.z)+width)/cellSize);z++){
         const key=`${x},${z}`;if(!cells.has(key))cells.set(key,[]);cells.get(key).push(segment);
       }
   }
@@ -38,12 +39,12 @@ export function addForest(scene,terrain,routes,landcover,texture,vegetation,stat
     if(!vegetation&&rng()>forestLikelihood(terrain,landcover,p.x,p.z)*.85)continue;
     if(terrain.sample(p.x,p.z)<1180)continue;
     if(stationAreas.some(a=>Math.hypot(((p.x-a.x)*a.fx+(p.z-a.z)*a.fz)/a.coreLength,((p.x-a.x)*a.fz-(p.z-a.z)*a.fx)/a.coreWidth)<1.04))continue;
-    // A small clearance around source centerlines prevents proxy trees on a run.
+    // Keep inferred tree trunks outside the authored piste corridor.
     let clear=false;
-    for(const {a,b} of cells.get(`${Math.floor(p.x/cellSize)},${Math.floor(p.z/cellSize)}`)||[]){
+    for(const {a,b,width} of cells.get(`${Math.floor(p.x/cellSize)},${Math.floor(p.z/cellSize)}`)||[]){
       const dx=b.x-a.x,dz=b.z-a.z,l2=dx*dx+dz*dz;
       const t=l2?THREE.MathUtils.clamp(((p.x-a.x)*dx+(p.z-a.z)*dz)/l2,0,1):0;
-      if(Math.hypot(p.x-a.x-t*dx,p.z-a.z-t*dz)<clearance){clear=true;break;}
+      if(Math.hypot(p.x-a.x-t*dx,p.z-a.z-t*dz)<width){clear=true;break;}
     }
     if(clear)continue;
     candidates.push({...p,size:p.size||.65+rng()*.8,rotation:rng()*Math.PI});
@@ -52,10 +53,17 @@ export function addForest(scene,terrain,routes,landcover,texture,vegetation,stat
   for(let i=0;i<3;i++){const g=new THREE.PlaneGeometry(8,21);g.translate(0,10.5,0);g.rotateY(i*Math.PI/3);cards.push(g);}
   texture.colorSpace=THREE.SRGBColorSpace;texture.anisotropy=4;
   const material=new THREE.MeshStandardMaterial({map:texture,alphaTest:.35,side:THREE.DoubleSide,roughness:1});
-  const forest=new THREE.InstancedMesh(mergeGeometries(cards),material,candidates.length);forest.castShadow=forest.receiveShadow=true;
+  // Spatial batches let the frustum discard forest behind / beside the camera.
+  const geometry=mergeGeometries(cards),tiles=new Map(),slots=[],dirty=new Set();
+  candidates.forEach((p,index)=>{const key=`${Math.floor(p.x/384)},${Math.floor(p.z/384)}`;if(!tiles.has(key))tiles.set(key,[]);tiles.get(key).push({p,index});});
   const dummy=new THREE.Object3D();
-  candidates.forEach((p,i)=>{p.y=terrain.surface(p.x,p.z)-1200-.2;p.scaleX=p.size*(.88+rng()*.24);dummy.position.set(p.x,p.y,p.z);dummy.scale.set(p.scaleX,p.size,p.size);dummy.rotation.y=p.rotation;dummy.updateMatrix();forest.setMatrixAt(i,dummy.matrix);});
-  scene.add(forest);cards.forEach(g=>g.dispose());installDetailedTrees(scene,forest,candidates);return candidates;
+  for(const members of tiles.values()){
+    const mesh=new THREE.InstancedMesh(geometry,material,members.length);mesh.castShadow=false;mesh.receiveShadow=true;mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+    members.forEach(({p,index},slot)=>{p.y=terrain.surface(p.x,p.z)-1200-.2;p.scaleX=p.size*(.88+rng()*.24);dummy.position.set(p.x,p.y,p.z);dummy.scale.set(p.scaleX,p.size,p.size);dummy.rotation.y=p.rotation;dummy.updateMatrix();mesh.setMatrixAt(slot,dummy.matrix);slots[index]={mesh,slot};});
+    mesh.computeBoundingSphere();scene.add(mesh);
+  }
+  const forest={setMatrixAt(index,matrix){const {mesh,slot}=slots[index];mesh.setMatrixAt(slot,matrix);dirty.add(mesh);},instanceMatrix:{addUpdateRange(start,count){const {mesh,slot}=slots[start/16];mesh.instanceMatrix.addUpdateRange(slot*16,count);},set needsUpdate(value){if(value){for(const mesh of dirty)mesh.instanceMatrix.needsUpdate=true;dirty.clear();}}}};
+  cards.forEach(g=>g.dispose());installDetailedTrees(scene,forest,candidates);return candidates;
 }
 
 export function addResort(scene,terrain,data){

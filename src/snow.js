@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import {snowLighting} from './environment.js';
 
 // Repeating, world-scale micro relief. Large forms always come from the DEM.
 export function createSnowMaterial(width,depth,renderer){
@@ -28,20 +29,32 @@ export function createSnowMaterial(width,depth,renderer){
     t.generateMipmaps=true;t.anisotropy=Math.min(8,renderer.capabilities.getMaxAnisotropy());
     if(color)t.colorSpace=THREE.SRGBColorSpace;t.needsUpdate=true;return t;
   };
-  const material=new THREE.MeshPhysicalMaterial({vertexColors:true,map:texture(albedo,true),normalMap:texture(normal),normalScale:new THREE.Vector2(.42,.42),roughnessMap:texture(rough),roughness:.94,metalness:0,clearcoat:.12,clearcoatRoughness:.65});
+  const material=new THREE.MeshPhysicalMaterial({vertexColors:true,map:texture(albedo,true),normalMap:texture(normal),normalScale:new THREE.Vector2(.65,.65),roughnessMap:texture(rough),roughness:.87,metalness:0,clearcoat:.025,clearcoatRoughness:.7});
   material.onBeforeCompile=shader=>{
+    shader.uniforms.snowSunDirection=snowLighting.sunDirection;shader.uniforms.snowCloudCover=snowLighting.cloudCover;
     shader.vertexShader=shader.vertexShader.replace('#include <common>','#include <common>\nvarying vec3 vSnowPosition;').replace('#include <begin_vertex>','#include <begin_vertex>\nvSnowPosition = (modelMatrix * vec4(position,1.)).xyz;');
     shader.fragmentShader=shader.fragmentShader.replace('#include <common>',`#include <common>
       varying vec3 vSnowPosition;
+      uniform vec3 snowSunDirection;uniform float snowCloudCover;
       float snowHash(vec2 p){ return fract(sin(dot(p,vec2(127.1,311.7)))*43758.5453); }
       float snowNoise(vec2 p){ vec2 i=floor(p),f=fract(p); f=f*f*(3.-2.*f); return mix(mix(snowHash(i),snowHash(i+vec2(1.,0.)),f.x),mix(snowHash(i+vec2(0.,1.)),snowHash(i+vec2(1.,1.)),f.x),f.y); }
     `).replace('#include <color_fragment>',`#include <color_fragment>
       float wind = snowNoise(vSnowPosition.xz * .045);
       float broad = snowNoise(vSnowPosition.xz * .006);
-      diffuseColor.rgb *= .90 + .10 * wind + .06 * broad;
+      float grain=snowNoise(vSnowPosition.xz*15.7);
+      diffuseColor.rgb *= .93 + .045 * wind + .035 * broad + .018*grain;
+    `).replace('#include <normal_fragment_maps>',`#include <normal_fragment_maps>
+      float relief=(snowNoise(vSnowPosition.xz*2.8)*.023+snowNoise(vSnowPosition.xz*12.3)*.007)*(1.-smoothstep(18.,110.,distance(cameraPosition,vSnowPosition)));
+      vec3 snowQ0=dFdx(-vViewPosition),snowQ1=dFdy(-vViewPosition);
+      vec3 snowR1=cross(snowQ1,normal),snowR2=cross(normal,snowQ0);float snowDet=dot(snowQ0,snowR1);
+      normal=normalize(abs(snowDet)*normal-sign(snowDet)*(dFdx(relief)*snowR1+dFdy(relief)*snowR2));
+    `).replace('#include <opaque_fragment>',`
+      float sparkle=pow(snowNoise(vSnowPosition.xz*97.1),28.)*(1.-smoothstep(4.,24.,distance(cameraPosition,vSnowPosition)))*(1.-snowCloudCover);
+      outgoingLight+=vec3(1.,.97,.89)*sparkle*.14*max(0.,dot(normal,normalize((viewMatrix*vec4(snowSunDirection,0.)).xyz)));
+      #include <opaque_fragment>
     `);
   };
-  material.customProgramCacheKey=()=>'snow-relief-v1';
+  material.customProgramCacheKey=()=>'snow-relief-v2';
   return material;
 }
 
@@ -62,12 +75,12 @@ export class SnowEffects {
     this.particleAlphas=new THREE.BufferAttribute(new Float32Array(this.particleCount),1).setUsage(THREE.DynamicDrawUsage);
     particleGeometry.setAttribute('position',this.particlePositions);particleGeometry.setAttribute('snowAlpha',this.particleAlphas);
     const canvas=document.createElement('canvas');canvas.width=canvas.height=64;const ctx=canvas.getContext('2d');const radial=ctx.createRadialGradient(32,32,0,32,32,32);radial.addColorStop(0,'#ffffffdf');radial.addColorStop(.35,'#ffffff89');radial.addColorStop(1,'#ffffff00');ctx.fillStyle=radial;ctx.fillRect(0,0,64,64);
-    const sprayMaterial=new THREE.PointsMaterial({map:new THREE.CanvasTexture(canvas),color:'#edf5ff',size:.55,transparent:true,depthWrite:false,opacity:.42});
+    const sprayMaterial=new THREE.PointsMaterial({map:new THREE.CanvasTexture(canvas),color:'#edf5ff',size:.72,transparent:true,depthWrite:false,opacity:.56});
     sprayMaterial.onBeforeCompile=shader=>{
       shader.vertexShader=shader.vertexShader.replace('#include <common>','#include <common>\nattribute float snowAlpha; varying float vSnowAlpha;').replace('#include <begin_vertex>','#include <begin_vertex>\nvSnowAlpha=snowAlpha;');
       shader.fragmentShader=shader.fragmentShader.replace('#include <common>','#include <common>\nvarying float vSnowAlpha;').replace('#include <map_particle_fragment>','#include <map_particle_fragment>\ndiffuseColor.a *= vSnowAlpha;');
     };
-    this.spray=new THREE.Points(particleGeometry,sprayMaterial);this.spray.frustumCulled=false;scene.add(this.spray);
+    this.sprayMaterial=sprayMaterial;this.spray=new THREE.Points(particleGeometry,sprayMaterial);this.spray.frustumCulled=false;scene.add(this.spray);
   }
   reset(){this.cursor=0;this.count=0;this.geometry.setDrawRange(0,0);this.breakTrail();}
   breakTrail(){this.previous=null;this.particles.forEach(p=>p.life=0);}
@@ -94,7 +107,8 @@ export class SnowEffects {
     this.positions.needsUpdate=this.colors.needsUpdate=this.normals.needsUpdate=true;
     this.cursor=(this.cursor+1)%this.capacity;this.count=Math.min(this.count+1,this.capacity);this.geometry.setDrawRange(0,this.count*this.verticesPerSegment);
   }
-  update(dt,skier,running,snow){
+  update(dt,skier,running,snow,poleContact){
+    if(running&&poleContact){for(let k=0;k<5;k++){const p=this.particles[this.particleCursor++%this.particleCount];Object.assign(p,{x:poleContact.x,y:poleContact.y+.02,z:poleContact.z,vx:(Math.random()-.5)*.5,vz:(Math.random()-.5)*.5,vy:.3+Math.random()*.3,life:.24,maxLife:.3});}}
     if(running&&skier.speed>.8){
       const current={x:skier.x,z:skier.z,heading:skier.heading,slip:skier.slip};
       if(!this.previous)this.previous=current;
@@ -108,16 +122,17 @@ export class SnowEffects {
         this.previous=current;
       }
       const intensity=Math.min(1,(snow==='soft'?.18:0)+skier.slip*.2+skier.edge*.5+Math.abs(skier.turn)*.25)*(snow==='soft'?1.5:1);
-      const emit=Math.min(12,Math.floor(skier.speed*intensity*dt*35));
+      this.emission=(this.emission||0)+Math.min(560,skier.speed*intensity*28)*dt;
+      const emit=Math.min(20,Math.floor(this.emission));this.emission-=emit;
       for(let i=0;i<emit;i++){
-        const p=this.particles[this.particleCursor++%this.particleCount],side=Math.random()<.5?-1:1;
+        const p=this.particles[this.particleCursor++%this.particleCount],side=skier.slip>1?(Math.sign(skier.vx*Math.cos(skier.heading)-skier.vz*Math.sin(skier.heading))||1):(Math.random()<.5?-1:1);
         Object.assign(p,{x:skier.x+Math.cos(skier.heading)*side*.23,z:skier.z-Math.sin(skier.heading)*side*.23,y:this.height(skier.x,skier.z)+.08,
-          vx:-skier.vx*.12+Math.cos(skier.heading)*side*(.5+intensity*2.3),vz:-skier.vz*.12-Math.sin(skier.heading)*side*(.5+intensity*2.3),vy:.3+Math.random()*intensity*2.5,life:.45+Math.random()*.65,maxLife:1.1});
+          vx:skier.vx*.12+Math.cos(skier.heading)*side*(.3+Math.random()*intensity*3.5),vz:skier.vz*.12-Math.sin(skier.heading)*side*(.3+Math.random()*intensity*3.5),vy:.25+Math.random()*intensity*2.2,life:.6+Math.random()*.7,maxLife:1.3});
       }
     }
     // Pausing also freezes airborne snow.
     for(let i=0;i<this.particleCount;i++){
-      const p=this.particles[i];if(p.life>0){if(running){p.life-=dt;p.vy-=5*dt;p.x+=p.vx*dt;p.y+=p.vy*dt;p.z+=p.vz*dt;}
+      const p=this.particles[i];if(p.life>0){if(running){p.life-=dt;p.vy-=3.4*dt;p.vx*=Math.exp(-dt*1.6);p.vz*=Math.exp(-dt*1.6);p.x+=p.vx*dt;p.y+=p.vy*dt;p.z+=p.vz*dt;}
         this.particlePositions.setXYZ(i,p.x,p.y,p.z);this.particleAlphas.setX(i,Math.max(0,p.life/p.maxLife));
       }else{this.particlePositions.setXYZ(i,0,-1e5,0);this.particleAlphas.setX(i,0);}
     }

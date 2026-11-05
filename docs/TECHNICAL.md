@@ -126,3 +126,17 @@ The fine DEM uses a binary height array on the original footprint. `src/ground.j
 The init pipeline builds piste corridors, then station aprons, before creating render / snow / physics terrain. All ten spawns start at zero velocity on gentle ground. Terminal and lodge details are merged by material into static geometry. The lower terminal has an 18 m arrival ring and a return-to-start action. An explicit development-only `?station-qa` fixture places the player just outside this ring to exercise arrival and return; it is excluded from production.
 
 Lateral snow shear is force-limited, with slip / edge-dependent drag and a static-friction hold. A latched high-edge cross-slope skid disables automatic arc steering until edge input is released. This is still a ground-constrained approximation, not independent ski contact / flex simulation. The pole cycle also drives arm, torso and basket animation. Sky uses a local CC0 HDR photograph and a prefiltered environment map; see [assets](ASSETS.md).
+
+
+## Unified environment and scene refinement
+
+`MountainWeather` owns the dynamic sky, weather transition, light direction / colors, fog, exposure and snowfall. `snowLighting` shares cloud cover with snow materials. User selection comes from the accessible `#weather` select. A five-second smoothstep transition restarts from the current state when interrupted. Weather continues while a run is paused; skier physics / spray retain their existing pause behavior.
+
+The distant winter material has reduced baked-darkness contrast so it integrates with the new haze. Near / mid trees use shared bent branch / needle geometry and snow caps, with spatially batched far cards. Corridor clearance uses authored piste widths; local rock dressing is cosmetic and excluded from mapped route vicinity.
+
+The follow camera blends ski and travel direction, with slower heading response than the skier and bounded speed-dependent distance / FOV. This gives turn continuity without artificial camera shake. The articulated pose shifts the hips, flexes the inside leg and counter-rotates the torso while keeping ankles anchored to the ski rig approximation. Snow spray follows slip direction and uses frame-rate-independent accumulated emission.
+
+Development-only `?visual-qa` offers fixed slope / forest inspection positions and an explicit start-from-here action. It is excluded from production. Inspection captures are real renders at staged positions, not full-run playthrough evidence.
+
+
+Turn-end pole timing lives in `src/skier-animation.js`: release / reversal or an accumulated turn arc arms a single 0.8 s gesture with a short contact window. Gesture-side state is retained through a steering reversal. The plant point is world anchored against the supplied snow surface, and the hand follows the fixed-length pole during contact. It generates contact spray but does not modify ski velocity; Shift remains the explicit propulsion input. Head / torso proportions, continuous sleeve and trouser sections, and independent ski pivots replace the earlier primitive-only silhouette. This is not motion capture or a physically articulated body solver.

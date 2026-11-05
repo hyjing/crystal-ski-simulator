@@ -1,11 +1,13 @@
 import * as THREE from 'three';
 import {createTerrain,lonLatToUTM} from './terrain.js';
 
+export const pisteHalfWidth=(name,difficulty)=>/road|traverse|otto|13-f|i-5/i.test(name)?6:name==='Green Valley'?22:difficulty==='easy'?12:13;
+
 export function preparePisteTerrain(raw,network){
   const heights=Float32Array.from(raw.heights),best=new Float32Array(heights.length).fill(Infinity),footH=new Float32Array(heights.length),signed=new Float32Array(heights.length),widths=new Float32Array(heights.length),groomed=new Uint8Array(heights.length);
   const ce=raw.originUTM[0]+(raw.width-1)*raw.spacing/2,cn=raw.originUTM[1]-(raw.height-1)*raw.spacing/2;
   for(const feature of network.features){
-    const name=feature.properties.name||'',road=/road|traverse|otto|13-f|i-5/i.test(name),halfWidth=road?6:name==='Green Valley'?22:feature.properties['piste:difficulty']==='easy'?12:13;
+    const name=feature.properties.name||'',road=/road|traverse|otto|13-f|i-5/i.test(name),halfWidth=pisteHalfWidth(name,feature.properties['piste:difficulty']);
     const points=feature.geometry.coordinates.map(ll=>{const p=lonLatToUTM(...ll);return{x:p.e-ce,z:cn-p.n};});
     for(let i=1;i<points.length;i++){
       const a=points[i-1],b=points[i],dx=b.x-a.x,dz=b.z-a.z,l2=dx*dx+dz*dz;if(l2<.1)continue;
@@ -19,7 +21,9 @@ export function preparePisteTerrain(raw,network){
   }
   for(let i=0;i<heights.length;i++)if(Number.isFinite(best[i])){
     const interior=1-THREE.MathUtils.smoothstep(best[i],.55,1),bench=THREE.MathUtils.clamp(footH[i]-heights[i],-3,3)*interior*.8*groomed[i];
-    const d=(signed[i]-widths[i])/5.5,berm=Math.exp(-d*d*2)*1.15;
+    const u=i%raw.width,v=Math.floor(i/raw.width),p=raw.world(u,v);
+    const drift=.72+.22*Math.sin(p.x*.035+p.z*.017)+.10*Math.sin(p.z*.095);
+    const d=(signed[i]-widths[i])/5.5,berm=Math.exp(-d*d*2)*1.15*drift;
     heights[i]+=bench+berm;
   }
   return createTerrain({...raw,heights});

@@ -40,3 +40,12 @@ A short 1280 × 900 browser trial reported a P95 frame interval around 18.5 ms, 
 Station beams, roofs, windows and machinery are merged into static material batches rather than retaining one draw call per part. Nearby procedural trees use three shared prototypes with a maximum of eight instances each (24 total), selected within 110 m at most every 650 ms. Only replaced far-card instance ranges are uploaded. Tree collision queries use a 16 m spatial grid rather than scanning the entire forest at each physics step.
 
 Terrain tile boundaries share the finest edge samples and DEM-gradient normals across 5/10/20 m LODs; no per-frame geometry reconstruction or dark downward skirts are required. The photographed sky adds a 5.2 MiB HDR asset and a prefiltered environment texture. These are budget measures, not proof of unchanged frame times; no new sustained hardware benchmark has been performed for this scene update.
+
+
+## Unified weather / denser forest
+
+- Far forest uses shared geometry in 384 m spatial batches so the frustum can reject invisible regions. Far cards do not cast shadows; near / mid branch instances do. Nearby replacement updates only dirty instance ranges at most every 500 ms.
+- Dense solid foliage clusters were replaced by bent needle cutouts, reducing near mesh triangles while preserving a porous silhouette. Geometry and materials are shared across three variants at each distance level.
+- Snowfall stays at 2,400 sprites and reuses a typed vertex buffer. Sky uses one dome pass, photographed cloud detail plus five noise octaves, with no volumetric ray marcher or extra shadow cascade.
+- Initial raster cap is now 1.15. Sustained frame P95 above 21.5 ms reduces raster scale towards 0.85, including overview / scenery and development inspection views. This trades raster sharpness for frame pacing; it does not guarantee 60 FPS on all devices.
+- This update adds detail and forest density, so old benchmark figures are historical, not performance parity claims.

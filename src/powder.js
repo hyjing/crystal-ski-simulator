@@ -32,7 +32,7 @@ export class PowderSurface {
     this.bytes=new Uint8Array(TEXTURE_SIZE*TEXTURE_SIZE*4);
     this.texture=new THREE.DataTexture(this.bytes,TEXTURE_SIZE,TEXTURE_SIZE,THREE.RGBAFormat);this.texture.minFilter=this.texture.magFilter=THREE.LinearFilter;this.texture.generateMipmaps=false;
     this.geometry=new THREE.PlaneGeometry(PATCH_SIZE,PATCH_SIZE,SEGMENTS,SEGMENTS);this.geometry.rotateX(-Math.PI/2);
-    const material=createSnowMaterial(PATCH_SIZE,PATCH_SIZE,renderer);material.vertexColors=false;material.color.set('#ffffff');material.normalScale.set(.13,.13);material.roughness=1;material.clearcoat=.02;material.transparent=true;material.depthWrite=false;
+    const material=createSnowMaterial(PATCH_SIZE,PATCH_SIZE,renderer);material.vertexColors=false;material.color.set('#ffffff');material.normalScale.set(.48,.48);material.roughness=.91;material.clearcoat=.02;material.transparent=true;material.depthWrite=false;
     const groundData=new Float32Array(terrain.width*terrain.height*4);
     for(let z=0;z<terrain.height;z++)for(let x=0;x<terrain.width;x++){
       const i=z*terrain.width+x,p=terrain.world(x,z),g=terrain.gradient(p.x,p.z),n=terrain.renderNormals;
@@ -72,7 +72,7 @@ export class PowderSurface {
         float gz=(powderOffset(powderWorld+vec2(0.,.25))-powderOffset(powderWorld-vec2(0.,.25)))/.5;
         objectNormal=normalize(vec3(-ground.y-gx,1.,-ground.z-gz));
       `).replace('#include <begin_vertex>','#include <begin_vertex>\ntransformed.y=ground.x-1200.+.012+powderOffset(powderWorld);')
-        .replace('vSnowPosition = position;','vSnowPosition = vec3(powderWorld.x,ground.x-1200.,powderWorld.y);')
+        .replace('vSnowPosition = (modelMatrix * vec4(position,1.)).xyz;','vSnowPosition = vec3(powderWorld.x,ground.x-1200.,powderWorld.y);')
         .replace('#include <uv_vertex>','#include <uv_vertex>\nvMapUv=vec2(position.x+powderCenter.x+(groundSize.x-1.)*groundSpacing*.5,(groundSize.y-1.)*groundSpacing*.5-position.z-powderCenter.y)/5.;vNormalMapUv=vMapUv;vRoughnessMapUv=vMapUv;');
     };
     material.customProgramCacheKey=()=>'deformable-powder-gpu-v2';

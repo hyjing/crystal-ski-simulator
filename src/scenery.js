@@ -23,7 +23,7 @@ function winterMaterial(texture){
         // Preserve the photographed glacier channels and rock, with authored winter snow.
         float snow=smoothstep(1150.,2150.,vElevation)*(1.-smoothstep(.18,.62,vSteep)*.82);
         vec3 winterSnow=vec3(.84,.90,.97)*(.52+.48*sqrt(luma));
-        vec3 winterForest=aerial.rgb*vec3(.65,.76,.83);
+        vec3 winterForest=mix(vec3(.12,.20,.18),vec3(.67,.75,.80),smoothstep(.025,.45,luma)*.60);
         float cover=snow*mix(.87,.25,smoothstep(2300.,3300.,vElevation));
         diffuseColor.rgb*=mix(winterForest,winterSnow,cover);
       #endif`);
@@ -68,22 +68,10 @@ export function addRainierTerrain(scene,grid,local,texture){
   scene.userData.rainierPeak=peak;return mesh;
 }
 
-function addFallbackSky(scene){
-  const sky=new THREE.Mesh(new THREE.SphereGeometry(58000,32,16),new THREE.ShaderMaterial({side:THREE.BackSide,depthWrite:false,
-    uniforms:{zenith:{value:new THREE.Color('#5389b4')},horizon:{value:new THREE.Color('#d9e4eb')}},
-    vertexShader:'varying vec3 vDirection;void main(){vDirection=position;gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.);}',
-    fragmentShader:'uniform vec3 zenith;uniform vec3 horizon;varying vec3 vDirection;void main(){float h=normalize(vDirection).y;float t=pow(max(0.,h),.48);gl_FragColor=vec4(mix(horizon,zenith,t),1.);#include <tonemapping_fragment>\n#include <colorspace_fragment>}',
-  }));
-  // Keep preprocessor directives on their own lines for WebGL compilers.
-  sky.material.fragmentShader=sky.material.fragmentShader.replace(';#include',';\n#include');
-  scene.add(sky);
-}
-
-
 export async function addAlpineSky(scene,renderer){
   try{
     const texture=await new HDRLoader().loadAsync(`${import.meta.env.BASE_URL}assets/partly-cloudy-sky.hdr`);
-    texture.mapping=THREE.EquirectangularReflectionMapping;scene.background=texture;scene.backgroundIntensity=.78;
+    texture.mapping=THREE.EquirectangularReflectionMapping;texture.wrapS=THREE.RepeatWrapping;scene.background=texture;scene.backgroundIntensity=.78;
     const pmrem=new THREE.PMREMGenerator(renderer);scene.environment=pmrem.fromEquirectangular(texture).texture;scene.environmentIntensity=.22;pmrem.dispose();
-  }catch(error){console.warn('Photo sky unavailable',error);addFallbackSky(scene);}
+  }catch(error){console.warn('Cloud photo unavailable; weather uses procedural clouds',error);}
 }

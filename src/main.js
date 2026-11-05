@@ -12,6 +12,8 @@ import {prepareStationTerrain,addStationStructures} from './stations.js';
 import {preparePisteTerrain,addBoundaryPosts,createArrivalZone} from './pistes.js';
 import {hitsTreeTrunk} from './trees.js';
 import {createAthleteRig,updateAthletePose} from './athlete.js';
+import {MountainWeather,WEATHER_PRESETS} from './environment.js';
+import {addAlpineDetails} from './alpine-details.js';
 
 const $ = id => document.getElementById(id);
 const keys = new Set();
@@ -20,8 +22,9 @@ let mode='intro', view='follow', elapsed=0, peakSpeed=0, checkpoint=0, totalDist
 let lastTime=0, accumulator=0, pausedFrom='running', soundOn=false, audio, noiseGain, toastTimeout;
 let frameTime=1/60,physicsMs=0;
 let powderMs=0,frameSamples=[],frameP95=0,frameMax=0,slowFrames=0;
-let renderScale=Math.min(devicePixelRatio,1.25),qualityClock=0;
+let renderScale=Math.min(devicePixelRatio,1.15),qualityClock=0;
 let routeFilter='all',routeQuery='',aerialBounds,stationAreas=[],boundaryPosts,arrivalZone,lookYaw=0,lookPitch=0,lookDrag;
+let weather,hemisphere,cameraHeading=null;
 let demoCapture,recordedInput=null,sceneryFrom='intro',sceneryView=false;
 let treePositions=[], trailPoints=[], mapBackground, snowEffects, sun, powder, speedRenderer, aerialImage, mapLayer='terrain', resortUpdate=()=>{};
 const baseElevation=1200, fixedStep=1/120;
@@ -66,10 +69,11 @@ async function init(){
   renderer.domElement.addEventListener('pointerdown',e=>{if(mode==='intro')return;lookDrag={x:e.clientX,y:e.clientY};renderer.domElement.setPointerCapture(e.pointerId);});
   renderer.domElement.addEventListener('pointermove',e=>{if(!lookDrag)return;lookYaw-=(e.clientX-lookDrag.x)*.004;lookPitch=clamp(lookPitch-(e.clientY-lookDrag.y)*.003,-.45,.65);lookDrag={x:e.clientX,y:e.clientY};});
   for(const event of ['pointerup','pointercancel'])renderer.domElement.addEventListener(event,()=>{lookDrag=null;});
-  scene.add(new THREE.HemisphereLight('#c2d9ff','#586b8a',.95));
+  hemisphere=new THREE.HemisphereLight('#c2d9ff','#586b8a',1.2);scene.add(hemisphere);
   sun=new THREE.DirectionalLight('#fff3de',3.1);sun.castShadow=true;sun.shadow.mapSize.set(2048,2048);
   Object.assign(sun.shadow.camera,{left:-150,right:150,top:150,bottom:-150,near:1,far:1400});sun.shadow.bias=-.0002;sun.shadow.normalBias=.06;sun.shadow.camera.updateProjectionMatrix();scene.add(sun,sun.target);
   await addAlpineSky(scene,renderer);
+  weather=new MountainWeather(scene,renderer,sun,hemisphere);
   const [canopy,canopyReference]=await Promise.all([new THREE.TextureLoader().loadAsync(`${import.meta.env.BASE_URL}data/crystal-canopy.png`),fetch(`${import.meta.env.BASE_URL}data/crystal-landcover.json`).then(r=>r.json())]);
   const centerE=terrain.originUTM[0]+(terrain.width-1)*terrain.spacing/2,centerN=terrain.originUTM[1]-(terrain.height-1)*terrain.spacing/2;
   aerialBounds={minX:canopyReference.extent.xmin-centerE,maxX:canopyReference.extent.xmax-centerE,minZ:centerN-canopyReference.extent.ymax,maxZ:centerN-canopyReference.extent.ymin};
@@ -82,6 +86,7 @@ async function init(){
   ]);
   routes.forEach(r=>{r.spawn=liftExitSpawn(terrain,r,infrastructure);});
   treePositions=addForest(scene,terrain,[...mappedRoutes,...routes],landcover,firTexture,vegetation,stationAreas);resortUpdate=addResort(scene,terrain,infrastructure);addStationStructures(scene,terrain,infrastructure,stationAreas);
+  addAlpineDetails(scene,terrain,mappedRoutes,stationAreas);
   createAthlete();snowEffects=new SnowEffects(scene,{...terrain,surface:(x,z)=>powder.surface(x,z)});createMapBackground();
   speedRenderer=new SpeedRenderer(renderer,scene,camera);
   aerialImage=new Image();aerialImage.onload=()=>drawMap();aerialImage.src=`${import.meta.env.BASE_URL}data/crystal-aerial.jpg`;
@@ -99,7 +104,15 @@ async function init(){
     }catch(error){console.warn('Detailed scenery unavailable',error);toast('高清远景暂未载入，已保留基础远山');}
   }).catch(()=>toast('远山数据载入失败，近处地形仍可滑行'));
   renderRouteList();
-  selectRoute(route.id);speedRenderer.prepare();$('loading').classList.add('hidden'); $('start').disabled=false;
+  selectRoute(route.id);weather.update(0,camera,athlete.position);weather.snowfall.mesh.visible=true;speedRenderer.prepare();weather.snowfall.mesh.visible=false;$('loading').classList.add('hidden'); $('start').disabled=false;
+  if(import.meta.env.DEV&&new URLSearchParams(location.search).has('visual-qa')){
+    const panel=document.createElement('div');Object.assign(panel.style,{position:'fixed',left:'350px',top:'95px',zIndex:40,display:'flex',gap:'6px'});
+    for(const [id,label,routeId,fraction] of [['slope','QA：坡面','green-valley',.38],['forest','QA：林间','mr-magoo',.48]]){
+      const button=document.createElement('button');button.id=`qa-${id}`;button.textContent=label;
+      button.onclick=()=>{selectRoute(routeId);startRun();const p=pointAlongRoute(route,route.length*fraction),next=pointAlongRoute(route,route.length*fraction+20);skier=createSkier(p,next);mode='inspection';updateAthlete(0);updateCamera(0,true);};panel.append(button);
+    }
+    const play=document.createElement('button');play.id='qa-play';play.textContent='QA：从这里滑';play.onclick=()=>{mode='running';};panel.append(play);const hide=document.createElement('button');hide.id='qa-hide';hide.textContent='QA：隐藏工具';hide.onclick=()=>{panel.hidden=true;panel.style.display='none';};panel.append(hide);document.body.append(panel);
+  }
   if(import.meta.env.DEV&&new URLSearchParams(location.search).has('station-qa')){
     const button=document.createElement('button');button.id='qa-arrival';button.textContent='QA：从光圈外验证到站';
     Object.assign(button.style,{position:'fixed',left:'36px',bottom:'80px',zIndex:50,padding:'12px',background:'#edf4e1',color:'#183c3c'});
@@ -209,7 +222,7 @@ function resetPosition(full=false){
 
 function startRun(){
   for(const d of document.querySelectorAll('dialog[open]'))d.close();
-  mode='running';view='follow';lookYaw=lookPitch=0;resetPosition(true);keys.clear();
+  mode='running';view='follow';lookYaw=lookPitch=0;cameraHeading=null;resetPosition(true);keys.clear();
   $('intro').classList.add('hidden');$('session').classList.remove('hidden');$('touch').classList.add('active');
   $('overview').innerHTML='俯瞰 <kbd>O</kbd>';
   toast('上站缓坡出发 · 按住 Shift 撑杖 · 沿雪道滑到下站光圈');
@@ -255,7 +268,7 @@ function updateAthlete(dt){
   athlete.position.set(skier.x,yAt(skier.x,skier.z)-.07,skier.z);
   groundNormal.set(-g.x,1,-g.z).normalize();skiForward.set(fx,g.x*fx+g.z*fz,fz).normalize();skiRight.crossVectors(groundNormal,skiForward).normalize();
   skiBasis.makeBasis(skiRight,groundNormal,skiForward);athlete.quaternion.setFromRotationMatrix(skiBasis);
-  updateAthletePose(athlete,skier,dt);
+  updateAthletePose(athlete,skier,dt,yAt);
 }
 
 function updateCamera(dt,snap=false){
@@ -273,14 +286,19 @@ function updateCamera(dt,snap=false){
     const start=route.points[0],goal=route.points.at(-1),station=Math.hypot(p.x-start.x,p.z-start.z)<150?start:Math.hypot(p.x-goal.x,p.z-goal.z)<150?goal:null;
     if(station){targetCamera.set(station.x+75,yAt(station.x,station.z)+52,station.z+75);lookTarget.set(station.x,yAt(station.x,station.z)+3,station.z);}else{targetCamera.set(p.x+180,p.y+460,p.z+280);lookTarget.copy(p);}
   }else{
-    forward.set(Math.sin(skier.heading+lookYaw),0,Math.cos(skier.heading+lookYaw));
-    targetCamera.copy(p).addScaledVector(forward,-9-Math.min(skier.speed*.08,3));targetCamera.y+=4.3-skier.tuck;
+    const velocityHeading=skier.speed>2?Math.atan2(skier.vx,skier.vz):skier.heading;
+    const skidAngle=Math.atan2(Math.sin(velocityHeading-skier.heading),Math.cos(velocityHeading-skier.heading));
+    const desiredHeading=skier.heading+skidAngle*.40;
+    if(cameraHeading===null||snap)cameraHeading=desiredHeading;
+    cameraHeading+=Math.atan2(Math.sin(desiredHeading-cameraHeading),Math.cos(desiredHeading-cameraHeading))*(snap?1:1-Math.exp(-dt*5));
+    forward.set(Math.sin(cameraHeading+lookYaw),0,Math.cos(cameraHeading+lookYaw));
+    targetCamera.copy(p).addScaledVector(forward,-10.5-Math.min(skier.speed*.12,4.5));targetCamera.y+=4.5-skier.tuck*.55;
     targetCamera.y=Math.max(targetCamera.y,yAt(targetCamera.x,targetCamera.z)+3);
-    lookTarget.copy(p).addScaledVector(forward,12);lookTarget.y+=1.8+lookPitch*20;
+    lookTarget.copy(p).addScaledVector(forward,8+Math.min(skier.speed*.20,5));lookTarget.y+=1.8+lookPitch*20;
   }
-  const a=snap?1:1-Math.exp(-dt*(mode==='intro'?2:12));
+  const a=snap?1:1-Math.exp(-dt*(mode==='intro'?2:7));
   camera.position.lerp(targetCamera,a);displayLook.lerp(lookTarget,a);camera.lookAt(displayLook);if(!sceneryView&&mode!=='intro'&&view==='follow')camera.rotateZ(-skier.turn*skier.edge*.022);
-  const fov=sceneryView?46:58+(mode==='intro'?0:Math.min(skier.speed*.45,17)+skier.tuck*4);
+  const fov=sceneryView?46:58+(mode==='intro'?0:Math.min(skier.speed*.28,11)+skier.tuck*2);
   camera.fov=THREE.MathUtils.lerp(camera.fov,fov,a);camera.updateProjectionMatrix();
 }
 
@@ -322,6 +340,7 @@ function updateUI(){
   $('timer').textContent=clockFormat(elapsed);$('distance').textContent=`${Math.round(totalDistance)} m`;
   $('stance').textContent=skier.poling>.2?'双杖蹬撑':skier.edge>.5&&skier.speed<.35?'立刃停稳':skier.edge>.5?`压刃${skier.turn<0?'左':'右'}弯 · ${Math.round(skier.edgeAngle*180/Math.PI)}°`:skier.tuck>.5?'收身 · 低风阻':skier.slip>1.5?'侧滑控速':Math.abs(skier.turn)>.15?'平板转向':'直滑';
   if(frameSamples.length>10){const sorted=[...frameSamples].sort((a,b)=>a-b);frameP95=sorted[Math.floor(sorted.length*.95)];frameMax=sorted.at(-1);slowFrames=sorted.filter(x=>x>25).length;}
+  $('weather-status').textContent=`${WEATHER_PRESETS[weather.id].label}${weather.progress<1?' · 过渡中':''}`;
   $('performance').textContent=`${Math.round(1/frameTime)} FPS`;$('performance').title=`近180帧：P95 ${frameP95.toFixed(1)} ms · 最大 ${frameMax.toFixed(1)} ms · 超25ms ${slowFrames}帧 · CPU粉雪 ${powderMs.toFixed(2)} ms · 物理 ${physicsMs.toFixed(2)} ms · 渲染 ${renderScale.toFixed(2)}×`;
   const n=nearestOnRoute(skier,route.points);$('progress').style.width=`${clamp(n.progress/n.total*100,0,100)}%`;
   if(mode==='running'){
@@ -338,11 +357,11 @@ function updateUI(){
 function animate(time){
   requestAnimationFrame(animate);const rawDt=(time-lastTime)/1000||0,dt=Math.min(rawDt,.1);lastTime=time;
   demoCapture?.beforeFrame(time);
-  if(mode==='running'){frameSamples.push(rawDt*1000);if(frameSamples.length>180)frameSamples.shift();}else frameSamples=[];
+  if(['running','inspection','intro','scenery'].includes(mode)){frameSamples.push(rawDt*1000);if(frameSamples.length>180)frameSamples.shift();}else frameSamples=[];
   qualityClock+=dt;
-  if(mode==='running'&&qualityClock>3&&frameSamples.length>90){
+  if(qualityClock>3&&frameSamples.length>90){
     qualityClock=0;
-    if(frameP95>24&&renderScale>.85){renderScale=Math.max(.85,renderScale-.15);renderer.setPixelRatio(renderScale);speedRenderer.setPixelRatio(renderScale);frameSamples=[];}
+    if(frameP95>21.5&&renderScale>.85){renderScale=Math.max(.85,renderScale-.15);renderer.setPixelRatio(renderScale);speedRenderer.setPixelRatio(renderScale);frameSamples=[];}
   }
   frameTime=frameTime*.94+Math.max(dt,.001)*.06;const physicsStart=performance.now();
   if(mode==='running'){
@@ -351,9 +370,10 @@ function animate(time){
   }else accumulator=0;
   physicsMs=physicsMs*.9+(performance.now()-physicsStart)*.1;
   const powderStart=performance.now();powder.update(skier,mode==='running',snow);powderMs=performance.now()-powderStart;
-  updateAthlete(dt);updateCamera(dt);snowEffects.update(dt,skier,mode==='running',snow);snowEffects.mesh.material.opacity=snow==='soft'?.18:.65;resortUpdate(time/1000);treePositions.updateLOD?.(mode==='intro'?camera.position:skier,time);
+  updateAthlete(dt);updateCamera(dt);snowEffects.update(dt,skier,mode==='running',snow,athlete.userData.poleContact);snowEffects.mesh.material.opacity=snow==='soft'?.29:.65;resortUpdate(time/1000);treePositions.updateLOD?.(mode==='intro'?camera.position:skier,time);
   if(arrivalZone){arrivalZone.visible=mode==='running';arrivalZone.children[0].material.opacity=.55+.15*Math.sin(time*.002);}
-  sun.position.copy(athlete.position).add(new THREE.Vector3(-430,380,-280));sun.target.position.copy(athlete.position);sun.target.updateMatrixWorld();
+  weather.update(dt,camera,athlete.position);
+  snowEffects.sprayMaterial.color.copy(weather.state.cloud).lerp(weather.state.sun,.2);
   uiClock+=dt;if(uiClock>.1){updateUI();uiClock=0;}
   if(noiseGain)noiseGain.gain.setTargetAtTime(soundOn&&mode==='running'?.006+Math.min(skier.speed/42,1)*.065:0,audio.currentTime,.15);
   speedRenderer.render(skier.speed,mode==='running'&&view==='follow');
@@ -397,6 +417,7 @@ $('help-dialog').addEventListener('cancel',e=>{e.preventDefault();closeHelp();})
 $('overview').addEventListener('click',()=>{if(mode==='intro'){toast('开始滑行后，可以切换跟随 / 俯瞰镜头');return;}view=view==='follow'?'overview':'follow';$('overview').innerHTML=view==='overview'?'跟随 <kbd>O</kbd>':'俯瞰 <kbd>O</kbd>';});
 $('blur').addEventListener('click',()=>{speedRenderer.enabled=!speedRenderer.enabled;$('blur').textContent=speedRenderer.enabled?'速度模糊开':'速度模糊关';$('blur').setAttribute('aria-pressed',speedRenderer.enabled);});
 $('map-layer').addEventListener('click',()=>{mapLayer=mapLayer==='terrain'?'aerial':'terrain';$('map-layer').textContent=mapLayer==='terrain'?'航拍图':'地形图';drawMap();});
+$('weather').addEventListener('change',event=>{const id=event.target.value;weather.set(id);event.target.blur();$('weather-status').textContent=`${WEATHER_PRESETS[id].label} · 环境过渡中`;toast(`正在转为${WEATHER_PRESETS[id].label}，天空、光照与能见度同步变化`);});
 $('sound').addEventListener('click',()=>{soundOn=!soundOn;if(soundOn)enableAudio();$('sound').textContent=soundOn?'声音开':'声音关';$('sound').setAttribute('aria-pressed',soundOn);});
 document.querySelectorAll('[data-snow]').forEach(b=>b.addEventListener('click',()=>{snow=b.dataset.snow;document.querySelectorAll('[data-snow]').forEach(el=>el.classList.toggle('selected',el===b));}));
 document.querySelectorAll('[data-key]').forEach(b=>{
@@ -404,7 +425,7 @@ document.querySelectorAll('[data-key]').forEach(b=>{
   for(const type of ['pointerup','pointercancel','lostpointercapture'])b.addEventListener(type,()=>keys.delete(b.dataset.key));
 });
 addEventListener('keydown',e=>{
-  if(e.target instanceof HTMLInputElement)return;
+  if(e.target instanceof HTMLInputElement||e.target instanceof HTMLSelectElement)return;
   if(['Space','ArrowLeft','ArrowRight','ArrowDown','ArrowUp'].includes(e.code))e.preventDefault();
   if(e.repeat)return;
   if(e.code==='KeyV'){toggleScenery();return;}
