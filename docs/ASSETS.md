@@ -30,7 +30,7 @@ Locations reference OSM geometry. Lift support height, chairs, cable sag, speeds
 
 ## Powder and speed effects
 
-- Near-field snow: a 48 m square tessellated patch, 0.1875 m vertex spacing, over the unchanged USGS ground model. Snow thickness and wind mounds are artistic parameters.
+- Near-field snow: a static 48 m square tessellated patch with GPU elevation / normal sampling, 0.1875 m vertex spacing, over the unchanged USGS ground model. Snow thickness and wind mounds are artistic parameters.
 - Compression: bounded sparse world-coordinate field, retaining up to 180,000 cells at 0.125 m spacing. The 512 × 512 visible displacement texture covers 64 m; ski imprints depress the surface and add raised rims.
 - Patch boundaries feather back into the base terrain. No granular particle mass-conservation, subsurface fracture or snow-water content is modeled.
 - Far session trails retain lightweight ribbons; near powder supplies the actual mesh deformation.

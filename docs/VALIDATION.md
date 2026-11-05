@@ -1,4 +1,4 @@
-# Validation — v0.3
+# Validation — v0.3.1
 
 ## Automated
 
@@ -9,7 +9,9 @@
 - High edge engagement gives a materially tighter turn than flat-ski steering.
 - Speed reduction from a completed turn / lateral skid.
 - Tuck reduces aerodynamic drag without creating forward thrust.
-- Mirrored steering, soft-snow drag, bounded finite simulation.
+- Mirrored steering, fast engagement / reversal, and stopping idle pivot after release.
+- Static powder vertex buffers across rebases, with persistent imprints across rolling texture windows.
+- Soft-snow drag and bounded finite simulation.
 - Kinetic energy does not exceed released gravitational energy on a constant slope.
 - Trail projection, DEM integrity and named OSM coordinate placement.
 - Render-triangle interpolation used for tracks / foot placement.
@@ -25,7 +27,7 @@ Route traversal verifies the simplified ground controller on the checked-in DEM,
 
 Interactive checks cover loading the snow shader / context terrain, powder deformation, moving on terrain, twin ski tracks, edge-angle feedback, tuck input, restarting, pause, overview, aerial-map toggle and speed-blur toggle. Browser console is checked for shader / runtime errors.
 
-The HUD reports current FPS and averaged per-frame CPU physics cost. This is not a sustained benchmark across named hardware, browsers or mobile devices.
+The HUD reports FPS, raw frame interval P95 / maximum, hitch count, raster scale, and CPU powder / physics cost. See `PERFORMANCE.md` for the focused measurements. This is not a sustained benchmark across named hardware, browsers or mobile devices.
 
 ## Remaining fidelity limits
 

@@ -1,13 +1,14 @@
 {
   "name": "crystal-ski-simulator",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "private": true,
   "type": "module",
   "scripts": {
     "dev": "vite --host 127.0.0.1",
     "build": "vite build",
     "preview": "vite preview --host 127.0.0.1",
-    "test": "node --test tests/*.test.js"
+    "test": "node --test tests/*.test.js",
+    "bench:powder": "node scripts/benchmark-powder.mjs"
   },
   "dependencies": {
     "three": "^0.180.0"

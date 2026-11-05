@@ -34,6 +34,12 @@ npm run preview
 
 Space enters a turn rather than applying pedal-style direct deceleration. A / D select its direction. Skiing across the slope reduces downhill acceleration; turning and lateral skid dissipate energy. Tucking reduces drag and cannot accelerate a stationary skier on flat ground.
 
+## v0.3.1 — responsiveness and frame pacing
+
+Steering / reversal and camera response are faster, and releasing input stops idle pivoting. Powder terrain / normals now update in the GPU shader with static vertex buffers and rolling texture updates. Default rendering caps raster scale at 1.25, adapts down under sustained slow frames, and bypasses post-processing when blur is off. Blur is now off by default and remains optional.
+
+See [measurements and reproduction](docs/PERFORMANCE.md). `npm run bench:powder` measures CPU powder updates; hover the FPS HUD for frame-interval P95 / maximum and hitch count.
+
 ## v0.3 changes
 
 - **Powder is the default.** The near-field tessellated snow layer compresses under the skis and forms displaced rims, with world-coordinate imprints retained in a bounded field. Loose snow spray accompanies sliding / edge engagement. Hard snow remains selectable.

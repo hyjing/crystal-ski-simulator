@@ -14,6 +14,8 @@ let terrain, routes, route, skier, renderer, scene, camera, athlete, routeGroup,
 let mode='intro', view='follow', elapsed=0, peakSpeed=0, checkpoint=0, totalDistance=0, uiClock=0;
 let lastTime=0, accumulator=0, pausedFrom='running', soundOn=false, audio, noiseGain, toastTimeout;
 let frameTime=1/60,physicsMs=0;
+let powderMs=0,frameSamples=[],frameP95=0,frameMax=0,slowFrames=0;
+let renderScale=Math.min(devicePixelRatio,1.25),qualityClock=0;
 let treePositions=[], trailPoints=[], mapBackground, snowEffects, sun, powder, speedRenderer, aerialImage, mapLayer='terrain', resortUpdate=()=>{};
 const baseElevation=1200, fixedStep=1/120;
 const forward = new THREE.Vector3(), targetCamera = new THREE.Vector3(), lookTarget = new THREE.Vector3();
@@ -36,7 +38,7 @@ async function init(){
   scene=new THREE.Scene(); scene.background=new THREE.Color('#cbdce9'); scene.fog=new THREE.Fog('#cbdce9',6500,35000);
   camera=new THREE.PerspectiveCamera(58,innerWidth/innerHeight,1,65000);
   renderer=new THREE.WebGLRenderer({antialias:true, powerPreference:'high-performance'});
-  renderer.setSize(innerWidth,innerHeight); renderer.setPixelRatio(Math.min(devicePixelRatio,1.75));
+  renderer.setSize(innerWidth,innerHeight); renderer.setPixelRatio(renderScale);
   renderer.outputColorSpace=THREE.SRGBColorSpace; renderer.toneMapping=THREE.ACESFilmicToneMapping; renderer.toneMappingExposure=1;
   renderer.shadowMap.enabled=true;renderer.shadowMap.type=THREE.PCFSoftShadowMap;
   $('world').appendChild(renderer.domElement);
@@ -74,6 +76,7 @@ function createMountain(){
     color.offsetHSL(0,0,variation); color.toArray(colors,i*3);
   }
   mesh.setAttribute('color',new THREE.BufferAttribute(colors,3)); mesh.computeVertexNormals();
+  terrain.renderNormals=mesh.attributes.normal.array;
   const mountain=new THREE.Mesh(mesh,createSnowMaterial((w-1)*s,(h-1)*s,renderer));mountain.receiveShadow=true;
   scene.add(mountain);
   // A skirt closes the DEM tile at the horizon without modifying its actual heights.
@@ -146,7 +149,7 @@ function resetPosition(full=false){
   skier=createSkier(route.points[i],route.points[i+1]);
   skier.distance=full?0:totalDistance;
   snowEffects.breakTrail();powder.breakTrail();
-  if(full){elapsed=0;peakSpeed=0;checkpoint=0;totalDistance=0;trailPoints=[];snowEffects.reset();powder.reset();}
+  if(full){elapsed=0;peakSpeed=0;checkpoint=0;totalDistance=0;trailPoints=[];frameSamples=[];frameP95=0;snowEffects.reset();powder.reset();}
   else trailPoints.push({x:skier.x,z:skier.z,break:true});
   powder.update(skier,false,snow);updateAthlete(0); updateCamera(1,true);
   updateUI();
@@ -198,7 +201,7 @@ function updateAthlete(dt){
   groundNormal.set(-g.x,1,-g.z).normalize();skiForward.set(fx,g.x*fx+g.z*fz,fz).normalize();skiRight.crossVectors(groundNormal,skiForward).normalize();
   skiBasis.makeBasis(skiRight,groundNormal,skiForward);athlete.quaternion.setFromRotationMatrix(skiBasis);
   const turn=skier.turn||0;
-  athlete.userData.body.rotation.z=THREE.MathUtils.lerp(athlete.userData.body.rotation.z,Math.sign(turn)*skier.edgeAngle*.85,1-Math.exp(-dt*8));
+  athlete.userData.body.rotation.z=THREE.MathUtils.lerp(athlete.userData.body.rotation.z,Math.sign(turn)*skier.edgeAngle*.85,1-Math.exp(-dt*22));
   athlete.userData.skiRig.rotation.z=Math.sign(turn)*skier.edgeAngle*.75;
   athlete.userData.body.rotation.x=skier.tuck*.8;
   athlete.userData.body.position.y=-skier.tuck*.65;
@@ -219,7 +222,7 @@ function updateCamera(dt,snap=false){
     targetCamera.y=Math.max(targetCamera.y,yAt(targetCamera.x,targetCamera.z)+3);
     lookTarget.copy(p).addScaledVector(forward,12);lookTarget.y+=1.1;
   }
-  const a=snap?1:1-Math.exp(-dt*(mode==='intro'?2:4));
+  const a=snap?1:1-Math.exp(-dt*(mode==='intro'?2:12));
   camera.position.lerp(targetCamera,a);displayLook.lerp(lookTarget,a);camera.lookAt(displayLook);if(mode!=='intro'&&view==='follow')camera.rotateZ(-skier.turn*skier.edge*.022);
   const fov=58+(mode==='intro'?0:Math.min(skier.speed*.45,17)+skier.tuck*4);
   camera.fov=THREE.MathUtils.lerp(camera.fov,fov,a);camera.updateProjectionMatrix();
@@ -257,7 +260,8 @@ function updateUI(){
   const g=terrain.gradient(skier.x,skier.z);$('slope').textContent=Math.round(Math.atan(Math.hypot(g.x,g.z))*180/Math.PI);
   $('timer').textContent=clockFormat(elapsed);$('distance').textContent=`${Math.round(totalDistance)} m`;
   $('stance').textContent=skier.edge>.5?`压刃${skier.turn<0?'左':'右'}弯 · ${Math.round(skier.edgeAngle*180/Math.PI)}°`:skier.tuck>.5?'收身 · 低风阻':skier.slip>1.5?'侧滑控速':Math.abs(skier.turn)>.15?'平板转向':'直滑';
-  $('performance').textContent=`${Math.round(1/frameTime)} FPS`;$('performance').title=`单帧 CPU 物理计算约 ${physicsMs.toFixed(2)} ms（不含渲染）`;
+  if(frameSamples.length>10){const sorted=[...frameSamples].sort((a,b)=>a-b);frameP95=sorted[Math.floor(sorted.length*.95)];frameMax=sorted.at(-1);slowFrames=sorted.filter(x=>x>25).length;}
+  $('performance').textContent=`${Math.round(1/frameTime)} FPS`;$('performance').title=`近180帧：P95 ${frameP95.toFixed(1)} ms · 最大 ${frameMax.toFixed(1)} ms · 超25ms ${slowFrames}帧 · CPU粉雪 ${powderMs.toFixed(2)} ms · 物理 ${physicsMs.toFixed(2)} ms · 渲染 ${renderScale.toFixed(2)}×`;
   const n=nearestOnRoute(skier,route.points);$('progress').style.width=`${clamp(n.progress/n.total*100,0,100)}%`;
   if(mode==='running'){
     if(n.distance>150) $('distance').textContent+=' · 已偏离参考线路';
@@ -271,14 +275,21 @@ function updateUI(){
 }
 
 function animate(time){
-  requestAnimationFrame(animate);const dt=Math.min((time-lastTime)/1000||0,.1);lastTime=time;
+  requestAnimationFrame(animate);const rawDt=(time-lastTime)/1000||0,dt=Math.min(rawDt,.1);lastTime=time;
+  if(mode==='running'){frameSamples.push(rawDt*1000);if(frameSamples.length>180)frameSamples.shift();}else frameSamples=[];
+  qualityClock+=dt;
+  if(mode==='running'&&qualityClock>3&&frameSamples.length>90){
+    qualityClock=0;
+    if(frameP95>24&&renderScale>.85){renderScale=Math.max(.85,renderScale-.15);renderer.setPixelRatio(renderScale);speedRenderer.setPixelRatio(renderScale);frameSamples=[];}
+  }
   frameTime=frameTime*.94+Math.max(dt,.001)*.06;const physicsStart=performance.now();
   if(mode==='running'){
     accumulator+=dt;
     while(accumulator>=fixedStep){if(mode==='running')updatePhysics(fixedStep);accumulator-=fixedStep;}
   }else accumulator=0;
   physicsMs=physicsMs*.9+(performance.now()-physicsStart)*.1;
-  powder.update(skier,mode==='running',snow);updateAthlete(dt);updateCamera(dt);snowEffects.update(dt,skier,mode==='running',snow);snowEffects.mesh.material.opacity=snow==='soft'?.18:.65;resortUpdate(time/1000);
+  const powderStart=performance.now();powder.update(skier,mode==='running',snow);powderMs=performance.now()-powderStart;
+  updateAthlete(dt);updateCamera(dt);snowEffects.update(dt,skier,mode==='running',snow);snowEffects.mesh.material.opacity=snow==='soft'?.18:.65;resortUpdate(time/1000);
   sun.position.copy(athlete.position).add(new THREE.Vector3(-430,380,-280));sun.target.position.copy(athlete.position);sun.target.updateMatrixWorld();
   uiClock+=dt;if(uiClock>.1){updateUI();uiClock=0;}
   if(noiseGain)noiseGain.gain.setTargetAtTime(soundOn&&mode==='running'?.006+Math.min(skier.speed/42,1)*.065:0,audio.currentTime,.15);

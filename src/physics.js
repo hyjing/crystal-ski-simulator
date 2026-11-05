@@ -15,15 +15,16 @@ export function stepSkier(s, input, terrain, dt, snow = 'packed') {
   // Rolling onto an edge bends a sidecut ski into an arc, even without yaw input.
   // A/D select its direction; Space alone uses the last chosen side.
   const steering=Math.abs(input.steer)>.05?clamp(input.steer,-1,1):edge*s.lastTurn;
-  s.turn += (steering-s.turn)*(1-Math.exp(-dt*6));
+  s.turn += (steering-s.turn)*(1-Math.exp(-dt*(steering===0?32:26)));
+  if(Math.abs(s.turn)<.001)s.turn=0;
   s.edge = edge;
   s.tuck += (clamp(input.tuck||0,0,1)-s.tuck)*(1-Math.exp(-dt*5));
-  s.edgeAngle += ((.31+edge*.60)*Math.abs(s.turn)-s.edgeAngle)*(1-Math.exp(-dt*8));
+  s.edgeAngle += ((.52+edge*.39)*Math.abs(s.turn)-s.edgeAngle)*(1-Math.exp(-dt*28));
   const radius=19*Math.cos(s.edgeAngle);
   const balancedRate=PHYSICS.gravity*Math.tan(s.edgeAngle)/Math.max(speed,2);
   const sidecutRate=speed/Math.max(8,radius);
-  const pivotRate=Math.max(0,1-speed/4)*.65;
-  const yawRate=pivotRate+Math.min(sidecutRate,balancedRate);
+  const pivotRate=Math.max(0,1-speed/6)*1.15;
+  const yawRate=pivotRate*Math.abs(s.turn)+Math.min(sidecutRate,balancedRate);
   s.heading -= Math.sign(s.turn)*yawRate*(1-s.tuck*.12)*dt;
   const fx = Math.sin(s.heading), fz = Math.cos(s.heading);
   const rx = fz, rz = -fx;

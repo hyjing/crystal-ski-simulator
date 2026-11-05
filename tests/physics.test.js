@@ -3,7 +3,8 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { createTerrain, getRoutes } from '../src/terrain.js';
 import { createSkier, stepSkier, nearestOnRoute, clamp, PHYSICS } from '../src/physics.js';
-import {PowderField} from '../src/powder.js';
+import {PowderField,PowderSurface} from '../src/powder.js';
+import * as THREE from 'three';
 import {forestLikelihood} from '../src/resort.js';
 
 const flat={gradient:()=>({x:0,z:0})};
@@ -60,6 +61,35 @@ test('opposite steering inputs make mirrored turns',()=>{
   const a=skier(),b=skier();a.vz=b.vz=12;
   simulate(a,{steer:-1,edge:0},1,flat);simulate(b,{steer:1,edge:0},1,flat);
   assert.ok(a.x>0&&b.x<0);assert.ok(Math.abs(a.x+b.x)<1e-8);
+});
+
+test('steering engages and reverses within 100 milliseconds',()=>{
+  const s=skier();s.vz=12;simulate(s,{steer:1,edge:0},.1,flat);assert.ok(s.turn>.9);
+  simulate(s,{steer:-1,edge:0},.1,flat);assert.ok(s.turn<-.8);
+});
+
+test('releasing steering stops idle pivoting rather than leaving a persistent turn',()=>{
+  const s=skier();simulate(s,{steer:1,edge:0},.3,flat);simulate(s,neutral,.5,flat);
+  const heading=s.heading;simulate(s,neutral,1,flat);
+  assert.ok(Math.abs(s.heading-heading)<.001);assert.equal(s.turn,0);
+});
+
+test('rebasing powder never rebuilds or uploads the static vertex buffer',()=>{
+  const t=createTerrain(JSON.parse(readFileSync(new URL('../public/data/crystal-dem.json',import.meta.url))));
+  const powder=new PowderSurface(new THREE.Scene(),t,{capabilities:{getMaxAnisotropy:()=>1}});
+  const positions=powder.geometry.attributes.position,version=positions.version;
+  powder.update({x:0,z:0,speed:0},false,'soft');powder.update({x:40,z:-40,speed:0},false,'soft');
+  assert.equal(positions.version,version);assert.equal(powder.mesh.position.x,36);assert.equal(powder.mesh.position.z,-36);
+});
+
+test('rolling powder texture preserves old imprints and reveals newly exposed world cells',()=>{
+  const t=createTerrain(JSON.parse(readFileSync(new URL('../public/data/crystal-dem.json',import.meta.url))));
+  const powder=new PowderSurface(new THREE.Scene(),t,{capabilities:{getMaxAnisotropy:()=>1}});
+  powder.field.stamp(0,0,.5,.16);powder.field.stamp(40,0,.5,.12);
+  const sample=(x,z)=>{const ix=Math.round(x/.125)-powder.textureOrigin.x,iz=Math.round(z/.125)-powder.textureOrigin.z;return powder.bytes[(iz*512+ix)*4];};
+  powder.update({x:0,z:0,speed:0},false,'soft');const original=sample(0,0);
+  powder.update({x:13,z:13,speed:0},false,'soft');assert.equal(sample(0,0),original);assert.ok(sample(40,0)<110);
+  powder.update({x:0,z:0,speed:0},false,'soft');assert.equal(sample(0,0),original);
 });
 
 test('downhill kinetic energy never exceeds gravitational energy released',()=>{

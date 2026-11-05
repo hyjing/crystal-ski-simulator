@@ -5,7 +5,8 @@ const CELL=.125,TEXTURE_SIZE=512,PATCH_SIZE=48,SEGMENTS=256;
 // A bounded sparse world grid retains actual compressed snow / pushed-up rims.
 export class PowderField {
   constructor(limit=180000){this.cells=new Map();this.limit=limit;}
-  key(ix,iz){return `${ix},${iz}`;}
+  // Exact integer keys within ±16 km, beyond the playable DEM bounds.
+  key(ix,iz){return (ix+131072)*262144+(iz+131072);}
   get(x,z){
     const u=x/CELL,v=z/CELL,ix=Math.floor(u),iz=Math.floor(v),fx=u-ix,fz=v-iz;
     const a=this.cells.get(this.key(ix,iz))||0,b=this.cells.get(this.key(ix+1,iz))||0,c=this.cells.get(this.key(ix,iz+1))||0,d=this.cells.get(this.key(ix+1,iz+1))||0;
@@ -31,29 +32,53 @@ export class PowderSurface {
     this.bytes=new Uint8Array(TEXTURE_SIZE*TEXTURE_SIZE*4);
     this.texture=new THREE.DataTexture(this.bytes,TEXTURE_SIZE,TEXTURE_SIZE,THREE.RGBAFormat);this.texture.minFilter=this.texture.magFilter=THREE.LinearFilter;this.texture.generateMipmaps=false;
     this.geometry=new THREE.PlaneGeometry(PATCH_SIZE,PATCH_SIZE,SEGMENTS,SEGMENTS);this.geometry.rotateX(-Math.PI/2);
-    this.colors=new THREE.BufferAttribute(new Float32Array(this.geometry.attributes.position.count*3).fill(1),3);this.geometry.setAttribute('color',this.colors);
-    const material=createSnowMaterial(PATCH_SIZE,PATCH_SIZE,renderer);material.normalScale.set(.13,.13);material.roughness=1;material.clearcoat=.02;material.transparent=true;material.depthWrite=false;
+    const material=createSnowMaterial(PATCH_SIZE,PATCH_SIZE,renderer);material.vertexColors=false;material.color.set('#ffffff');material.normalScale.set(.13,.13);material.roughness=1;material.clearcoat=.02;material.transparent=true;material.depthWrite=false;
+    const groundData=new Float32Array(terrain.width*terrain.height*4);
+    for(let z=0;z<terrain.height;z++)for(let x=0;x<terrain.width;x++){
+      const i=z*terrain.width+x,p=terrain.world(x,z),g=terrain.gradient(p.x,p.z),n=terrain.renderNormals;
+      groundData.set([terrain.heights[i],n?-n[i*3]/n[i*3+1]:g.x,n?-n[i*3+2]/n[i*3+1]:g.z,0],i*4);
+    }
+    this.demTexture=new THREE.DataTexture(groundData,terrain.width,terrain.height,THREE.RGBAFormat,THREE.FloatType);
+    this.demTexture.minFilter=this.demTexture.magFilter=THREE.NearestFilter;this.demTexture.generateMipmaps=false;this.demTexture.needsUpdate=true;
     const original=material.onBeforeCompile;
-    this.uniforms={powderDepth:{value:this.texture},powderOrigin:{value:new THREE.Vector2()},powderCenter:{value:new THREE.Vector2()},powderExtent:{value:TEXTURE_SIZE*CELL}};
+    this.uniforms={powderDepth:{value:this.texture},powderOrigin:{value:new THREE.Vector2()},powderCenter:{value:new THREE.Vector2()},powderExtent:{value:TEXTURE_SIZE*CELL},groundDEM:{value:this.demTexture},groundSize:{value:new THREE.Vector2(terrain.width,terrain.height)},groundSpacing:{value:terrain.spacing},powderWhite:{value:new THREE.Color('#e8f0eb')},powderIce:{value:new THREE.Color('#b7ced4')},powderRock:{value:new THREE.Color('#899e9f')},powderFresh:{value:new THREE.Color('#f1f4f8')}};
     material.onBeforeCompile=shader=>{
       original(shader);Object.assign(shader.uniforms,this.uniforms);
-      shader.fragmentShader=shader.fragmentShader.replace('#include <common>','#include <common>\nuniform vec2 powderCenter;').replace('#include <color_fragment>',`#include <color_fragment>
+      shader.fragmentShader=shader.fragmentShader.replace('#include <common>','#include <common>\nuniform vec2 powderCenter;varying float vPowderSlope;uniform vec3 powderWhite;uniform vec3 powderIce;uniform vec3 powderRock;uniform vec3 powderFresh;').replace('#include <color_fragment>',`#include <color_fragment>
         vec2 powderEdge=vec2(24.)-abs(vSnowPosition.xz-powderCenter);
+        vec3 powderColor=mix(powderWhite,powderIce,clamp(vPowderSlope*.29,0.,.6));
+        powderColor=mix(powderColor,powderRock,clamp((vPowderSlope-1.15)*.65,0.,.7));
+        powderColor=mix(powderColor,powderFresh,smoothstep(0.,4.,min(powderEdge.x,powderEdge.y))*.25);
+        diffuseColor.rgb*=powderColor;
         diffuseColor.a*=smoothstep(0.,6.,min(powderEdge.x,powderEdge.y));
       `);
       shader.vertexShader=shader.vertexShader.replace('#include <common>',`#include <common>
         uniform sampler2D powderDepth;uniform vec2 powderOrigin;uniform vec2 powderCenter;uniform float powderExtent;
+        uniform sampler2D groundDEM;uniform vec2 groundSize;uniform float groundSpacing;
+        varying float vPowderSlope;
+        vec3 groundAt(vec2 p){
+          vec2 grid=clamp(p/groundSpacing+(groundSize-1.)*.5,vec2(0.),groundSize-1.001),i=floor(grid),f=fract(grid);
+          vec3 a=texture2D(groundDEM,(i+.5)/groundSize).rgb,b=texture2D(groundDEM,(i+vec2(1.5,.5))/groundSize).rgb;
+          vec3 c=texture2D(groundDEM,(i+vec2(.5,1.5))/groundSize).rgb,d=texture2D(groundDEM,(i+1.5)/groundSize).rgb;
+          vec2 slope=mix(mix(a.gb,b.gb,f.x),mix(c.gb,d.gb,f.x),f.y);
+          float h=f.x+f.y<=1.?a.r*(1.-f.x-f.y)+b.r*f.x+c.r*f.y:d.r*(f.x+f.y-1.)+b.r*(1.-f.y)+c.r*(1.-f.x);
+          return vec3(h,slope);
+        }
         float powderOffset(vec2 p){vec2 uv=(p-powderOrigin)/powderExtent;float pressed=(texture2D(powderDepth,uv).r-.5)*.8;float mound=.32+.055*sin(p.x*.31+sin(p.y*.12))+.035*sin(p.y*.57+p.x*.08);vec2 edge=vec2(24.)-abs(p-powderCenter);return (mound+pressed)*smoothstep(0.,4.,min(edge.x,edge.y));}
       `).replace('#include <beginnormal_vertex>',`#include <beginnormal_vertex>
-        float gx=(powderOffset(position.xz+vec2(.25,0.))-powderOffset(position.xz-vec2(.25,0.)))/.5;
-        float gz=(powderOffset(position.xz+vec2(0.,.25))-powderOffset(position.xz-vec2(0.,.25)))/.5;
-        objectNormal=normalize(objectNormal+vec3(-gx,0.,-gz));
-      `).replace('#include <begin_vertex>','#include <begin_vertex>\ntransformed.y+=powderOffset(position.xz);');
+        vec2 powderWorld=position.xz+powderCenter;vec3 ground=groundAt(powderWorld);
+        vPowderSlope=length(ground.yz);
+        float gx=(powderOffset(powderWorld+vec2(.25,0.))-powderOffset(powderWorld-vec2(.25,0.)))/.5;
+        float gz=(powderOffset(powderWorld+vec2(0.,.25))-powderOffset(powderWorld-vec2(0.,.25)))/.5;
+        objectNormal=normalize(vec3(-ground.y-gx,1.,-ground.z-gz));
+      `).replace('#include <begin_vertex>','#include <begin_vertex>\ntransformed.y=ground.x-1200.+.012+powderOffset(powderWorld);')
+        .replace('vSnowPosition = position;','vSnowPosition = vec3(powderWorld.x,ground.x-1200.,powderWorld.y);')
+        .replace('#include <uv_vertex>','#include <uv_vertex>\nvMapUv=vec2(position.x+powderCenter.x+(groundSize.x-1.)*groundSpacing*.5,(groundSize.y-1.)*groundSpacing*.5-position.z-powderCenter.y)/5.;vNormalMapUv=vMapUv;vRoughnessMapUv=vMapUv;');
     };
-    material.customProgramCacheKey=()=>'deformable-powder-v1';
+    material.customProgramCacheKey=()=>'deformable-powder-gpu-v2';
     this.mesh=new THREE.Mesh(this.geometry,material);this.mesh.receiveShadow=true;this.mesh.frustumCulled=false;scene.add(this.mesh);
   }
-  reset(){this.field.clear();this.previous=null;this.center=null;}
+  reset(){this.field.clear();this.previous=null;this.center=null;this.textureOrigin=null;}
   breakTrail(){this.previous=null;}
   surface(x,z){
     if(!this.enabled||!this.center)return this.terrain.surface(x,z);
@@ -65,18 +90,7 @@ export class PowderSurface {
     if(!this.enabled)return;
     const center={x:Math.round(skier.x/12)*12,z:Math.round(skier.z/12)*12};let moved=false;
     if(!this.center||center.x!==this.center.x||center.z!==this.center.z){
-      this.center=center;moved=true;const p=this.geometry.attributes.position,uv=this.geometry.attributes.uv,normals=this.geometry.attributes.normal;
-      const white=new THREE.Color('#e8f0eb'),ice=new THREE.Color('#b7ced4'),rock=new THREE.Color('#899e9f'),fresh=new THREE.Color('#f1f4f8');
-      for(let row=0;row<=SEGMENTS;row++)for(let col=0;col<=SEGMENTS;col++){
-        const i=row*(SEGMENTS+1)+col,x=center.x-PATCH_SIZE/2+col*PATCH_SIZE/SEGMENTS,z=center.z-PATCH_SIZE/2+row*PATCH_SIZE/SEGMENTS;
-        p.setXYZ(i,x,this.terrain.surface(x,z)-1200+.012,z);uv.setXY(i,x/PATCH_SIZE,-z/PATCH_SIZE);
-        const g=this.terrain.gradient(x,z),slope=Math.hypot(g.x,g.z),color=white.clone().lerp(ice,THREE.MathUtils.clamp(slope*.29,0,.6));
-        const normalLength=Math.hypot(g.x,1,g.z);normals.setXYZ(i,-g.x/normalLength,1/normalLength,-g.z/normalLength);
-        if(slope>1.15)color.lerp(rock,THREE.MathUtils.clamp((slope-1.15)*.65,0,.7));
-        color.offsetHSL(0,0,Math.sin(x*.024)*Math.sin(z*.019)*.012);
-        const edge=Math.min(col,SEGMENTS-col,row,SEGMENTS-row)*PATCH_SIZE/SEGMENTS,fade=THREE.MathUtils.smoothstep(edge,0,4);color.lerp(fresh,fade*.25);this.colors.setXYZ(i,color.r,color.g,color.b);
-      }
-      p.needsUpdate=uv.needsUpdate=this.colors.needsUpdate=normals.needsUpdate=true;
+      this.center=center;moved=true;this.mesh.position.set(center.x,0,center.z);
       this.uniforms.powderCenter.value.set(center.x,center.z);this.uniforms.powderOrigin.value.set(center.x-32-CELL/2,center.z-32-CELL/2);
     }
     let stamped=false;
@@ -93,14 +107,33 @@ export class PowderSurface {
     }
     if(moved||stamped){
       const startX=Math.round((this.center.x-32)/CELL),startZ=Math.round((this.center.z-32)/CELL);
+      if(moved&&!this.field.cells.size){
+        // Only R is sampled by the height shader; an untouched window is constant.
+        this.bytes.fill(128);this.textureOrigin={x:startX,z:startZ};this.texture.needsUpdate=true;return;
+      }
       const localX=Math.round(skier.x/CELL)-startX,localZ=Math.round(skier.z/CELL)-startZ;
       const reach=Math.ceil(7/CELL);
-      const x0=moved?0:Math.max(0,localX-reach),x1=moved?TEXTURE_SIZE:Math.min(TEXTURE_SIZE,localX+reach+1);
-      const z0=moved?0:Math.max(0,localZ-reach),z1=moved?TEXTURE_SIZE:Math.min(TEXTURE_SIZE,localZ+reach+1);
+      const rx0=Math.max(0,localX-reach),rx1=Math.min(TEXTURE_SIZE,localX+reach+1),rz0=Math.max(0,localZ-reach),rz1=Math.min(TEXTURE_SIZE,localZ+reach+1);
+      let ox0=0,ox1=0,oz0=0,oz1=0,full=moved&&!this.textureOrigin;
+      if(moved&&this.textureOrigin){
+        const dx=startX-this.textureOrigin.x,dz=startZ-this.textureOrigin.z;
+        full=Math.abs(dx)>=TEXTURE_SIZE||Math.abs(dz)>=TEXTURE_SIZE;
+        if(!full){
+          ox0=Math.max(0,-dx);ox1=Math.min(TEXTURE_SIZE,TEXTURE_SIZE-dx);oz0=Math.max(0,-dz);oz1=Math.min(TEXTURE_SIZE,TEXTURE_SIZE-dz);
+          for(let row=0;row<oz1-oz0;row++){
+            const z=dz>=0?oz0+row:oz1-1-row;
+            this.bytes.copyWithin((z*TEXTURE_SIZE+ox0)*4,((z+dz)*TEXTURE_SIZE+ox0+dx)*4,((z+dz)*TEXTURE_SIZE+ox1+dx)*4);
+          }
+        }
+      }
+      const x0=moved?0:rx0,x1=moved?TEXTURE_SIZE:rx1,z0=moved?0:rz0,z1=moved?TEXTURE_SIZE:rz1;
       for(let z=z0;z<z1;z++)for(let x=x0;x<x1;x++){
+        const dirty=x>=rx0&&x<rx1&&z>=rz0&&z<rz1;
+        if(moved&&!full&&x>=ox0&&x<ox1&&z>=oz0&&z<oz1&&!dirty)continue;
         const value=this.field.cells.get(this.field.key(startX+x,startZ+z))||0,i=(z*TEXTURE_SIZE+x)*4;
         this.bytes[i]=Math.round(THREE.MathUtils.clamp(value/.8+.5,0,1)*255);this.bytes[i+3]=255;
       }
+      this.textureOrigin={x:startX,z:startZ};
       this.texture.needsUpdate=true;
     }
   }
