@@ -16,6 +16,7 @@ let lastTime=0, accumulator=0, pausedFrom='running', soundOn=false, audio, noise
 let frameTime=1/60,physicsMs=0;
 let powderMs=0,frameSamples=[],frameP95=0,frameMax=0,slowFrames=0;
 let renderScale=Math.min(devicePixelRatio,1.25),qualityClock=0;
+let demoCapture,recordedInput=null;
 let treePositions=[], trailPoints=[], mapBackground, snowEffects, sun, powder, speedRenderer, aerialImage, mapLayer='terrain', resortUpdate=()=>{};
 const baseElevation=1200, fixedStep=1/120;
 const forward = new THREE.Vector3(), targetCamera = new THREE.Vector3(), lookTarget = new THREE.Vector3();
@@ -60,6 +61,12 @@ async function init(){
   $('routes').innerHTML=routes.map((r,i)=>`<button class="route ${i===0?'active':''}" data-route="${r.id}" aria-pressed="${i===0}" style="--route:${r.color}"><span class="route-dot"></span><span class="route-text"><span class="route-name">${r.name}</span><span class="route-sub">${r.subtitle} · ${r.label}</span></span><span class="route-stat">${(r.length/1000).toFixed(1)} km<small>↓ ${Math.round(r.drop)} m</small></span></button>`).join('');
   document.querySelectorAll('[data-route]').forEach(b=>b.addEventListener('click',()=>selectRoute(b.dataset.route)));
   selectRoute(route.id);speedRenderer.prepare();$('loading').classList.add('hidden'); $('start').disabled=false;
+  if(import.meta.env.DEV&&new URLSearchParams(location.search).has('record-demo')){
+    const {installDemoCapture}=await import('./capture-demo.js');
+    demoCapture=installDemoCapture({canvas:renderer.domElement,skier:()=>skier,route:()=>route,minimap:()=>$('minimap'),
+      intro:()=>{selectRoute('green-valley');goIntro();},start:startRun,view:value=>{view=value;},input:value=>{recordedInput=value;},
+      aerial:()=>{mapLayer='aerial';$('map-layer').textContent='地形图';drawMap();}});
+  }
   requestAnimationFrame(animate);
 }
 
@@ -181,7 +188,7 @@ function updatePhysics(dt){
   const steer=(keys.has('KeyD')||keys.has('ArrowRight')?1:0)-(keys.has('KeyA')||keys.has('ArrowLeft')?1:0);
   const edge=keys.has('Space')||keys.has('ArrowDown')?1:0;
   const tuck=keys.has('KeyW')||keys.has('ArrowUp')?1:0;
-  stepSkier(skier,{steer,edge,tuck},terrain,dt,snow);elapsed+=dt;peakSpeed=Math.max(peakSpeed,skier.speed);totalDistance=skier.distance;
+  stepSkier(skier,recordedInput||{steer,edge,tuck},terrain,dt,snow);elapsed+=dt;peakSpeed=Math.max(peakSpeed,skier.speed);totalDistance=skier.distance;
   const boundsX=(terrain.width-1)*terrain.spacing/2-20,boundsZ=(terrain.height-1)*terrain.spacing/2-20;
   if(Math.abs(skier.x)>boundsX||Math.abs(skier.z)>boundsZ){resetPosition();toast('已到地形边界，返回检查点');return;}
   const p=route.points[Math.min(checkpoint+1,route.points.length-1)];
@@ -276,6 +283,7 @@ function updateUI(){
 
 function animate(time){
   requestAnimationFrame(animate);const rawDt=(time-lastTime)/1000||0,dt=Math.min(rawDt,.1);lastTime=time;
+  demoCapture?.beforeFrame(time);
   if(mode==='running'){frameSamples.push(rawDt*1000);if(frameSamples.length>180)frameSamples.shift();}else frameSamples=[];
   qualityClock+=dt;
   if(mode==='running'&&qualityClock>3&&frameSamples.length>90){
@@ -294,6 +302,7 @@ function animate(time){
   uiClock+=dt;if(uiClock>.1){updateUI();uiClock=0;}
   if(noiseGain)noiseGain.gain.setTargetAtTime(soundOn&&mode==='running'?.006+Math.min(skier.speed/42,1)*.065:0,audio.currentTime,.15);
   speedRenderer.render(skier.speed,mode==='running'&&view==='follow');
+  demoCapture?.afterFrame(time);
 }
 
 function enableAudio(){
