@@ -100,5 +100,5 @@ export function updateAthletePose(athlete,s,dt,surface){
     arm.target={hand:hand.clone(),tip:tip.clone()};
     connect(arm.pole,hand,tip);arm.basket.position.copy(tip).y+=.12;arm.basket.rotation.x=Math.PI/2;
   }
-  updateHumanoid(athlete,{hipY,hipX,lean,tuck,counter});
+  updateHumanoid(athlete,{hipY,hipX,lean,tuck,counter,roll});
 }

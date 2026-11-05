@@ -99,3 +99,10 @@ The HUD reports FPS, raw frame interval P95 / maximum, hitch count, raster scale
 - A flat 12 m/s hold fixture reports about 23.5° edge at 0.25 s, 39.9° at 0.75 s and 57.3° at 1.5 s. Ski heading changes about 59° at 1.5 s and 118° at 2.5 s. These are prototype scenario outputs, not measured ski-turn calibration.
 - Normal runtime loads the bundled 65-bone human rather than the procedural body. The source license and checksum are recorded in ASSETS.md. Screenshots `refined-character.png`, `refined-resort.png` and `refined-storm.png` are actual staged inspection renders; they do not prove a full-route playthrough.
 - Tree crowns remain textured crossed surfaces with physical trunks. The static shadow proxy and architecture are approximations. The new costume, textures and pose timing still have room for improvement against the reference video; this update does not establish visual or physical parity.
+
+
+## Complete skier / geographic detail rebuild — November 5, 2026
+
+- 61 tests pass: new checks cover a single connected closed outfit surface, absence of nonmanifold seams / degenerate triangles, normalized native skin weights, native bones and finite deformation. Existing downhill / traverse counter-rotation, linked pole timing and physics tests remain.
+- Adaptive terrain boundary tests check both 2-cell and 4-cell coarse grids for unpaired interior edges; summit position / elevation and aerial pixel-edge registration remain checked. The measured distant geometry total is 247,257 triangles, bounded below 300k.
+- `rebuilt-character.png` is an actual staged, moving-turn render paused for inspection; `refined-rainier.png` shows the real ridge viewpoint after the scenery update. These are visual QA, not evidence of a full route playthrough, scanned character quality or fluid simulation.

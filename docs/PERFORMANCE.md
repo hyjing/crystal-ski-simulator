@@ -56,3 +56,10 @@ Terrain tile boundaries share the finest edge samples and DEM-gradient normals a
 The final forest path no longer allocates / sorts nearest-tree lists or updates crown transforms while skiing. Fixed crowns and trunks are spatially instanced; the silhouette remains the same as the camera approaches. Independent static shadow proxies use lightweight geometry and submit no color-pass instances. This removes the former dynamic pool / dither-shadow transition work. Shadow texel snapping and distance fading address crawling / border changes.
 
 The humanoid adds a 724 KiB bundled GLB and native skinning / IK; no external runtime asset service is used. The shadow map increases from 2048² to 3072², which costs additional GPU memory. The initial/adaptive raster policy remains. Stronger storm haze is a composed material function, without a volumetric ray marcher. These are workload changes, not an assertion of identical frame time on all hardware.
+
+
+## Complete asset and 4K geographic scenery
+
+The complete skier is ~3.05 MiB on disk and includes a 47,864-triangle continuous outfit plus the native exposed anatomy / equipment. Geometry construction and skin-weight transfer run offline; no marching cubes or garment remeshing runs in the browser. Native skinning and existing IK animate it.
+
+Summit and valley detail is spatially limited: 247,257 total far-terrain triangles, with no runtime refinement / replacement. Each 4K aerial texture requires roughly 75–80 MiB including mipmaps, so the two larger maps cost additional GPU memory. They load progressively after skiing is initialized. Image detail and silhouette improve at a real memory / transfer cost; no blanket 60 FPS claim is made.

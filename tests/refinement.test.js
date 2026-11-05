@@ -27,13 +27,14 @@ test('forest topology and instance transforms are static across camera movement'
  assert.deepEqual(scene.children.map(m=>Array.from(m.instanceMatrix.array)),before);assert.ok(scene.children.some(m=>m.name==='Fixed snowy fir canopy'));assert.ok(scene.children.some(m=>m.name==='Stable forest shadow proxy'));
 });
 test('the checked-in humanoid has a real skeleton, deforms finitely and counter-rotates its shoulders towards downhill',async()=>{
- const bytes=fs.readFileSync(new URL('../public/assets/skier-human.glb',import.meta.url)),gltf=await new GLTFLoader().parseAsync(bytes.buffer.slice(bytes.byteOffset,bytes.byteOffset+bytes.byteLength),'');
+ const bytes=fs.readFileSync(new URL('../public/assets/skier-complete.glb',import.meta.url)),gltf=await new GLTFLoader().parseAsync(bytes.buffer.slice(bytes.byteOffset,bytes.byteOffset+bytes.byteLength),'');
  const actor=createAthleteRig(new THREE.Scene()),rig=attachHumanoid(actor,gltf.scene);assert.ok(Object.keys(rig.bones).length>50);assert.ok(rig.model.getObjectByName('SuperHero_Male').isSkinnedMesh);
- const jacket=rig.model.getObjectByName('Loose ski jacket'),pants=rig.model.getObjectByName('Loose ski trousers');assert.ok(jacket?.isSkinnedMesh&&pants?.isSkinnedMesh);
- const pos=pants.geometry.attributes.position,used=new Set(pants.geometry.index.array);let max=0;for(const i of used)if(pos.getY(i)>.5&&pos.getY(i)<.7)max=Math.max(max,pos.getX(i));assert.ok(max>.23,'trouser knee envelope has loose fabric volume');
+ const suit=rig.model.getObjectByName('Unified_ski_suit');assert.ok(suit?.isSkinnedMesh);
+ assert.ok(suit.geometry.index.count/3>40000);assert.ok(rig.model.getObjectByName('Integrated_helmet_and_goggles'));assert.ok(rig.model.getObjectByName('Articulated_ski_boot'));
  actor.rotation.y=.8;const s={speed:12,heading:.8,downhillHeading:0,turn:1,edgeRoll:.8,edgeAngle:.8,tuck:.2,poling:0};updateAthletePose(actor,s,1/60,()=>0);actor.updateMatrixWorld(true);
  const torso=rig.bones.spine_03.getWorldQuaternion(new THREE.Quaternion()).multiply(rig.rest.get('spine_03').q.clone().invert()),hips=rig.bones.pelvis.getWorldQuaternion(new THREE.Quaternion()).multiply(rig.rest.get('pelvis').q.clone().invert());
  const heading=q=>{const f=new THREE.Vector3(0,0,1).applyQuaternion(q);return Math.atan2(f.x,f.z);};assert.ok(Math.abs(heading(torso))<Math.abs(heading(hips))*.5);assert.ok(upperBodyCounterAngle(.8,0)<-.6);
+ const expectedFoot=actor.getWorldQuaternion(new THREE.Quaternion()).multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0,0,1),s.edgeRoll*.70)).multiply(rig.rest.get('foot_l').q);assert.ok(rig.bones.foot_l.getWorldQuaternion(new THREE.Quaternion()).angleTo(expectedFoot)<1e-6,'boot follows the ski bank');
  rig.model.traverse(o=>{if(o.isSkinnedMesh){o.skeleton.update();o.computeBoundingBox();for(const v of [...o.boundingBox.min,...o.boundingBox.max])assert.ok(Number.isFinite(v));assert.ok(o.boundingBox.max.y<2.1&&o.boundingBox.min.y>-.15);}});
 });
 test('detailed chair, gondola and tower assets have finite merged geometry',()=>{
@@ -53,4 +54,13 @@ test('counter rotation fades out for traversing, uphill travel and standing stil
  assert.equal(Math.abs(upperBodyCounterAngle(.6,0,motion(Math.PI/2))),0,'gate uses travel velocity, not just ski heading');
  const angles=Array.from({length:100},(_,i)=>.6+i*.01),values=angles.map(a=>upperBodyCounterAngle(a,0,motion(a)));
  for(let i=1;i<values.length;i++)assert.ok(Math.abs(values[i]-values[i-1])<.04,'smooth transition into traverse');
+});
+
+test('the complete ski suit is one closed connected skin with normalized bone weights',async()=>{
+ const bytes=fs.readFileSync(new URL('../public/assets/skier-complete.glb',import.meta.url)),{scene}=await new GLTFLoader().parseAsync(bytes.buffer.slice(bytes.byteOffset,bytes.byteOffset+bytes.byteLength),'');
+ const suit=scene.getObjectByName('Unified_ski_suit'),g=suit.geometry,edges=new Map(),adj=Array.from({length:g.attributes.position.count},()=>[]);
+ for(let i=0;i<g.index.count;i+=3){const tri=[g.index.getX(i),g.index.getX(i+1),g.index.getX(i+2)];assert.equal(new Set(tri).size,3);for(let j=0;j<3;j++){const a=tri[j],b=tri[(j+1)%3],key=a<b?`${a},${b}`:`${b},${a}`;edges.set(key,(edges.get(key)||0)+1);adj[a].push(b);adj[b].push(a);}}
+ for(const n of edges.values())assert.equal(n,2,'outfit surface has no open or nonmanifold seams');
+ const visited=new Set(),queue=[0];while(queue.length){const i=queue.pop();if(visited.has(i))continue;visited.add(i);for(const j of adj[i])if(!visited.has(j))queue.push(j);}assert.equal(visited.size,adj.length,'jacket, sleeves and trousers form one connected surface');
+ for(let i=0;i<g.attributes.position.count;i++){let sum=0;for(let j=0;j<4;j++){const weight=g.attributes.skinWeight.array[i*4+j];assert.ok(weight>=0);sum+=weight;assert.ok(g.attributes.skinIndex.array[i*4+j]<suit.skeleton.bones.length);}assert.ok(Math.abs(sum-1)<1e-5);}
 });

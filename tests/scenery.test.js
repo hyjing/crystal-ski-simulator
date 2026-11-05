@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import * as THREE from 'three';
 import {lonLatToUTM} from '../src/terrain.js';
-import {addContextTerrain,addRainierTerrain} from '../src/scenery.js';
+import {addContextTerrain,addRainierTerrain,distantGeometry} from '../src/scenery.js';
 const read=name=>JSON.parse(readFileSync(new URL(`../public/data/${name}.json`,import.meta.url)));
 const local=read('crystal-dem'),rainier=read('rainier-dem'),context=read('context-dem');
 
@@ -24,10 +24,19 @@ test('both aerial textures cover the DEM pixel edges in the same projected CRS',
   }
 });
 
-test('detailed distant scenery fits inside the original far terrain triangle budget',()=>{
+test('detailed summit and valley patches stay within a bounded 300k far-terrain budget',()=>{
   const scene=new THREE.Scene();
   const a=addContextTerrain(scene,context,local,undefined,rainier),b=addRainierTerrain(scene,rainier,local);
   const triangles=(a.geometry.index.count+b.geometry.index.count)/3;
-  assert.ok(triangles<(context.width-1)*(context.height-1)*2);
+  assert.ok(triangles<300000);
   assert.ok(scene.userData.rainierPeak.x<-10000&&scene.userData.rainierPeak.z>5000,'Rainier is southwest of Crystal');
+});
+
+test('fine distant terrain patches stitch to coarse terrain without interior boundary edges',()=>{
+ for(const width of [17,705]){
+ const grid={width,height:17,spacing:36,originUTM:[0,0],heights:Array.from({length:width*17},(_,i)=>1500+Math.sin(i)*20)},g=distantGeometry(grid,grid,[],{x:0,z:0,halfX:110,halfZ:110}),p=g.attributes.position,edges=new Map();
+ for(let i=0;i<g.index.count;i+=3){const tri=[g.index.getX(i),g.index.getX(i+1),g.index.getX(i+2)];for(let j=0;j<3;j++){const a=tri[j],b=tri[(j+1)%3],key=a<b?`${a},${b}`:`${b},${a}`;edges.set(key,(edges.get(key)||0)+1);}}
+ for(const [key,n] of edges){assert.ok(n<=2);if(n===1){const [a,b]=key.split(',').map(Number);assert.ok((Math.abs(p.getX(a))===(width-1)*18&&p.getX(a)===p.getX(b))||(Math.abs(p.getZ(a))===288&&p.getZ(a)===p.getZ(b)),'unpaired edges may only lie on the outer tile boundary');}}
+ }
+
 });

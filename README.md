@@ -8,13 +8,26 @@
 
 Real terrain. Fresh tracks. Your line.
 
-[▶ 20 秒实机 Demo](docs/media/crystal-demo.mp4) · [开始滑行](#快速开始) · [技术与数据](docs/TECHNICAL.md)
+[🎿 直接试玩](https://hyjing.github.io/crystal-ski-simulator/) · [▶ 20 秒实机 Demo](docs/media/crystal-demo.mp4) · [开始滑行](#快速开始) · [技术与数据](docs/TECHNICAL.md)
+
+[![Play deployment](https://github.com/hyjing/crystal-ski-simulator/actions/workflows/pages.yml/badge.svg)](https://github.com/hyjing/crystal-ski-simulator/actions/workflows/pages.yml)
 
 [![Checks](https://github.com/hyjing/crystal-ski-simulator/actions/workflows/ci.yml/badge.svg)](https://github.com/hyjing/crystal-ski-simulator/actions/workflows/ci.yml)
 
 **Three.js / WebGL** &nbsp; · &nbsp; **USGS 地形** &nbsp; · &nbsp; **OSM 雪道** &nbsp; · &nbsp; **可变形粉雪**
 
 </div>
+
+## 发给朋友，打开就能滑
+
+**试玩链接：[hyjing.github.io/crystal-ski-simulator](https://hyjing.github.io/crystal-ski-simulator/)**
+
+把这个网页链接发给朋友即可，无需安装、注册或 GitHub 账号。仓库链接用于看源码；试玩请打开上面的网页。
+
+建议用电脑和键盘，手机触控仍在完善。首次载入会下载地形、人物与航拍资源，请等「开始滑行」可点击；选好雪道后按 **Shift** 撑杖离开缓坡站区，**A / D** 转弯，**W** 收身加速。按 **V** 看雷尼尔山，滚轮拉近人物；操作说明在页面顶部。
+
+这是可试玩的早期原型：真实地理参考与游戏外观结合，动作、雪况和设施仍在打磨。遇到问题可以在 [Issues](https://github.com/hyjing/crystal-ski-simulator/issues) 留下雪道名称、浏览器和复现步骤。
+
 
 ---
 
@@ -45,15 +58,15 @@ Real terrain. Fresh tracks. Your line.
 
 ### 抬头，看见雷尼尔山
 
-![从 Crystal 山脊眺望雷尼尔山的实机画面](docs/media/crystal-rainier.png)
+![从 Crystal 山脊眺望雷尼尔山的实机画面](docs/media/refined-rainier.png)
 
-按 **V** 去山脊观景：真实方位上的 Mount Rainier，搭配细化高程和航拍纹理，能看见冰川、岩壁与林谷。再按一次返回原来的滑行位置。
+按 **V** 去山脊观景：真实方位上的 Mount Rainier，搭配分块拼接的 4K 真实航拍图、加密的山顶和河谷地形，保留冰川沟槽、岩壁、林谷与河床纹理。远景河流来自航拍图，暂未模拟动态水面。再按一次返回原来的滑行位置。
 
 ## 人物、连弯与近景细节
 
-![完整骨骼人物、冬装与上下身分离的实机检查画面](docs/media/refined-character.png)
+![完整骨骼人物、冬装与上下身分离的实机检查画面](docs/media/rebuilt-character.png)
 
-按住转向，逐渐加大立刃；换侧时经过平刃，保留滑行惯性。雪板与髋部随弯形转动，顺坡连弯时胸肩适量朝向落线，横穿和静止时回正跟随雪板；转弯切换时短暂点杖。蓝色宽松外套与宽裤管冬装跟随骨骼弯曲。滚轮可以拉近查看人物和设施。
+按住转向，逐渐加大立刃；换侧时经过平刃，保留滑行惯性。雪板与髋部随弯形转动，顺坡连弯时胸肩适量朝向落线，横穿和静止时回正跟随雪板；转弯切换时短暂点杖。蓝色外套、袖子和宽裤管是一张连续蒙皮，整套人物与圆润雪靴从完整 GLB 加载，随同一套骨骼运动。滚轮可以拉近查看人物和设施。
 
 ## 从缆车站出发
 
@@ -99,7 +112,7 @@ npm run dev
 
 打开终端给出的本地地址，通常是 [http://127.0.0.1:5173](http://127.0.0.1:5173/)。选一条线路，点击「开始滑行」。
 
-> 当前以本地试玩为主。这个仓库是私有仓库，克隆需要相应 GitHub 访问权限。
+线上试玩不需要运行这些命令；以上步骤供本地开发使用。推送到 `main` 后，GitHub Actions 会测试、构建并更新 Pages。部署方式见 [PUBLISHING.md](docs/PUBLISHING.md)。
 
 ## 把第一道弯做好
 
@@ -124,7 +137,7 @@ npm run dev
 
 ## 地形有出处，细节在生长
 
-- **山形**：USGS 3DEP 高程；滑行区域约 4.93 m 导出采样（约 19.7 m 备份），雷尼尔山约 36 m，周边山群约 120 m。导出间距不代表原始测绘精度。
+- **山形**：USGS 3DEP 高程；滑行区域约 4.93 m 导出采样（约 19.7 m 备份），雷尼尔山约 36 m，周边山群约 60 m。导出间距不代表原始测绘精度。
 - **雪道与设施**：© OpenStreetMap contributors，ODbL 1.0；使用雪道中心线、缆车路径与建筑轮廓。
 - **林地参考**：公开的 USGS / USDA NAIP 无雪季航拍。从林冠纹理提取约 5.6 万个树木候选位置，并提供远处林地覆盖与航拍小地图；单株位置仍是估算。
 - **冬季外观**：粉雪层、滑痕、雪雾和站房外观由项目制作；冷杉使用固定覆雪纹理与实体树干。人物基于 Quaternius CC0 骨骼人形，冬装、头盔与滑雪动作由项目适配。
