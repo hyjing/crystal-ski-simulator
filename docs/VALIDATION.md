@@ -106,3 +106,9 @@ The HUD reports FPS, raw frame interval P95 / maximum, hitch count, raster scale
 - 61 tests pass: new checks cover a single connected closed outfit surface, absence of nonmanifold seams / degenerate triangles, normalized native skin weights, native bones and finite deformation. Existing downhill / traverse counter-rotation, linked pole timing and physics tests remain.
 - Adaptive terrain boundary tests check both 2-cell and 4-cell coarse grids for unpaired interior edges; summit position / elevation and aerial pixel-edge registration remain checked. The measured distant geometry total is 247,257 triangles, bounded below 300k.
 - `rebuilt-character.png` is an actual staged, moving-turn render paused for inspection; `refined-rainier.png` shows the real ridge viewpoint after the scenery update. These are visual QA, not evidence of a full route playthrough, scanned character quality or fluid simulation.
+
+## Public play preparation — November 5, 2026
+
+- Gitleaks 8.30.1 (official release, checksum verified) reported no leaks in the original 15-commit history, the anonymized 16-commit pre-publication history, and the current working tree. Separate review found no private local paths in 224 historical file blobs and no private GPS / author image metadata. The included video metadata contains only format / encoder information.
+- Local author / committer metadata was replaced with the GitHub username and noreply email after a verified private bundle backup outside the repository. Only `main` is pushed; private backup refs are not published. This describes the canonical visible history, not deletion of every server-side cached object.
+- The production build was tested under `/crystal-ski-simulator/`, including lift-area start and the detailed Rainier view, with no new browser warnings / errors observed. Pages publishes `dist/` only. No personal access token is embedded in source or required by the deployment workflow.
