@@ -38,9 +38,9 @@ test('baseline and representative new downhill routes finish in packed and powde
 test('flat terrain does not generate motion',()=>{
   const s=simulate(skier(),neutral,5,flat);assert.equal(s.speed,0);assert.equal(s.distance,0);
 });
-test('edge alone enters an arc on the last selected side, with no flat-ground thrust',()=>{
+test('holding an edge without steering does not invent a turn or flat-ground thrust',()=>{
   const s=skier();s.vz=15;simulate(s,{steer:0,edge:1},2,flat);
-  assert.ok(s.x<0&&s.heading<-.5);assert.ok(s.edgeAngle>.8);
+  assert.ok(Math.abs(s.x)<1e-8);assert.equal(s.heading,0);assert.ok(s.edgeAngle>.8);
   assert.equal(simulate(skier(),{steer:0,edge:1},3,flat).speed,0);
 });
 test('pressing the edge gives a materially tighter turn than flat-ski yaw',()=>{

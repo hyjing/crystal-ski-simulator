@@ -66,22 +66,22 @@ export function updateAthletePose(athlete,s,dt,surface){
   const {body,skiRig,torso,pelvis,legs,arms,skis}=athlete.userData,turn=s.turn||0,tuck=s.tuck||0,pole=s.poling||0,phase=(s.polePhase||0)*Math.PI*2;
   const plantState=advanceTurnPlant(athlete.userData.plant,s,dt);athlete.userData.poleContact=null;
   const drive=Math.sin(phase),reach=Math.cos(phase),edge=s.edgeAngle||0;
-  const weight=Math.abs(turn)*edge,flex=tuck*.38+weight*.20+pole*(.1+.1*Math.max(0,drive)),hipY=1.68-flex;
-  const targetLean=turn*edge,rate=dt>0?1-Math.exp(-dt*12):1;
+  const roll=s.edgeRoll??turn*edge,weight=Math.abs(roll),flex=tuck*.38+weight*.20+pole*(.1+.1*Math.max(0,drive)),hipY=1.68-flex;
+  const targetLean=roll,rate=dt>0?1-Math.exp(-dt*12):1;
   athlete.userData.lean=THREE.MathUtils.lerp(athlete.userData.lean||0,targetLean,rate);const lean=athlete.userData.lean,hipX=-lean*.43;
   body.rotation.z=0;body.position.y=-pole*.035*Math.sin(phase);pelvis.position.set(hipX,hipY-.06,0);
-  skiRig.rotation.z=0;for(const ski of skis)ski.rotation.z=Math.sign(turn||s.lastTurn)*edge*.70;
+  skiRig.rotation.z=0;for(const ski of skis)ski.rotation.z=roll*.70;
   torso.position.set(hipX,hipY+.55,.05+tuck*.16);torso.rotation.x=.12+tuck*.7+weight*.08+pole*(.12+.16*Math.max(0,drive));
   torso.rotation.y=-turn*.20;torso.rotation.z=lean*.38;
   for(const leg of legs){
-    const inside=Math.max(0,-leg.sign*turn),hip=new THREE.Vector3(hipX+leg.sign*.23,hipY,0),knee=new THREE.Vector3(hipX*.55+leg.sign*(.29+weight*.12),.94-tuck*.18-inside*weight*.12,.38+tuck*.32+inside*weight*.2),ankle=new THREE.Vector3(leg.sign*.30,.45,.15);
+    const inside=Math.max(0,-leg.sign*Math.sign(roll)),hip=new THREE.Vector3(hipX+leg.sign*.23,hipY,0),knee=new THREE.Vector3(hipX*.55+leg.sign*(.29+weight*.12),.94-tuck*.18-inside*weight*.12,.38+tuck*.32+inside*weight*.2),ankle=new THREE.Vector3(leg.sign*.30,.45,.15);
     shapeLimb(leg.mesh,hip,knee,ankle);
   }
   for(const arm of arms){
-    const sign=arm.sign,activePlant=plantState.active&&plantState.plantSide===sign,plant=activePlant?Math.sin(plantState.phase*Math.PI):0,shoulder=new THREE.Vector3(hipX+sign*.48,hipY+1.0-tuck*.2,.12+tuck*.55),hand=new THREE.Vector3(hipX*.45+sign*(.68-tuck*.18+weight*.12),1.85-flex*.45+pole*.15*reach-plant*.16,.58+tuck*.45+pole*.75*reach+plant*.25),elbow=new THREE.Vector3(hipX*.6+sign*.67,(shoulder.y+hand.y)/2-.18,(shoulder.z+hand.z)/2-.10);
+    const sign=arm.sign,activePlant=plantState.active&&plantState.plantSide===sign,plant=activePlant?(plantState.phase<.2?THREE.MathUtils.smoothstep(plantState.phase,0,.2):1-THREE.MathUtils.smoothstep(plantState.phase,.32,1)):0,shoulder=new THREE.Vector3(hipX+sign*.48,hipY+1.0-tuck*.2,.12+tuck*.55),hand=new THREE.Vector3(hipX*.45+sign*(.68-tuck*.18+weight*.12),1.85-flex*.45+pole*.15*reach-plant*.16,.58+tuck*.45+pole*.75*reach+plant*.70),elbow=new THREE.Vector3(hipX*.6+sign*.67,(shoulder.y+hand.y)/2-.18,(shoulder.z+hand.z)/2-.10);
     const planting=pole>.1&&(s.polePhase||0)<.58,tip=new THREE.Vector3(sign*(.86+weight*.15),planting?.14:.45+pole*.55*Math.max(0,-drive)-plant*.20,hand.z+(planting?-.45-.65*Math.max(0,drive):-.9));
     if(activePlant){
-      tip.set(sign*(.90+weight*.1),.35,.65-plantState.phase*1.1);
+      tip.set(sign*(.90+weight*.1),.35,-.9+3.1*plant);
       if(plantState.contact){
         body.updateWorldMatrix(true,false);
         if(!plantState.worldPoint){const point=body.localToWorld(new THREE.Vector3(sign*1.0,.08,2.2));if(surface)point.y=surface(point.x,point.z)+.025;plantState.worldPoint=point;if(plantState.contactStarted)athlete.userData.poleContact=point.clone();}

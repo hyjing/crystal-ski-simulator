@@ -268,7 +268,7 @@ function updateAthlete(dt){
   athlete.position.set(skier.x,yAt(skier.x,skier.z)-.07,skier.z);
   groundNormal.set(-g.x,1,-g.z).normalize();skiForward.set(fx,g.x*fx+g.z*fz,fz).normalize();skiRight.crossVectors(groundNormal,skiForward).normalize();
   skiBasis.makeBasis(skiRight,groundNormal,skiForward);athlete.quaternion.setFromRotationMatrix(skiBasis);
-  updateAthletePose(athlete,skier,dt,yAt);
+  updateAthletePose(athlete,skier,mode==='running'?dt:0,yAt);
 }
 
 function updateCamera(dt,snap=false){
@@ -338,7 +338,7 @@ function updateUI(){
   $('speed').textContent=Math.round(skier.speed*3.6);$('altitude').textContent=Math.round(terrain.sample(skier.x,skier.z));
   const g=terrain.gradient(skier.x,skier.z);$('slope').textContent=Math.round(Math.atan(Math.hypot(g.x,g.z))*180/Math.PI);
   $('timer').textContent=clockFormat(elapsed);$('distance').textContent=`${Math.round(totalDistance)} m`;
-  $('stance').textContent=skier.poling>.2?'双杖蹬撑':skier.edge>.5&&skier.speed<.35?'立刃停稳':skier.edge>.5?`压刃${skier.turn<0?'左':'右'}弯 · ${Math.round(skier.edgeAngle*180/Math.PI)}°`:skier.tuck>.5?'收身 · 低风阻':skier.slip>1.5?'侧滑控速':Math.abs(skier.turn)>.15?'平板转向':'直滑';
+  $('stance').textContent=skier.poling>.2?'双杖蹬撑':skier.edge>.5&&skier.speed<.35?'立刃停稳':skier.edge>.5?`${skier.slip>.5||skier.edgeBrake?'横板搓雪':'加强立刃'} · ${Math.round(skier.edgeAngle*180/Math.PI)}°`:skier.tuck>.5?'收身 · 低风阻':skier.slip>1.5?'侧滑控速':Math.abs(skier.turn)>.15?'沿弧转弯':'直滑';
   if(frameSamples.length>10){const sorted=[...frameSamples].sort((a,b)=>a-b);frameP95=sorted[Math.floor(sorted.length*.95)];frameMax=sorted.at(-1);slowFrames=sorted.filter(x=>x>25).length;}
   $('weather-status').textContent=`${WEATHER_PRESETS[weather.id].label}${weather.progress<1?' · 过渡中':''}`;
   $('performance').textContent=`${Math.round(1/frameTime)} FPS`;$('performance').title=`近180帧：P95 ${frameP95.toFixed(1)} ms · 最大 ${frameMax.toFixed(1)} ms · 超25ms ${slowFrames}帧 · CPU粉雪 ${powderMs.toFixed(2)} ms · 物理 ${physicsMs.toFixed(2)} ms · 渲染 ${renderScale.toFixed(2)}×`;

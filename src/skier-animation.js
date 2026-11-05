@@ -1,18 +1,36 @@
-// Turn-end pole touch is a timing gesture. Only explicit Shift strokes add propulsion.
+// A pole touch belongs to a linked turn transition, not to releasing a key or
+// reaching an arbitrary turn angle. Explicit Shift strokes alone add propulsion.
 export function advanceTurnPlant(state,skier,dt){
-  const turn=skier.turn||0,previous=state.previousTurn||0,speed=skier.speed||0;
-  const angle=state.previousHeading===undefined?0:Math.atan2(Math.sin(skier.heading-state.previousHeading),Math.cos(skier.heading-state.previousHeading));
-  if(Math.abs(turn)>.25&&!state.locked){state.armed=true;state.side=Math.sign(turn);state.arc=(state.arc||0)+Math.abs(angle);}
-  const reversal=previous*turn<0&&Math.abs(turn)>.08,release=Math.abs(previous)>.12&&Math.abs(turn)<=.12;
-  const trigger=state.armed&&(release||reversal||state.arc>.75)&&speed>2&&(skier.poling||0)<.15;
-  if(trigger&&!state.active){state.active=true;state.plantSide=state.side;state.time=0;state.locked=true;state.armed=false;state.arc=0;state.worldPoint=null;}
-  if(release||reversal){state.locked=false;state.arc=0;}
-  if(speed<1||(skier.poling||0)>.2){state.active=false;state.worldPoint=null;state.armed=false;}
-  const before=(state.time||0)/.8;
-  if(state.active){state.time+=dt;if(state.time>=.8){state.active=false;state.worldPoint=null;}}
-  const phase=state.active?state.time/.8:0;
-  state.contact=state.active&&phase>=.43&&phase<=.57;
-  state.contactStarted=state.contact&&before<.43;
-  state.phase=phase;state.previousTurn=turn;state.previousHeading=skier.heading;
+  const command=skier.steerInput??skier.turn??0,side=Math.abs(command)>.18?Math.sign(command):0;
+  const speed=skier.speed||0,poling=skier.poling||0;
+  const angle=state.previousHeading===undefined?0:Math.abs(Math.atan2(Math.sin(skier.heading-state.previousHeading),Math.cos(skier.heading-state.previousHeading)));
+  state.contact=false;state.contactStarted=false;
+  if(speed<2||poling>.15){
+    state.active=false;state.committedSide=0;state.candidateSide=0;state.turnTime=0;state.arc=0;state.worldPoint=null;
+  }else if(side){
+    state.neutralTime=0;
+    if(side!==state.candidateSide){
+      // Consume the previous completed leg once, when input enters its opposite.
+      if(state.committedSide===-side&&!state.active){
+        state.active=true;state.targetSide=side;state.plantSide=-side;state.time=0;state.incomingHeld=0;state.touched=false;state.worldPoint=null;state.committedSide=0;
+      }
+      state.candidateSide=side;state.turnTime=0;state.arc=0;
+    }
+    state.turnTime=(state.turnTime||0)+dt;state.arc=(state.arc||0)+angle;
+    if(state.turnTime>=.20&&state.arc>=.045)state.committedSide=side;
+  }else{
+    state.neutralTime=(state.neutralTime||0)+dt;
+    if(state.neutralTime>.75){state.committedSide=0;state.candidateSide=0;state.turnTime=0;state.arc=0;}
+  }
+  if(state.active){
+    state.time+=dt;
+    if(side===state.targetSide)state.incomingHeld+=dt;
+    else if(!state.touched){state.active=false;state.worldPoint=null;}
+    const flattened=skier.edgeRoll===undefined?Math.sign(skier.turn||0)===state.targetSide:skier.edgeRoll*state.targetSide>=-.035;
+    if(state.active&&!state.touched&&state.incomingHeld>=.055&&flattened&&state.time<.26){state.touched=true;state.contactAge=0;state.contactStarted=true;}
+    if(state.touched){if(!state.contactStarted)state.contactAge+=dt;state.contact=state.contactAge<=.075;}
+    if(state.time>=.5||(!state.touched&&state.time>=.26)){state.active=false;state.contact=false;state.worldPoint=null;}
+  }
+  state.phase=state.active?state.time/.5:0;state.previousHeading=skier.heading;
   return state;
 }

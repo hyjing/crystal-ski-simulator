@@ -24,7 +24,7 @@ npm run preview
 | Input | Action |
 | --- | --- |
 | A / D or Left / Right | Hold to complete a turn and control speed |
-| Space or Down | Edge into a turn; hold after turning across the slope to skid / stop |
+| Space or Down | With A/D, turn skis across travel for a skid; hold to stop across the slope |
 | Shift | Rhythmic double-pole propulsion, no speed cutoff |
 | W or Up | Tuck: lower posture and aerodynamic drag |
 | N / visible Restart button | Restart the entire run, clearing time, distance and tracks |
@@ -140,3 +140,14 @@ Development-only `?visual-qa` offers fixed slope / forest inspection positions a
 
 
 Turn-end pole timing lives in `src/skier-animation.js`: release / reversal or an accumulated turn arc arms a single 0.8 s gesture with a short contact window. Gesture-side state is retained through a steering reversal. The plant point is world anchored against the supplied snow surface, and the hand follows the fixed-length pole during contact. It generates contact spray but does not modify ski velocity; Shift remains the explicit propulsion input. Head / torso proportions, continuous sleeve and trouser sections, and independent ski pivots replace the earlier primitive-only silhouette. This is not motion capture or a physically articulated body solver.
+
+
+## Supported turning and linked pole transitions — November 5, 2026
+
+This supersedes earlier descriptions of heading-first turns, Space auto-arcs and pole gestures triggered by release / accumulated angle.
+
+Normal A/D turns build lateral world velocity using a bounded snow reaction. The controller rotates velocity in the actual slope tangent plane (Rodrigues rotation), with rate limited by bank angle, nominal sidecut and grip; it does not discard lateral world momentum to point the skier in the requested direction. Ski heading follows the same curvature. Remaining grip handles ski-relative slip. Signed edge roll passes continuously through flat skis on a reversal, and visual hip / ski roll follows that signed value.
+
+Space + A/D is the deliberate ski-attack / skid control; Space alone no longer invents a turn. Existing cross-slope static-hold behavior remains. These are prototype controls, with no independent ski flex or measured contact solver. The distinction between turning snow reaction and skidding follows the conceptual discussion in [Jentschura & Fahrbach, Physics of Skiing](https://arxiv.org/abs/physics/0310086); the implementation is an authored approximation rather than a reproduction / validation of that model.
+
+A pole gesture requires a meaningful previous turn (at least 0.20 s steering and 0.045 rad heading change), followed by input to the opposite side. A short neutral release may link turns; a straight gap over 0.75 s clears the previous leg. Touch occurs after at least 55 ms of continued incoming input, near signed-edge flattening / crossover, with a 75 ms contact window and 0.5 s total gesture. The new inside hand plants once; release, continuing the same arc, and short alternating taps do not trigger it. Shift overrides the timing gesture. Pose timing pauses with simulation.

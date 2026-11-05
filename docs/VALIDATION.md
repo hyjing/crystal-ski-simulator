@@ -5,7 +5,7 @@
 `npm test` checks:
 
 - Downhill gravity and stationary flat-ground behavior.
-- Space enters an arc on the last selected side, with no flat-ground thrust.
+- Strong edge held without steering does not invent a turn or flat-ground thrust (current behavior).
 - High edge engagement gives a materially tighter turn than flat-ski steering.
 - Speed reduction from a completed turn / lateral skid.
 - Tuck reduces aerodynamic drag without creating forward thrust.
@@ -81,3 +81,13 @@ The HUD reports FPS, raw frame interval P95 / maximum, hitch count, raster scale
 - A short static forest inspection at 1280 × 720, after adaptive raster scaling to 0.85, reported 17.6 ms P95 / 17.7 ms maximum and no >25 ms intervals in that 180-frame sample. During compilation / loading or transitions, observed FPS was lower. This is not a sustained performance guarantee or an input-latency measurement.
 - Snowfall shader compilation was explicitly exercised and prewarmed during loading. Browser checks also cover pole-powered starts and the weather selector. All ten full itineraries have not been manually revalidated after this scene update.
 - The skier is still an authored procedural character with kinematic poses and gesture timing. Weather is an artistic preset system with static weak IBL; snow is a heightfield with sprites, not volumetric conserved snow. Rock dressing and piste widths remain authored approximations. These changes improve presentation without establishing photogrammetric or measured physical accuracy.
+
+
+## Turning / pole timing correction — November 5, 2026
+
+- **52 tests pass**. New trajectory tests verify substantial lateral world displacement / velocity in a normal turn, low ski-relative slip, momentum retained during reversal, continuous signed edge crossover, and no energy creation during banked turns on an inclined plane. Existing representative route and 10–30° cross-slope stop checks remain successful.
+- A flat 12 m/s, 1.5 s normal-turn fixture ends approximately 4.97 m to the side, with 6.67 m/s lateral world velocity, 10.88 m/s total speed and negligible ski-relative slip. These are scenario outputs, not measured skiing data.
+- Tests cover both directions of linked turns, no plant on release / one held arc / same-side re-engagement / short alternating taps, expiry after a straight gap, Shift / stop cancellation, cancelling a pending touch before crossover, finite posed limbs and snow contact. An actual physics + animation fixture verifies one touch near signed-edge crossover, rather than only testing synthetic state changes.
+- Historical pole-timing descriptions and tests above are superseded: cumulative turn angle no longer independently triggers a touch, and neutral release alone does not plant a pole.
+
+- Touch presentation also has a frame-hitch regression at 60 Hz, 30 Hz and a 100 ms frame: a valid linked transition still presents one contact rather than dropping it or planting twice. Browser checks exercised the actual Green Valley inspection slope, pole-powered starts, linked A/D input and visible curved tracks, with no new runtime errors.

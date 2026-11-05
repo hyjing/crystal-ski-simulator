@@ -66,7 +66,7 @@ export function installDemoCapture(api){
         while(next<points.length-1&&Math.hypot(s.x-points[next].x,s.z-points[next].z)<35)next++;
         const p=points[next],baseAngle=Math.atan2(Math.sin(Math.atan2(p.x-s.x,p.z-s.z)-s.heading),Math.cos(Math.atan2(p.x-s.x,p.z-s.z)-s.heading));
         const angle=baseAngle+.20*Math.sin((t-2.2)*1.8);
-        api.input({steer:clamp(-angle*2,-1,1),edge:Math.abs(angle)>.12?1:0,tuck:t>2.5&&t<6?1:0});
+        api.input({steer:clamp(-angle*2,-1,1),edge:Math.abs(angle)>.4?.18:0,pole:s.speed<4,tuck:t>2.5&&t<6?1:0});
       }
       if(t>=20){recording=false;api.input(null);recorder.stop();}
     },
