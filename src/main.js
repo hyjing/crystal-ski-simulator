@@ -118,11 +118,13 @@ function setRouteMarkers(){
   const pts=curve.getPoints(Math.ceil(route.length/8)).map(p=>new THREE.Vector3(p.x,yAt(p.x,p.z)+1.5,p.z));
   const line=new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts),new THREE.LineDashedMaterial({color:route.color,dashSize:8,gapSize:10,transparent:true,opacity:.7}));line.computeLineDistances();routeGroup.add(line);
   route.points.forEach((p,i)=>{
-    const y=yAt(p.x,p.z);
-    const pole=new THREE.Mesh(new THREE.CylinderGeometry(.18,.18,8,5),new THREE.MeshStandardMaterial({color:'#3e6059'}));pole.position.set(p.x,y+4,p.z);routeGroup.add(pole);
-    const flag=new THREE.Mesh(new THREE.PlaneGeometry(6,3),new THREE.MeshBasicMaterial({color:route.color,side:THREE.DoubleSide}));flag.position.set(p.x+3,y+7,p.z);routeGroup.add(flag);
+    const next=route.points[Math.min(i+1,route.points.length-1)],prev=route.points[Math.max(i-1,0)];
+    const dx=next.x-prev.x,dz=next.z-prev.z,len=Math.hypot(dx,dz)||1;
+    const marker={x:p.x+dz/len*9,z:p.z-dx/len*9},y=yAt(marker.x,marker.z);
+    const pole=new THREE.Mesh(new THREE.CylinderGeometry(.18,.18,8,5),new THREE.MeshStandardMaterial({color:'#3e6059'}));pole.position.set(marker.x,y+4,marker.z);routeGroup.add(pole);
+    const flag=new THREE.Mesh(new THREE.PlaneGeometry(6,3),new THREE.MeshBasicMaterial({color:route.color,side:THREE.DoubleSide}));flag.position.set(marker.x+3,y+7,marker.z);routeGroup.add(flag);
     if(i===route.points.length-1){
-      const ring=new THREE.Mesh(new THREE.TorusGeometry(11,.4,6,40),new THREE.MeshBasicMaterial({color:route.color}));ring.position.set(p.x,y+12,p.z);ring.rotation.y=Math.PI/2;routeGroup.add(ring);
+      const ring=new THREE.Mesh(new THREE.TorusGeometry(11,.4,6,40),new THREE.MeshBasicMaterial({color:route.color}));ring.position.set(p.x,yAt(p.x,p.z)+12,p.z);ring.rotation.y=Math.PI/2;routeGroup.add(ring);
     }
   });
   scene.add(routeGroup);
