@@ -64,3 +64,11 @@ test('the complete ski suit is one closed connected skin with normalized bone we
  const visited=new Set(),queue=[0];while(queue.length){const i=queue.pop();if(visited.has(i))continue;visited.add(i);for(const j of adj[i])if(!visited.has(j))queue.push(j);}assert.equal(visited.size,adj.length,'jacket, sleeves and trousers form one connected surface');
  for(let i=0;i<g.attributes.position.count;i++){let sum=0;for(let j=0;j<4;j++){const weight=g.attributes.skinWeight.array[i*4+j];assert.ok(weight>=0);sum+=weight;assert.ok(g.attributes.skinIndex.array[i*4+j]<suit.skeleton.bones.length);}assert.ok(Math.abs(sum-1)<1e-5);}
 });
+
+test('the winter outfit has a shaped waist, loose hem, chest volume and skinned garment details',async()=>{
+ const bytes=fs.readFileSync(new URL('../public/assets/skier-complete.glb',import.meta.url)),{scene}=await new GLTFLoader().parseAsync(bytes.buffer.slice(bytes.byteOffset,bytes.byteOffset+bytes.byteLength),'');
+ const suit=scene.getObjectByName('Unified_ski_suit'),p=suit.geometry.attributes.position;
+ const widthAt=y=>{let width=0;for(let i=0;i<p.count;i++)if(Math.abs(p.getY(i)-y)<.008&&Math.abs(p.getX(i))<.30)width=Math.max(width,Math.abs(p.getX(i)));return width;};
+ const waist=widthAt(1.14);assert.ok(widthAt(1.30)>waist+.020,'chest must widen visibly above the waist');assert.ok(widthAt(.96)>waist+.020,'loose jacket hem must widen below the waist');
+ const details=scene.getObjectByName('Jacket_seams_and_pockets');assert.ok(details?.isSkinnedMesh);assert.equal(details.skeleton.bones[0],suit.skeleton.bones[0]);
+});

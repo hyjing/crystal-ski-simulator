@@ -112,3 +112,10 @@ The HUD reports FPS, raw frame interval P95 / maximum, hitch count, raster scale
 - Gitleaks 8.30.1 (official release, checksum verified) reported no leaks in the original 15-commit history, the anonymized 16-commit pre-publication history, and the current working tree. Separate review found no private local paths in 224 historical file blobs and no private GPS / author image metadata. The included video metadata contains only format / encoder information.
 - Local author / committer metadata was replaced with the GitHub username and noreply email after a verified private bundle backup outside the repository. Only `main` is pushed; private backup refs are not published. This describes the canonical visible history, not deletion of every server-side cached object.
 - The production build was tested under `/crystal-ski-simulator/`, including lift-area start and the detailed Rainier view, with no new browser warnings / errors observed. Pages publishes `dist/` only. No personal access token is embedded in source or required by the deployment workflow.
+
+
+## Character silhouette revision — November 5, 2026
+
+- 62 tests pass. The new silhouette fixture verifies that both chest and loose hem widen by more than 2cm from the waist in the baked mesh, and that garment details share the native skeleton. Existing closed-surface connectivity, normalized weights, finite posed bounds and ski-boot bank checks remain green.
+- Actual browser inspection covered the front, back, wheel close-up, a large orbit and a short turn paused for review, with no new warnings / errors observed after loading. The initial close-orbit linear interpolation exposed the near clipping plane; angle / radius interpolation fixes that camera path. No long full-route performance certification is implied.
+- Current close front / back screenshots supersede `rebuilt-character.png` for the README character example. The game remains stylized and has not reached reference-video parity.

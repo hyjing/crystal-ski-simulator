@@ -69,7 +69,7 @@ async function init(){
   $('world').appendChild(renderer.domElement);
   renderer.domElement.addEventListener('pointerdown',e=>{if(mode==='intro')return;lookDrag={x:e.clientX,y:e.clientY};renderer.domElement.setPointerCapture(e.pointerId);});
   renderer.domElement.addEventListener('pointermove',e=>{if(!lookDrag)return;lookYaw-=(e.clientX-lookDrag.x)*.004;lookPitch=clamp(lookPitch-(e.clientY-lookDrag.y)*.003,-.45,.65);lookDrag={x:e.clientX,y:e.clientY};});
-  renderer.domElement.addEventListener('wheel',e=>{if(mode==='intro')return;e.preventDefault();lookDistance=clamp(lookDistance+e.deltaY*.007,-6,8);},{passive:false});
+  renderer.domElement.addEventListener('wheel',e=>{if(mode==='intro')return;e.preventDefault();lookDistance=clamp(lookDistance+e.deltaY*.007,-8.5,8);},{passive:false});
   for(const event of ['pointerup','pointercancel'])renderer.domElement.addEventListener(event,()=>{lookDrag=null;});
   hemisphere=new THREE.HemisphereLight('#c2d9ff','#586b8a',1.2);scene.add(hemisphere);
   sun=new THREE.DirectionalLight('#fff3de',3.1);sun.castShadow=true;sun.shadow.mapSize.set(3072,3072);
@@ -295,12 +295,21 @@ function updateCamera(dt,snap=false){
     if(cameraHeading===null||snap)cameraHeading=desiredHeading;
     cameraHeading+=Math.atan2(Math.sin(desiredHeading-cameraHeading),Math.cos(desiredHeading-cameraHeading))*(snap?1:1-Math.exp(-dt*5));
     forward.set(Math.sin(cameraHeading+lookYaw),0,Math.cos(cameraHeading+lookYaw));
-    targetCamera.copy(p).addScaledVector(forward,-10.5-Math.min(skier.speed*.12,4.5)-lookDistance);targetCamera.y+=4.5+Math.min(0,lookDistance)*.24-skier.tuck*.55;
-    targetCamera.y=Math.max(targetCamera.y,yAt(targetCamera.x,targetCamera.z)+3);
-    lookTarget.copy(p).addScaledVector(forward,(8+Math.min(skier.speed*.20,5))*clamp((10.5+lookDistance)/10.5,.45,1.5));lookTarget.y+=1.8+lookPitch*20;
+    const closeZoom=clamp((-lookDistance-3)/5.5,0,1);
+    targetCamera.copy(p).addScaledVector(forward,-10.5-Math.min(skier.speed*.12,4.5)*(1-closeZoom)-lookDistance);targetCamera.y+=4.5+Math.min(0,lookDistance)*.32-skier.tuck*.55;
+    targetCamera.y=Math.max(targetCamera.y,yAt(targetCamera.x,targetCamera.z)+3-closeZoom*1.8);
+    lookTarget.copy(p).addScaledVector(forward,(8+Math.min(skier.speed*.20,5))*clamp((10.5+lookDistance)/10.5,.18,1.5)*(1-closeZoom));lookTarget.y+=1.8-closeZoom*.7+lookPitch*(20-closeZoom*16);
   }
   const a=snap?1:1-Math.exp(-dt*(mode==='intro'?2:7));
-  camera.position.lerp(targetCamera,a);displayLook.lerp(lookTarget,a);camera.lookAt(displayLook);if(!sceneryView&&mode!=='intro'&&view==='follow')camera.rotateZ(-skier.turn*skier.edge*.022);
+  if(!snap&&!sceneryView&&mode!=='intro'&&view==='follow'){
+    // Follow an orbit arc: a straight lerp can pass through the skier on a close 180-degree drag.
+    const ox=camera.position.x-p.x,oz=camera.position.z-p.z,tx=targetCamera.x-p.x,tz=targetCamera.z-p.z;
+    const oldAngle=Math.atan2(ox,oz),targetAngle=Math.atan2(tx,tz),angle=oldAngle+Math.atan2(Math.sin(targetAngle-oldAngle),Math.cos(targetAngle-oldAngle))*a;
+    const radius=Math.max(1.6,THREE.MathUtils.lerp(Math.hypot(ox,oz),Math.hypot(tx,tz),a));
+    camera.position.set(p.x+Math.sin(angle)*radius,THREE.MathUtils.lerp(camera.position.y,targetCamera.y,a),p.z+Math.cos(angle)*radius);
+    camera.position.y=Math.max(camera.position.y,yAt(camera.position.x,camera.position.z)+3-clamp((-lookDistance-3)/5.5,0,1)*1.8);
+  }else camera.position.lerp(targetCamera,a);
+  displayLook.lerp(lookTarget,a);camera.lookAt(displayLook);if(!sceneryView&&mode!=='intro'&&view==='follow')camera.rotateZ(-skier.turn*skier.edge*.022);
   const fov=sceneryView?46:58+(mode==='intro'?0:Math.min(skier.speed*.28,11)+skier.tuck*2);
   camera.fov=THREE.MathUtils.lerp(camera.fov,fov,a);camera.updateProjectionMatrix();
 }

@@ -40,3 +40,5 @@ Elevation, map and generated-asset attribution remains in [ASSETS.md](../ASSETS.
 `crystal-rainier.png` is an additional live browser screenshot of the later distant-scenery update. It is not part of the original v0.3.1 video; that video remains a record of the previous build.
 
 `rebuilt-character.png` and `refined-rainier.png` show the complete skier / 4K geographic scenery rebuild. They are staged live browser inspection views. Older video and screenshot files remain historical; they do not represent every current asset.
+
+`contoured-character-front.png` and `contoured-character-back.png` show the later garment-silhouette revision, captured through the real close follow camera in development inspection mode. These supersede the straight-sided outfit image for the current character example.

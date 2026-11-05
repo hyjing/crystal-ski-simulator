@@ -9,7 +9,7 @@ export function upperBodyCounterAngle(heading,fallLine,motion={}){
   const downhill=THREE.MathUtils.smoothstep(Math.cos(travel-fallLine),.25,.70);
   return THREE.MathUtils.clamp(Math.atan2(Math.sin(fallLine-heading),Math.cos(fallLine-heading))*.88,-.95,.95)*downhill*moving;
 }
-export async function loadHumanoid(athlete){const gltf=await new GLTFLoader().loadAsync(`${import.meta.env.BASE_URL}assets/skier-complete.glb`);return attachHumanoid(athlete,gltf.scene);}
+export async function loadHumanoid(athlete){const gltf=await new GLTFLoader().loadAsync(`${import.meta.env.BASE_URL}assets/skier-complete.glb?v=contoured-outfit-2`);return attachHumanoid(athlete,gltf.scene);}
 function jointSolution(a,target,pole,l1,l2){
   const delta=target.clone().sub(a),d=THREE.MathUtils.clamp(delta.length(),Math.abs(l1-l2)+.001,l1+l2-.002),axis=delta.normalize();
   const along=(l1*l1-l2*l2+d*d)/(2*d),height=Math.sqrt(Math.max(0,l1*l1-along*along));

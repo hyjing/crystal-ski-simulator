@@ -60,6 +60,9 @@ The humanoid adds a 724 KiB bundled GLB and native skinning / IK; no external ru
 
 ## Complete asset and 4K geographic scenery
 
-The complete skier is ~3.05 MiB on disk and includes a 47,864-triangle continuous outfit plus the native exposed anatomy / equipment. Geometry construction and skin-weight transfer run offline; no marching cubes or garment remeshing runs in the browser. Native skinning and existing IK animate it.
+The complete skier is ~4.30 MiB on disk and includes a 78,270-triangle continuous outfit plus the native exposed anatomy / equipment. Geometry construction and skin-weight transfer run offline; no marching cubes or garment remeshing runs in the browser. Native skinning and existing IK animate it.
 
 Summit and valley detail is spatially limited: 247,257 total far-terrain triangles, with no runtime refinement / replacement. Each 4K aerial texture requires roughly 75–80 MiB including mipmaps, so the two larger maps cost additional GPU memory. They load progressively after skiing is initialized. Image detail and silhouette improve at a real memory / transfer cost; no blanket 60 FPS claim is made.
+
+
+The contoured garment revision adds roughly 30k outfit triangles and a small skinned seam mesh to the previous character. The extra geometry supports the silhouette and folds; no per-frame garment generation is introduced. Stronger wheel zoom can increase character pixel coverage. Actual frame time remains device / view dependent; the existing adaptive raster policy remains active.

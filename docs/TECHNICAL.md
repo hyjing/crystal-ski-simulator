@@ -169,3 +169,10 @@ Forest rendering is now static: fixed crown / trunk meshes in spatial batches an
 `node scripts/build-skier.mjs` produces the runtime complete GLB. A welded implicit surface joins jacket, sleeves and trousers before skeletal binding, so no runtime envelope projection or body-triangle garment slicing remains. Closed connectivity and normalized weights are tested. Anatomy and skeleton remain from the documented CC0 base; equipment is authored into the same asset. Runtime only loads materials and poses its native bones. Previous counter-rotation / velocity gates remain unchanged.
 
 Distant terrain uses static local refinement around Rainier's summit and the intervening main valley, with every fine boundary vertex shared by its neighboring coarse fan. This prevents T-junction cracks without camera-dependent geometry swaps. Rainier currently uses 158,658 triangles and context 88,599 (247,257 combined). All vertices use real DEM samples. Textures share projected UTM pixel-edge bounds, preserving glacier / channel locations. NAIP RGB detail survives winter shading; authored snow cover uses elevation, slope, photographic brightness and vegetation tint. It does not create a hydraulic river model.
+
+
+## Contoured character and close inspection camera
+
+The garment builder uses smooth section profiles and localized compression folds instead of a constant elliptical torso. An explicit shoulder slope, hood opening, elbow / knee volume and seam details are baked into the complete GLB. Skin weights remain normalized on the original native skeleton. A versioned asset URL prevents reuse of the previous cached model after this update.
+
+Wheel zoom now supports a closer view aimed at the character rather than far downhill. Follow-camera interpolation uses angle / radius around the skier, with terrain clearance, so a large close orbit does not linearly pass through the character. C resets the view as before. Default ski controls / contact physics are unchanged.
