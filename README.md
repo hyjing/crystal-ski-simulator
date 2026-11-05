@@ -51,15 +51,18 @@ Real terrain. Fresh tracks. Your line.
 
 ## 今天滑哪条？
 
-现已收录 **78 条地图线路**：**38 条蓝道、37 条单黑道、3 条绿道**。可按难度筛选、按英文名称或原有中文别名搜索；列表独立滚动，「开始滑行」位于列表外。
+菜单现为 **10 条缆车整趟路线**，长度约 **0.6–2.8 km**。从上站附近的雪面出口滑出，以抵达下站为目标；不足 400 m 的短段不再单独列为一趟，连接段仍保留在线网里。
 
-| 想滑哪种 | 试试这些线路 |
-| :--- | :--- |
-| ■ 蓝道 | Green Valley、Lucky Shot、Pro Course、Downhill、Mr Magoo、Gold Hills |
-| ◆ 单黑道 | Sunnyside、Middle Ferk's Run、Memorial Forest、Little Portillo、Lower North |
-| ● 绿道 | Tinkerbell、Quicksilver、Easy Street |
+| 路线 | 缆车 | 本次整趟长度 |
+| :--- | :--- | :--- |
+| Green Valley | Green Valley | 1.2 km |
+| Lucky Shot | Rainier Express | 2.0 km |
+| Mr Magoo / Chappelle's / Downhill | Forest Queen Express | 1.6 / 1.8 / 1.6 km |
+| Gold Hills | Gold Hills | 0.6 km |
+| Northway / Otto Bahn | Northway | 2.1 / 2.8 km |
+| Quicksilver / Tinkerbell | Quicksilver | 1.1 / 1.3 km |
 
-路线使用 OpenStreetMap 中心线并与真实地形对齐。目录包含短分段和连接道，不等于官方完整雪道数量；部分横切道路仍受 DEM 起伏影响。查看 [完整线路、数据来源与通行验证范围](docs/TRAILS.md)，以及 [Crystal Mountain 官方雪道地图](https://www.crystalmountainresort.com/the-mountain/trail-maps)。
+路线沿 OSM 中心线串联，起终点取缆车端点；站区和少量数据断口的接驳仍是近似。查看 [完整线路、接驳边界与验证范围](docs/TRAILS.md)，以及 [Crystal Mountain 官方雪道地图](https://www.crystalmountainresort.com/the-mountain/trail-maps)。
 
 ## 快速开始
 
@@ -83,6 +86,7 @@ npm run dev
 | 左右转向 / 选择压刃方向 | **A / D** 或 **← / →** |
 | 压刃入弯，沿上次选择的一侧转弯 | **空格** 或 **↓** |
 | 收身，降低空气阻力 | **W** 或 **↑** |
+| 站区和缓坡低速撑杖 | **Shift** |
 | 从起点重新开始 | **N** |
 | 返回最近检查点 | **R** |
 | 跟随 / 俯瞰镜头 | **O** |
@@ -95,16 +99,16 @@ npm run dev
 
 ## 地形有出处，细节在生长
 
-- **山形**：USGS 3DEP 高程；滑行区域约 19.7 m 导出采样，雷尼尔山约 36 m，周边山群约 120 m。导出间距不代表原始测绘精度。
+- **山形**：USGS 3DEP 高程；滑行区域约 4.93 m 导出采样（约 19.7 m 备份），雷尼尔山约 36 m，周边山群约 120 m。导出间距不代表原始测绘精度。
 - **雪道与设施**：© OpenStreetMap contributors，ODbL 1.0；使用雪道中心线、缆车路径与建筑轮廓。
-- **林地参考**：公开的 USGS / USDA NAIP 无雪季航拍。用来约束植被分布，也能在小地图查看。
+- **林地参考**：公开的 USGS / USDA NAIP 无雪季航拍。从林冠纹理提取约 2 万个树木候选位置，并提供远处林地覆盖与航拍小地图；单株位置仍是估算。
 - **冬季外观**：粉雪层、滑痕、雪雾、人物和设施外观由项目制作；覆雪冷杉使用生成的透明纹理。
 
 这是独立的早期原型，与 Crystal Mountain Resort 无关联。雪层形变属于视觉高度场模型，树林位置和建筑外观仍是近似；它不用于现实雪场导航，也未模拟跳跃、落地或完整人体动作。
 
 ## 继续往山里走
 
-- [x] 真实高程 + 78 条命名地图线路、难度筛选与搜索
+- [x] 真实高程 + 10 条缆车整趟路线、难度筛选与搜索
 - [x] 粉雪压痕、雪边与雪雾
 - [x] 转弯、立刃、收身与检查点
 - [x] 航拍地图、覆雪林地、缆车与建筑

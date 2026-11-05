@@ -52,3 +52,11 @@ The HUD reports FPS, raw frame interval P95 / maximum, hitch count, raster scale
 - The former three-route completion check is now an explicitly named representative downhill check: the original three plus seven new blue/black runs, in both snow modes. It does not assert that all imported road/traverse geometry can be completed. A separate simple soft-snow audit completed 62 of 78 entries; limitations are recorded in [TRAILS.md](TRAILS.md).
 - Short sections have a smaller finish radius so a 63 m section does not complete immediately on spawn. Route signs are capped at 21 locations; forest clearance uses a spatial index to avoid multiplying tree-placement work by the full catalog.
 - Browser: original Green Valley and new Sunnyside start correctly after selection; difficulty/search selection uses a bounded list so the start button is not pushed below a 78-row list.
+
+## Lift runs, fine ground and canopy update
+
+- 34 tests pass: selected itineraries meet the 400 m cutoff; S/F coordinates match the assigned lift terminals; all 10 runs have a clear snow exit near the upper terminal; fine / coarse terrain footprints agree; canopy positions retain image registration; pole input works only at low speeds.
+- The 78-entry source inventory tests remain data-integrity checks, not a statement that 78 runs remain selectable.
+- A simple controller audit on full itineraries, with detailed ground and pole input, completed 5/10 before the station-exit refinement. This audit is not a manual-playability certification; it does not justify claiming all station-to-station traverses are validated.
+- Browser checks verify the Lucky Shot spawn near the Rainier Express upper terminal and outside building proxies, terrain shader compilation, the bounded run selector and the more detailed forest layout.
+- Additional geometry / texture memory comes from static terrain LOD meshes and the finer DEM texture. No frame-time equality with the previous build is claimed.

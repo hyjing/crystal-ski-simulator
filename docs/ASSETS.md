@@ -2,10 +2,10 @@
 
 ## Public-domain aerial reference
 
-- File: `public/data/crystal-aerial.jpg` (1028 × 1284).
+- File: `public/data/crystal-aerial.jpg` (2056 × 2568).
 - Source: [USGS / USDA NAIP ImageServer](https://imagery.nationalmap.gov/arcgis/rest/services/USGSNAIPImagery/ImageServer).
 - Requested/exported bounds in EPSG:32610: `613351.2019716937, 5196180.504790717, 618417.1903457006, 5202508.062253971`.
-- RGB bands 0,1,2, bilinear export. Pixel size approximately 4.928 m.
+- RGB bands 0,1,2, bilinear export. Pixel size approximately 2.464 m.
 - Retrieved November 4, 2026 (Pacific time). The service is a mosaic; exact source acquisition dates are not established here.
 - This is **snow-free aerial orthoimagery**, not a winter satellite photograph. It is available as the minimap's aerial layer and guides vegetation likelihood. It is not pasted onto the snow surface.
 - `public/data/crystal-landcover.json`: RGB-based vegetation likelihood at DEM grid locations. This heuristic can confuse dark grass, shrubs and forest; it does not locate individual surveyed trees or give canopy height.
@@ -52,3 +52,12 @@ Locations reference OSM geometry. Lift support height, chairs, cable sag, speeds
 `crystal-trails.json` now retains 81 named OSM centerline ways in the Crystal area, grouped into 78 selectable entries: 38 intermediate, 37 advanced, 3 easy. The fetch uses `https://api.openstreetmap.org/api/0.6/map?bbox=-121.525,46.90,-121.435,46.985`, with name/type/grade/geometry filtering. Reproduce with `python3 scripts/fetch-trails.py`, or `--input` with a previously exported XML map. Original IDs and tags remain in the data. © OpenStreetMap contributors, ODbL 1.0.
 
 The current official winter map was inspected through the resort's [map page](https://www.crystalmountainresort.com/the-mountain/trail-maps); it marks Quicksilver and Easy Street green, overriding their OSM intermediate tags for the selector. No official map image is redistributed in the repository. See [TRAILS.md](TRAILS.md) for every source ID and scope limits.
+
+## Fine local ground and georeferenced canopy placement
+
+- Local source image is now 2056 × 2568 RGB pixels (~2.46 m export pixels), from the same public-domain USGS / USDA NAIP service and exact extent recorded in `crystal-landcover.json`. Reproduce with `scripts/fetch-aerial.py`.
+- `crystal-detail-dem.json` + `.bin` contain a 1025 × 1281 USGS bare-earth export, 4.928004 m spacing, Float32 little-endian heights in meters. Its pixel-center footprint matches the original local DEM exactly. Reproduce with `scripts/fetch-ground-detail.py`. Export spacing does not establish the native source survey resolution; local 1 m lidar availability has not been verified here.
+- Terrain appearance: `src/ground.js` builds static 5/10/20 m LOD meshes, with downward skirts to close tile seams. Cliffs, gullies and banks follow the source heights; no decorative obstacle cliffs were added. Bare-rock coloring is authored from surface steepness.
+- `crystal-canopy.png` and `crystal-vegetation.json`: derived locally from the aerial image using RGB vegetation rules, canopy texture maxima and minimum 8 m candidate spacing. Candidate centers remain at real image pixels; size and orientation remain artistic. Up to 20,000 candidates are retained. This is an image-derived approximation, not a canopy-height or individual-tree survey. `scripts/derive-vegetation.py` reproduces them.
+- Forest line clearance is reduced from 18 m to 5 m so inferred trees no longer cut a broad uniform empty lane through the photographic forest. The same mask shades distant forest cover on the terrain. Extents are transformed independently of the DEM resolution.
+- Lift itineraries combine OSM source centerlines with authored short station aprons / junction connections. Details and bounds are explicit in [TRAILS.md](TRAILS.md).

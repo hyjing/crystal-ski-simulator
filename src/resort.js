@@ -1,22 +1,25 @@
 import * as THREE from 'three';
 import {mergeGeometries} from 'three/addons/utils/BufferGeometryUtils.js';
-import {lonLatToUTM} from './terrain.js';
+import {lonLatToUTM,pointAlongRoute} from './terrain.js';
 
 export function geographicPoint(terrain,[lon,lat]){
   const p=lonLatToUTM(lon,lat);
   return {x:p.e-terrain.originUTM[0]-(terrain.width-1)*terrain.spacing/2,z:terrain.originUTM[1]-(terrain.height-1)*terrain.spacing/2-p.n};
 }
 export function forestLikelihood(terrain,landcover,x,z){
-  const u=Math.round(x/terrain.spacing+(terrain.width-1)/2),v=Math.round(z/terrain.spacing+(terrain.height-1)/2);
+  const ce=terrain.originUTM[0]+(terrain.width-1)*terrain.spacing/2,cn=terrain.originUTM[1]-(terrain.height-1)*terrain.spacing/2;
+  const extent=landcover.extent;
+  const u=extent?Math.floor((ce+x-extent.xmin)/(extent.xmax-extent.xmin)*landcover.width):Math.round(x/terrain.spacing+(terrain.width-1)/2);
+  const v=extent?Math.floor((extent.ymax-cn+z)/(extent.ymax-extent.ymin)*landcover.height):Math.round(z/terrain.spacing+(terrain.height-1)/2);
   if(u<0||v<0||u>=landcover.width||v>=landcover.height)return 0;
   return landcover.values[v*landcover.width+u];
 }
 
-export function addForest(scene,terrain,routes,landcover,texture){
+export function addForest(scene,terrain,routes,landcover,texture,vegetation){
   let seed=84;const rng=()=>{seed=(Math.imul(seed,1664525)+1013904223)|0;return(seed>>>0)/4294967296;};
   const candidates=[];
   // Index all route segments once; hundreds of ways should not multiply forest startup work.
-  const cells=new Map(),cellSize=100,clearance=18;
+  const cells=new Map(),cellSize=100,clearance=5;
   for(const route of routes)for(let i=1;i<route.points.length;i++){
     const a=route.points[i-1],b=route.points[i],segment={a,b};
     for(let x=Math.floor((Math.min(a.x,b.x)-clearance)/cellSize);x<=Math.floor((Math.max(a.x,b.x)+clearance)/cellSize);x++)
@@ -24,10 +27,14 @@ export function addForest(scene,terrain,routes,landcover,texture){
         const key=`${x},${z}`;if(!cells.has(key))cells.set(key,[]);cells.get(key).push(segment);
       }
   }
-  for(let i=0;i<14000;i++){
-    const p=terrain.world(8+rng()*(terrain.width-16),8+rng()*(terrain.height-16));
-    const probability=forestLikelihood(terrain,landcover,p.x,p.z);
-    if(rng()>probability*.85||terrain.sample(p.x,p.z)<1180)continue;
+  const ce=terrain.originUTM[0]+(terrain.width-1)*terrain.spacing/2,cn=terrain.originUTM[1]-(terrain.height-1)*terrain.spacing/2;
+  const source=vegetation?vegetation.pixels.map(([u,v,size])=>{
+    const {extent,imageSize:[w,h]}=vegetation;
+    return {x:extent.xmin+(u+.5)/w*(extent.xmax-extent.xmin)-ce,z:cn-extent.ymax+(v+.5)/h*(extent.ymax-extent.ymin),size};
+  }):Array.from({length:14000},()=>terrain.world(8+rng()*(terrain.width-16),8+rng()*(terrain.height-16)));
+  for(const p of source){
+    if(!vegetation&&rng()>forestLikelihood(terrain,landcover,p.x,p.z)*.85)continue;
+    if(terrain.sample(p.x,p.z)<1180)continue;
     // A small clearance around source centerlines prevents proxy trees on a run.
     let clear=false;
     for(const {a,b} of cells.get(`${Math.floor(p.x/cellSize)},${Math.floor(p.z/cellSize)}`)||[]){
@@ -36,7 +43,7 @@ export function addForest(scene,terrain,routes,landcover,texture){
       if(Math.hypot(p.x-a.x-t*dx,p.z-a.z-t*dz)<clearance){clear=true;break;}
     }
     if(clear)continue;
-    candidates.push({...p,size:.65+rng()*.8,rotation:rng()*Math.PI});
+    candidates.push({...p,size:p.size||.65+rng()*.8,rotation:rng()*Math.PI});
   }
   const cards=[];
   for(let i=0;i<3;i++){const g=new THREE.PlaneGeometry(8,21);g.translate(0,10.5,0);g.rotateY(i*Math.PI/3);cards.push(g);}
@@ -105,4 +112,20 @@ export function addResort(scene,terrain,data){
       dummy.rotation.set(0,Math.atan2(seg.b.x-seg.a.x,seg.b.z-seg.a.z)+(chair.side<0?Math.PI:0),0);dummy.updateMatrix();mesh.setMatrixAt(i,dummy.matrix);
     });update(openChairs,seats);update(closedCabins,cabins);seats.instanceMatrix.needsUpdate=cabins.instanceMatrix.needsUpdate=true;
   };
+}
+
+
+export function liftExitSpawn(terrain,route,infrastructure){
+  const rings=infrastructure.features.filter(f=>f.geometry.type==='Polygon').map(f=>f.geometry.coordinates[0].map(p=>geographicPoint(terrain,p)));
+  const blocked=p=>rings.some(ring=>{
+    let inside=false;
+    for(let i=0,j=ring.length-1;i<ring.length;j=i++){
+      const a=ring[i],b=ring[j];if((a.z>p.z)!==(b.z>p.z)&&p.x<(b.x-a.x)*(p.z-a.z)/(b.z-a.z)+a.x)inside=!inside;
+      const dx=b.x-a.x,dz=b.z-a.z,l=dx*dx+dz*dz,t=l?THREE.MathUtils.clamp(((p.x-a.x)*dx+(p.z-a.z)*dz)/l,0,1):0;
+      if(Math.hypot(p.x-a.x-t*dx,p.z-a.z-t*dz)<4)return true;
+    }
+    return inside;
+  });
+  for(let distance=35;distance<=150;distance+=5){const point=pointAlongRoute(route,distance);if(!blocked(point)&&!blocked(pointAlongRoute(route,distance-15)))return point;}
+  throw new Error(`No clear snow exit near ${route.lift}`);
 }

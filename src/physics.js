@@ -32,6 +32,8 @@ export function stepSkier(s, input, terrain, dt, snow = 'packed') {
   const norm = 1 + g.x*g.x + g.z*g.z;
   s.vx += -PHYSICS.gravity*g.x/norm*dt;
   s.vz += -PHYSICS.gravity*g.z/norm*dt;
+  // Low-speed pole work at station aprons / traverses; no thrust once gliding quickly.
+  if(input.pole&&speed<4.2){const push=110/PHYSICS.mass*(1-speed/4.2)*dt;s.vx+=fx*push;s.vz+=fz*push;}
   const forward = s.vx*fx+s.vz*fz, lateral=s.vx*rx+s.vz*rz;
   const grip = (snow === 'packed' ? 1.4 : 1.0) + Math.abs(s.turn)*.8 + edge*7;
   const side = lateral*Math.exp(-grip*dt);

@@ -1,18 +1,40 @@
-# Crystal mapped trail catalog
+# Lift-to-lift runs
 
-78 selectable route entries from 81 OSM centerline ways: 38 blue, 37 single-black and 3 green. This is a catalog of mapped portions and connectors, not a claim that the resort has exactly 78 official runs.
+The menu now contains 10 lift-to-lift itineraries, rather than 78 independently selectable map fragments. Runs shorter than 400 m are excluded. Short named segments remain in the routing network when they connect a complete run.
 
-Names and geometry are from OpenStreetMap. Default grades use OSM tags; Quicksilver and Easy Street are corrected to green after visual review of the current [official 2026–27 winter map](https://www.crystalmountainresort.com/the-mountain/trail-maps). Some community-mapped names or subdivisions may differ from the official map.
+The four requested corrections are explicit: Green Valley starts at the Green Valley upper terminal and ends at its lower terminal; Lucky Shot uses Rainier Express; Mr Magoo and Chappelle’s use Forest Queen Express. The skier starts on a clear snow exit 35–150 m along the approach, avoiding the current building proxies and camera obstruction. The map's S/F pins still mark the actual mapped lift endpoints. Finishing requires reaching within 18 m of the lower terminal.
 
-Connected fragments of Kelley’s Gap Road and Northway Drainage are joined only at identical endpoints. Disconnected ways are never bridged by an invented line. The original Green Valley entry still omits the first source approach point. All entries fit the existing high-resolution DEM.
+| Run | Lift | Approximate itinerary length | Via |
+| --- | --- | ---: | --- |
+| Green Valley | Green Valley | 1.22 km | Grubstake → Green Valley |
+| Lucky Shot | Rainier Express | 1.98 km | Front Traverse → Back Traverse to Lucky Shot → Lucky Shot → Gandy's Run |
+| Mr Magoo | Forest Queen Express | 1.64 km | Downhill → Mr Magoo → Ms. Magoo → Lower Magoo → Broadway |
+| Chappelle's | Forest Queen Express | 1.77 km | Downhill → Chappelle's → Lower Magoo → Broadway |
+| Downhill | Forest Queen Express | 1.58 km | Downhill → Afterburn → Broadway |
+| Gold Hills | Gold Hills | 0.62 km | Gold Hills |
+| Northway | Northway | 2.08 km | Upper Northway → Northway Drainage |
+| Otto Bahn | Northway | 2.81 km | Upper Otto Bahn → Otto Bahn → Lower Otto Bahn |
+| Quicksilver | Quicksilver | 1.11 km | Quicksilver → Tinkerbell |
+| Tinkerbell | Quicksilver | 1.32 km | Easy Street → Tinkerbell |
 
-## Simulation limits
+## Sources and authored connections
 
-The catalog covers mapped blue and single-black centerlines; double-black/expert lines, extreme/cliff lines, unnamed ways, and bowls with only polygon outlines are outside this import. Some official blue/black runs without usable centerlines remain absent. Short entries are mapped sections, not full top-to-bottom runs.
+- `crystal-trail-network.json` retains 93 easy/intermediate/advanced OSM ways, including green and unnamed connectors. The older `crystal-trails.json` remains an 81-way source inventory and is not the current menu.
+- `crystal-lift-runs.json` records lift IDs, contributing OSM way IDs, named legs, and the lengths of inferred station / junction connections. `scripts/build-trail-network.py --input <Crystal OSM XML>` exports the network; `scripts/assemble-lift-runs.mjs` reproduces the itineraries from these local inputs.
+- Real mapped segments are retained. Source gaps of up to 50 m are bridged as approximate junctions; station apron connections may be up to 300 m at the top and 180 m at the bottom. Northway's upper approach is approximately 215 m; the lower apron links for Lucky Shot and Otto Bahn are approximately 137 m and 146 m. These are authored approaches, not surveyed trail or gate geometry.
+- The current menu is a curated subset. Other long source sections remain outside the menu until their lift approaches / exits are assembled. Double-black and cliff lines are outside this set.
 
-The ~20 m DEM does not resolve cut road benches or every traverse. In a simple waypoint-controller audit, 62 of 78 routes finished in soft snow; 16 did not, often on road/traverse geometry. This is not a human-playability certification. Ten representative downhill runs, including the original three, complete in both snow modes in the regression suite. Terrain shaping / road benches and poling still need work before claiming every connector can be followed smoothly end to end.
+## Ground and forest limits
 
-## Mapped entries
+Near terrain now uses a 4.928 m USGS elevation export on the same footprint as the original tile, rendered with static 5/10/20 m LOD meshes. Denser sampling preserves more of the service's slope and gully shape; it does not establish the native resolution or recover every small cliff. No random cliffs or route-edge walls were added. Overhangs and airborne landing physics are not modeled.
+
+Tree candidates come from RGB vegetation and canopy-texture peaks in the 2056 × 2568 NAIP image, with georeferenced pixel centers and a narrow 5 m clearance at mapped lines. This estimates forest placement rather than surveying individual trees. The far forest cover uses the same georeferenced canopy mask. See [ASSETS.md](ASSETS.md).
+
+## Validation boundaries
+
+Tests verify the lift endpoint coordinates, minimum run length, clear station exits, ground registration and low-speed pole behavior. The original source-section physics regressions still cover representative downhill segments; they do not prove all 10 full itineraries can be followed continuously on the current DEM. A simple waypoint-controller audit on the detailed ground completed 5 of the 10 full itineraries and failed to follow the others, especially traverses. Manual control can differ; road benches, route junctions and complete-run physics calibration remain work in progress.
+
+## Source inventory — raw mapped sections, not menu entries
 
 | Name | Grade | Length | Drop | Source way IDs |
 | --- | --- | ---: | ---: | --- |

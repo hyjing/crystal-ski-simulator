@@ -30,7 +30,7 @@ export function createSnowMaterial(width,depth,renderer){
   };
   const material=new THREE.MeshPhysicalMaterial({vertexColors:true,map:texture(albedo,true),normalMap:texture(normal),normalScale:new THREE.Vector2(.42,.42),roughnessMap:texture(rough),roughness:.94,metalness:0,clearcoat:.12,clearcoatRoughness:.65});
   material.onBeforeCompile=shader=>{
-    shader.vertexShader=shader.vertexShader.replace('#include <common>','#include <common>\nvarying vec3 vSnowPosition;').replace('#include <begin_vertex>','#include <begin_vertex>\nvSnowPosition = position;');
+    shader.vertexShader=shader.vertexShader.replace('#include <common>','#include <common>\nvarying vec3 vSnowPosition;').replace('#include <begin_vertex>','#include <begin_vertex>\nvSnowPosition = (modelMatrix * vec4(position,1.)).xyz;');
     shader.fragmentShader=shader.fragmentShader.replace('#include <common>',`#include <common>
       varying vec3 vSnowPosition;
       float snowHash(vec2 p){ return fract(sin(dot(p,vec2(127.1,311.7)))*43758.5453); }

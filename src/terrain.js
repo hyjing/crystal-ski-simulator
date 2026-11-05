@@ -105,3 +105,29 @@ export function getRoutes(terrain,trailData) {
     return (rank(a)<0?99:rank(a))-(rank(b)<0?99:rank(b))||a.name.localeCompare(b.name);
   });
 }
+
+
+export function getLiftRuns(terrain,data){
+  const ce=terrain.originUTM[0]+(terrain.width-1)*terrain.spacing/2,cn=terrain.originUTM[1]-(terrain.height-1)*terrain.spacing/2;
+  return data.features.map(feature=>{
+    const properties=feature.properties,preset=routeDefinitions.find(r=>r.id===feature.id)||{};
+    const difficulty=['quicksilver','tinkerbell'].includes(feature.id)?'easy':['northway','otto-bahn'].includes(feature.id)?'advanced':'intermediate';
+    const style=difficultyStyles[difficulty],points=[];
+    for(const ll of feature.geometry.coordinates){const p=lonLatToUTM(...ll),point={x:p.e-ce,z:cn-p.n};if(!points.length||Math.hypot(point.x-points.at(-1).x,point.z-points.at(-1).z)>.25)points.push(point);}
+    const length=points.slice(1).reduce((sum,p,i)=>sum+Math.hypot(p.x-points[i].x,p.z-points[i].z),0);
+    return {...preset,...properties,id:feature.id,name:properties.name,points,difficulty,...style,
+      subtitle:feature.id==='mr-magoo'?'Magoo mangoo 马古':feature.id==='chappelles'?'Chappelle champell 沙佩尔':preset.subtitle||'',
+      label:`${style.label} · 上站 → 下站`,length,drop:terrain.sample(points[0].x,points[0].z)-terrain.sample(points.at(-1).x,points.at(-1).z),
+      sourceUrl:`https://www.openstreetmap.org/way/${properties.primaryWayId||properties.osmWayIds[0]}`,osmWayId:properties.primaryWayId||properties.osmWayIds[0]};
+  }).filter(r=>r.length>=400);
+}
+
+export function pointAlongRoute(route,distance){
+  let travelled=0;
+  for(let i=1;i<route.points.length;i++){
+    const a=route.points[i-1],b=route.points[i],length=Math.hypot(b.x-a.x,b.z-a.z);
+    if(travelled+length>=distance){const t=Math.max(0,Math.min(1,(distance-travelled)/(length||1)));return{x:a.x+(b.x-a.x)*t,z:a.z+(b.z-a.z)*t,segment:i-1,distance};}
+    travelled+=length;
+  }
+  return{...route.points.at(-1),segment:route.points.length-2,distance:travelled};
+}

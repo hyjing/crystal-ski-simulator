@@ -1,12 +1,13 @@
 import * as THREE from 'three';
 import './style.css';
-import { createTerrain, getRoutes, filterRoutes } from './terrain.js';
+import { createTerrain, getRoutes, getLiftRuns, pointAlongRoute, filterRoutes } from './terrain.js';
 import { createSkier, stepSkier, nearestOnRoute, clamp } from './physics.js';
 import { createSnowMaterial, SnowEffects } from './snow.js';
 import { addContextTerrain, addRainierTerrain, addAlpineSky } from './scenery.js';
 import {PowderSurface} from './powder.js';
 import {SpeedRenderer} from './postprocessing.js';
-import {addForest,addResort} from './resort.js';
+import {addForest,addResort,liftExitSpawn} from './resort.js';
+import {addDetailedGround} from './ground.js';
 
 const $ = id => document.getElementById(id);
 const keys = new Set();
@@ -16,7 +17,7 @@ let lastTime=0, accumulator=0, pausedFrom='running', soundOn=false, audio, noise
 let frameTime=1/60,physicsMs=0;
 let powderMs=0,frameSamples=[],frameP95=0,frameMax=0,slowFrames=0;
 let renderScale=Math.min(devicePixelRatio,1.25),qualityClock=0;
-let routeFilter='all',routeQuery='';
+let routeFilter='all',routeQuery='',aerialBounds;
 let demoCapture,recordedInput=null,sceneryFrom='intro',sceneryView=false;
 let treePositions=[], trailPoints=[], mapBackground, snowEffects, sun, powder, speedRenderer, aerialImage, mapLayer='terrain', resortUpdate=()=>{};
 const baseElevation=1200, fixedStep=1/120;
@@ -34,9 +35,17 @@ async function init(){
   const response=await fetch(`${import.meta.env.BASE_URL}data/crystal-dem.json`);
   if(!response.ok) throw new Error('无法载入高程数据，请刷新重试。');
   terrain=createTerrain(await response.json());
+  try{
+    const detail=await fetch(`${import.meta.env.BASE_URL}data/crystal-detail-dem.json`).then(r=>{if(!r.ok)throw new Error('detail metadata');return r.json();});
+    const bytes=await fetch(`${import.meta.env.BASE_URL}data/${detail.data}`).then(r=>{if(!r.ok)throw new Error('detail heights');return r.arrayBuffer();});
+    const heights=new Float32Array(bytes);if(heights.length!==detail.width*detail.height)throw new Error('detail size');
+    terrain=createTerrain({...detail,heights});
+  }catch(error){console.warn('Detailed ground unavailable, using base DEM',error);}
   const trailResponse=await fetch(`${import.meta.env.BASE_URL}data/crystal-trails.json`);
   if(!trailResponse.ok)throw new Error('无法载入雪道数据');
-  routes=getRoutes(terrain,await trailResponse.json());route=routes[0];
+  const mappedRoutes=getRoutes(terrain,await trailResponse.json());
+  const runs=await fetch(`${import.meta.env.BASE_URL}data/crystal-lift-runs.json`).then(r=>{if(!r.ok)throw new Error('缆车线路载入失败');return r.json();});
+  routes=getLiftRuns(terrain,runs);route=routes[0];
   scene=new THREE.Scene(); scene.background=new THREE.Color('#cbdce9'); scene.fog=new THREE.Fog('#cbdce9',12000,65000);
   camera=new THREE.PerspectiveCamera(58,innerWidth/innerHeight,1,65000);
   renderer=new THREE.WebGLRenderer({antialias:true, powerPreference:'high-performance'});
@@ -47,13 +56,20 @@ async function init(){
   scene.add(new THREE.HemisphereLight('#c2d9ff','#586b8a',.95));
   sun=new THREE.DirectionalLight('#fff3de',3.1);sun.castShadow=true;sun.shadow.mapSize.set(2048,2048);
   Object.assign(sun.shadow.camera,{left:-150,right:150,top:150,bottom:-150,near:1,far:1400});sun.shadow.bias=-.0002;sun.shadow.normalBias=.06;sun.shadow.camera.updateProjectionMatrix();scene.add(sun,sun.target);
-  addAlpineSky(scene);createMountain();powder=new PowderSurface(scene,terrain,renderer);
-  const [landcover,firTexture,infrastructure]=await Promise.all([
+  addAlpineSky(scene);
+  const [canopy,canopyReference]=await Promise.all([new THREE.TextureLoader().loadAsync(`${import.meta.env.BASE_URL}data/crystal-canopy.png`),fetch(`${import.meta.env.BASE_URL}data/crystal-landcover.json`).then(r=>r.json())]);
+  const centerE=terrain.originUTM[0]+(terrain.width-1)*terrain.spacing/2,centerN=terrain.originUTM[1]-(terrain.height-1)*terrain.spacing/2;
+  aerialBounds={minX:canopyReference.extent.xmin-centerE,maxX:canopyReference.extent.xmax-centerE,minZ:centerN-canopyReference.extent.ymax,maxZ:centerN-canopyReference.extent.ymin};
+  if(terrain.spacing<10)addDetailedGround(scene,terrain,renderer,canopy,canopyReference.extent);else createMountain();
+  powder=new PowderSurface(scene,terrain,renderer);
+  const [landcover,firTexture,infrastructure,vegetation]=await Promise.all([
     fetch(`${import.meta.env.BASE_URL}data/crystal-landcover.json`).then(r=>{if(!r.ok)throw new Error('林地数据载入失败');return r.json();}),
     new THREE.TextureLoader().loadAsync(`${import.meta.env.BASE_URL}assets/snow-fir.png`),
-    fetch(`${import.meta.env.BASE_URL}data/crystal-infrastructure.json`).then(r=>{if(!r.ok)throw new Error('设施数据载入失败');return r.json();})
+    fetch(`${import.meta.env.BASE_URL}data/crystal-infrastructure.json`).then(r=>{if(!r.ok)throw new Error('设施数据载入失败');return r.json();}),
+    fetch(`${import.meta.env.BASE_URL}data/crystal-vegetation.json`).then(r=>{if(!r.ok)throw new Error('林冠数据载入失败');return r.json();})
   ]);
-  treePositions=addForest(scene,terrain,routes,landcover,firTexture);resortUpdate=addResort(scene,terrain,infrastructure);
+  routes.forEach(r=>{r.spawn=liftExitSpawn(terrain,r,infrastructure);});
+  treePositions=addForest(scene,terrain,[...mappedRoutes,...routes],landcover,firTexture,vegetation);resortUpdate=addResort(scene,terrain,infrastructure);
   createAthlete();snowEffects=new SnowEffects(scene,{...terrain,surface:(x,z)=>powder.surface(x,z)});createMapBackground();
   speedRenderer=new SpeedRenderer(renderer,scene,camera);
   aerialImage=new Image();aerialImage.onload=()=>drawMap();aerialImage.src=`${import.meta.env.BASE_URL}data/crystal-aerial.jpg`;
@@ -175,17 +191,20 @@ $('route-filters').addEventListener('click',event=>{
 function selectRoute(id){
   route=routes.find(r=>r.id===id); checkpoint=0;
   document.querySelectorAll('[data-route]').forEach(b=>{const active=b.dataset.route===id;b.classList.toggle('active',active);b.setAttribute('aria-pressed',active);});
-  $('route-selection').textContent=`已选：${route.name} · ${route.label}`;
+  $('route-selection').textContent=`已选：${route.name} · ${route.lift} 上站 → 下站`;
   $('map-label').textContent=route.name.toUpperCase();$('session-name').textContent=route.name.toUpperCase();
-  setRouteMarkers(); resetPosition(true); updateAthlete(0); updateCamera(1,true); drawMap();
+  fitMapToRoute();createMapBackground();setRouteMarkers(); resetPosition(true); updateAthlete(0); updateCamera(1,true); drawMap();
 }
 
 function resetPosition(full=false){
   const i=full?0:Math.min(checkpoint,route.points.length-2);
-  skier=createSkier(route.points[i],route.points[i+1]);
+  const spawn=full?route.spawn:route.points[i],ahead=full?pointAlongRoute(route,spawn.distance+25):route.points[i+1];
+  if(full)checkpoint=spawn.segment;
+  skier=createSkier(spawn,ahead);
+  if(full){skier.vx=Math.sin(skier.heading)*1.8;skier.vz=Math.cos(skier.heading)*1.8;skier.speed=1.8;}
   skier.distance=full?0:totalDistance;
   snowEffects.breakTrail();powder.breakTrail();
-  if(full){elapsed=0;peakSpeed=0;checkpoint=0;totalDistance=0;trailPoints=[];frameSamples=[];frameP95=0;snowEffects.reset();powder.reset();}
+  if(full){elapsed=0;peakSpeed=0;checkpoint=spawn.segment;totalDistance=0;trailPoints=[];frameSamples=[];frameP95=0;snowEffects.reset();powder.reset();}
   else trailPoints.push({x:skier.x,z:skier.z,break:true});
   powder.update(skier,false,snow);updateAthlete(0); updateCamera(1,true);
   updateUI();
@@ -217,11 +236,12 @@ function updatePhysics(dt){
   const steer=(keys.has('KeyD')||keys.has('ArrowRight')?1:0)-(keys.has('KeyA')||keys.has('ArrowLeft')?1:0);
   const edge=keys.has('Space')||keys.has('ArrowDown')?1:0;
   const tuck=keys.has('KeyW')||keys.has('ArrowUp')?1:0;
-  stepSkier(skier,recordedInput||{steer,edge,tuck},terrain,dt,snow);elapsed+=dt;peakSpeed=Math.max(peakSpeed,skier.speed);totalDistance=skier.distance;
+  const pole=keys.has('ShiftLeft')||keys.has('ShiftRight');
+  stepSkier(skier,recordedInput||{steer,edge,tuck,pole},terrain,dt,snow);elapsed+=dt;peakSpeed=Math.max(peakSpeed,skier.speed);totalDistance=skier.distance;
   const boundsX=(terrain.width-1)*terrain.spacing/2-20,boundsZ=(terrain.height-1)*terrain.spacing/2-20;
   if(Math.abs(skier.x)>boundsX||Math.abs(skier.z)>boundsZ){resetPosition();toast('已到地形边界，返回检查点');return;}
   const p=route.points[Math.min(checkpoint+1,route.points.length-1)];
-  if(Math.hypot(skier.x-p.x,skier.z-p.z)<Math.min(65,Math.max(8,route.length*.18))){
+  if(Math.hypot(skier.x-p.x,skier.z-p.z)<(checkpoint===route.points.length-2?18:55)){
     checkpoint++;
     if(checkpoint===route.points.length-1){finishRun();return;}
     toast(`检查点 ${checkpoint} / ${route.points.length-1}`);
@@ -280,18 +300,23 @@ function createMapBackground(){
   ctx.putImageData(im,0,0);
 }
 const mapBounds={minX:-2300,maxX:1300,minZ:-850,maxZ:1850};
+function fitMapToRoute(){
+  const xs=route.points.map(p=>p.x),zs=route.points.map(p=>p.z),minX=Math.min(...xs),maxX=Math.max(...xs),minZ=Math.min(...zs),maxZ=Math.max(...zs);
+  const width=Math.max(1700,maxX-minX+450,(maxZ-minZ+450)*4/3),height=width*3/4,cx=(minX+maxX)/2,cz=(minZ+maxZ)/2;
+  Object.assign(mapBounds,{minX:cx-width/2,maxX:cx+width/2,minZ:cz-height/2,maxZ:cz+height/2});
+}
 function mapPoint(p){return {x:(p.x-mapBounds.minX)/(mapBounds.maxX-mapBounds.minX)*280,y:(p.z-mapBounds.minZ)/(mapBounds.maxZ-mapBounds.minZ)*210};}
 function mapToWorld(x,y){return {x:mapBounds.minX+x/280*(mapBounds.maxX-mapBounds.minX),z:mapBounds.minZ+y/210*(mapBounds.maxZ-mapBounds.minZ)};}
 function drawMap(){
   const ctx=$('minimap').getContext('2d');ctx.drawImage(mapBackground,0,0);
   if(mapLayer==='aerial'&&aerialImage?.complete&&aerialImage.naturalWidth){
-    const fullW=terrain.width*terrain.spacing,fullH=terrain.height*terrain.spacing;
-    ctx.drawImage(aerialImage,(mapBounds.minX+fullW/2)/fullW*aerialImage.width,(mapBounds.minZ+fullH/2)/fullH*aerialImage.height,(mapBounds.maxX-mapBounds.minX)/fullW*aerialImage.width,(mapBounds.maxZ-mapBounds.minZ)/fullH*aerialImage.height,0,0,280,210);
+    const fullW=aerialBounds.maxX-aerialBounds.minX,fullH=aerialBounds.maxZ-aerialBounds.minZ;
+    ctx.drawImage(aerialImage,(mapBounds.minX-aerialBounds.minX)/fullW*aerialImage.width,(mapBounds.minZ-aerialBounds.minZ)/fullH*aerialImage.height,(mapBounds.maxX-mapBounds.minX)/fullW*aerialImage.width,(mapBounds.maxZ-mapBounds.minZ)/fullH*aerialImage.height,0,0,280,210);
   }
   for(const r of routes){ctx.beginPath();r.points.forEach((p,i)=>{const m=mapPoint(p);i?ctx.lineTo(m.x,m.y):ctx.moveTo(m.x,m.y);});ctx.strokeStyle=r.id===route.id?(mapLayer==='aerial'?'#c3f47d':'#365b49'):(mapLayer==='aerial'?'#9ebdcc':'#94ac8b');ctx.lineWidth=r.id===route.id?2.5:1;ctx.setLineDash(r.id===route.id?[]:[3,3]);ctx.stroke();}
   ctx.setLineDash([]);
   if(trailPoints.length>1){ctx.beginPath();trailPoints.forEach((p,i)=>{const m=mapPoint({x:p.x,z:p.z});i&&!p.break?ctx.lineTo(m.x,m.y):ctx.moveTo(m.x,m.y);});ctx.strokeStyle='#d57f4d';ctx.lineWidth=1.5;ctx.stroke();}
-  for(const p of [route.points[0],route.points.at(-1)]){const m=mapPoint(p);ctx.beginPath();ctx.arc(m.x,m.y,3,0,Math.PI*2);ctx.fillStyle='#f9fbe8';ctx.fill();ctx.strokeStyle='#365b49';ctx.lineWidth=1.5;ctx.stroke();}
+  for(const [index,p] of [route.points[0],route.points.at(-1)].entries()){const m=mapPoint(p);ctx.beginPath();ctx.arc(m.x,m.y,7,0,Math.PI*2);ctx.fillStyle=index?'#e4ac56':'#315b4b';ctx.fill();ctx.fillStyle='#fff';ctx.font='bold 8px sans-serif';ctx.textAlign='center';ctx.fillText(index?'F':'S',m.x,m.y+3);}
   const m=mapPoint(skier);ctx.save();ctx.translate(m.x,m.y);ctx.rotate(-skier.heading);ctx.beginPath();ctx.moveTo(0,7);ctx.lineTo(-5,-5);ctx.lineTo(0,-3);ctx.lineTo(5,-5);ctx.closePath();ctx.fillStyle='#dd7446';ctx.strokeStyle='#fff8e9';ctx.lineWidth=1.5;ctx.fill();ctx.stroke();ctx.restore();
 }
 

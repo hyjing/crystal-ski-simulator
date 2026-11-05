@@ -116,3 +116,9 @@ See `docs/SCOPE.md` and `docs/VALIDATION.md` for remaining work and verification
 ## Distant scenery update
 
 Mount Rainier now has a separate georeferenced 36.18 m DEM export and NAIP texture. The surrounding grid also uses NAIP imagery with an elevation/slope-based winter treatment. `src/scenery.js` renders decimated static meshes with a shared winter shader; the combined far terrain stays below the original context mesh triangle count. `V` switches to a summit-ridge scenic view and suspends physics until returning. See [asset provenance](ASSETS.md#mount-rainier-and-surrounding-mountain-textures) for export bounds and limitations.
+
+## Lift-run / local ground update
+
+`getRoutes` retains the raw OSM inventory for data checks and tree clearance. The menu uses `getLiftRuns`, built from `crystal-lift-runs.json`, with actual lift coordinates and explicit authored station / junction links. Short source sections are no longer menu entries. `liftExitSpawn` chooses an unobstructed snow exit near the station and includes space for the trailing camera. Shift provides bounded low-speed pole work.
+
+The fine DEM uses a binary height array on the original footprint. `src/ground.js` prebuilds terrain LOD tiles; geometry is not rebuilt while skiing. Vegetation comes from georeferenced aerial canopy peaks and distant canopy cover. Fine export spacing is not native survey accuracy. See [TRAILS.md](TRAILS.md) and [ASSETS.md](ASSETS.md) for limitations and reproduction.
