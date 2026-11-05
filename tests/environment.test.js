@@ -5,7 +5,7 @@ import {MountainWeather,weatherState,sunDirection,blendWeather} from '../src/env
 function fixture(){const scene=new THREE.Scene(),sun=new THREE.DirectionalLight(),hemi=new THREE.HemisphereLight();scene.add(sun,hemi);const renderer={getPixelRatio:()=>1,toneMappingExposure:1},camera=new THREE.PerspectiveCamera();camera.position.set(10,900,20);return{weather:new MountainWeather(scene,renderer,sun,hemi),scene,sun,hemi,camera,focus:new THREE.Vector3(0,850,0)};}
 test('sunset sky and the actual light share a low sun direction and warm direct light',()=>{
  const {weather,scene,sun,camera,focus}=fixture();weather.set('sunset');weather.update(5,camera,focus);
- const direction=sun.position.clone().sub(focus).normalize();assert.ok(direction.distanceTo(sunDirection(weather.state))<1e-10);assert.ok(direction.distanceTo(weather.uniforms.sunDirection.value)<1e-10);assert.ok(direction.y<.15);assert.ok(sun.color.r>sun.color.b);assert.ok(scene.fog.color.equals(weather.state.horizon));assert.ok(weather.sky.position.equals(camera.position));
+ const direction=sun.position.clone().sub(sun.target.position).normalize();assert.ok(direction.distanceTo(sunDirection(weather.state))<1e-10);assert.ok(direction.distanceTo(weather.uniforms.sunDirection.value)<1e-10);assert.ok(direction.y<.15);assert.ok(sun.color.r>sun.color.b);assert.ok(scene.fog.color.equals(weather.state.horizon));assert.ok(weather.sky.position.equals(camera.position));
 });
 test('snow changes illumination, visibility and bounded flakes together',()=>{
  const {weather,scene,sun,camera,focus}=fixture();weather.update(0,camera,focus);const clearDensity=scene.fog.density,clearSun=sun.intensity;weather.set('snow');weather.update(5,camera,focus);

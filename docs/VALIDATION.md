@@ -91,3 +91,11 @@ The HUD reports FPS, raw frame interval P95 / maximum, hitch count, raster scale
 - Historical pole-timing descriptions and tests above are superseded: cumulative turn angle no longer independently triggers a touch, and neutral release alone does not plant a pole.
 
 - Touch presentation also has a frame-hitch regression at 60 Hz, 30 Hz and a 100 ms frame: a valid linked transition still presents one contact rather than dropping it or planting twice. Browser checks exercised the actual Green Valley inspection slope, pole-powered starts, linked A/D input and visible curved tracks, with no new runtime errors.
+
+
+## Five-part refinement — November 5, 2026
+
+- **59 tests pass**, including progressive bank / actual-path tightening, continuous reversal, bundled skinned-model parsing and finite deformation, chest / hips heading separation toward the fall line, smooth removal during traverse / uphill / rest using actual velocity, separate loose garments and trouser knee volume, static forest topology / transforms across camera motion, stable light-space texels, fixed shadow-proxy pass counts, and finite merged detailed chair / gondola / tower geometry. Existing route, snow, braking and linked-pole checks remain green.
+- A flat 12 m/s hold fixture reports about 23.5° edge at 0.25 s, 39.9° at 0.75 s and 57.3° at 1.5 s. Ski heading changes about 59° at 1.5 s and 118° at 2.5 s. These are prototype scenario outputs, not measured ski-turn calibration.
+- Normal runtime loads the bundled 65-bone human rather than the procedural body. The source license and checksum are recorded in ASSETS.md. Screenshots `refined-character.png`, `refined-resort.png` and `refined-storm.png` are actual staged inspection renders; they do not prove a full-route playthrough.
+- Tree crowns remain textured crossed surfaces with physical trunks. The static shadow proxy and architecture are approximations. The new costume, textures and pose timing still have room for improvement against the reference video; this update does not establish visual or physical parity.

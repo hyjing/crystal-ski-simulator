@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import {advanceTurnPlant} from './skier-animation.js';
+import {updateHumanoid,upperBodyCounterAngle} from './humanoid.js';
 const up=new THREE.Vector3(0,1,0),delta=new THREE.Vector3();
 function skiGeometry(){
   const vertices=[],indices=[],count=22;
@@ -67,24 +68,27 @@ export function updateAthletePose(athlete,s,dt,surface){
   const plantState=advanceTurnPlant(athlete.userData.plant,s,dt);athlete.userData.poleContact=null;
   const drive=Math.sin(phase),reach=Math.cos(phase),edge=s.edgeAngle||0;
   const roll=s.edgeRoll??turn*edge,weight=Math.abs(roll),flex=tuck*.38+weight*.20+pole*(.1+.1*Math.max(0,drive)),hipY=1.68-flex;
+  const counterTarget=upperBodyCounterAngle(s.heading||0,s.downhillHeading??s.heading??0,s);
+  const counter=athlete.userData.counterYaw===undefined||dt===0?counterTarget:THREE.MathUtils.lerp(athlete.userData.counterYaw,counterTarget,1-Math.exp(-dt*8));athlete.userData.counterYaw=counter;
   const targetLean=roll,rate=dt>0?1-Math.exp(-dt*12):1;
-  athlete.userData.lean=THREE.MathUtils.lerp(athlete.userData.lean||0,targetLean,rate);const lean=athlete.userData.lean,hipX=-lean*.43;
+  athlete.userData.lean=THREE.MathUtils.lerp(athlete.userData.lean||0,targetLean,rate);const lean=athlete.userData.lean,hipX=-lean*.75;
   body.rotation.z=0;body.position.y=-pole*.035*Math.sin(phase);pelvis.position.set(hipX,hipY-.06,0);
   skiRig.rotation.z=0;for(const ski of skis)ski.rotation.z=roll*.70;
   torso.position.set(hipX,hipY+.55,.05+tuck*.16);torso.rotation.x=.12+tuck*.7+weight*.08+pole*(.12+.16*Math.max(0,drive));
-  torso.rotation.y=-turn*.20;torso.rotation.z=lean*.38;
+  torso.rotation.y=counter;torso.rotation.z=lean*.38;
   for(const leg of legs){
     const inside=Math.max(0,-leg.sign*Math.sign(roll)),hip=new THREE.Vector3(hipX+leg.sign*.23,hipY,0),knee=new THREE.Vector3(hipX*.55+leg.sign*(.29+weight*.12),.94-tuck*.18-inside*weight*.12,.38+tuck*.32+inside*weight*.2),ankle=new THREE.Vector3(leg.sign*.30,.45,.15);
-    shapeLimb(leg.mesh,hip,knee,ankle);
+    leg.target={hip,knee,ankle};if(!athlete.userData.humanRig)shapeLimb(leg.mesh,hip,knee,ankle);
   }
   for(const arm of arms){
     const sign=arm.sign,activePlant=plantState.active&&plantState.plantSide===sign,plant=activePlant?(plantState.phase<.2?THREE.MathUtils.smoothstep(plantState.phase,0,.2):1-THREE.MathUtils.smoothstep(plantState.phase,.32,1)):0,shoulder=new THREE.Vector3(hipX+sign*.48,hipY+1.0-tuck*.2,.12+tuck*.55),hand=new THREE.Vector3(hipX*.45+sign*(.68-tuck*.18+weight*.12),1.85-flex*.45+pole*.15*reach-plant*.16,.58+tuck*.45+pole*.75*reach+plant*.70),elbow=new THREE.Vector3(hipX*.6+sign*.67,(shoulder.y+hand.y)/2-.18,(shoulder.z+hand.z)/2-.10);
+    for(const point of [shoulder,hand,elbow]){point.x-=hipX;point.applyAxisAngle(up,counter);point.x+=hipX;}
     const planting=pole>.1&&(s.polePhase||0)<.58,tip=new THREE.Vector3(sign*(.86+weight*.15),planting?.14:.45+pole*.55*Math.max(0,-drive)-plant*.20,hand.z+(planting?-.45-.65*Math.max(0,drive):-.9));
     if(activePlant){
       tip.set(sign*(.90+weight*.1),.35,-.9+3.1*plant);
       if(plantState.contact){
         body.updateWorldMatrix(true,false);
-        if(!plantState.worldPoint){const point=body.localToWorld(new THREE.Vector3(sign*1.0,.08,2.2));if(surface)point.y=surface(point.x,point.z)+.025;plantState.worldPoint=point;if(plantState.contactStarted)athlete.userData.poleContact=point.clone();}
+        if(!plantState.worldPoint){const point=body.localToWorld(new THREE.Vector3(sign*1.0,.08,2.2).applyAxisAngle(up,counter));if(surface)point.y=surface(point.x,point.z)+.025;plantState.worldPoint=point;if(plantState.contactStarted)athlete.userData.poleContact=point.clone();}
         tip.copy(body.worldToLocal(plantState.worldPoint.clone()));
       }
     }
@@ -92,7 +96,9 @@ export function updateAthletePose(athlete,s,dt,surface){
     if(activePlant&&plantState.contact)hand.copy(tip).addScaledVector(poleVector,-2.65);
     else tip.copy(hand).addScaledVector(poleVector,2.65);
     elbow.set(hipX*.6+sign*.67,(shoulder.y+hand.y)/2-.18,(shoulder.z+hand.z)/2-.10);
-    shapeLimb(arm.mesh,shoulder,elbow,hand);arm.glove.position.copy(hand);
+    if(!athlete.userData.humanRig)shapeLimb(arm.mesh,shoulder,elbow,hand);arm.glove.position.copy(hand);
+    arm.target={hand:hand.clone(),tip:tip.clone()};
     connect(arm.pole,hand,tip);arm.basket.position.copy(tip).y+=.12;arm.basket.rotation.x=Math.PI/2;
   }
+  updateHumanoid(athlete,{hipY,hipX,lean,tuck,counter});
 }

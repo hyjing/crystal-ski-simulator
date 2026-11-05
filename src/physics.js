@@ -2,7 +2,7 @@ export const clamp = (x, a, b) => Math.max(a, Math.min(b, x));
 // Prototype SI parameters; not measured ski/snow coefficients.
 export const PHYSICS={mass:85,gravity:9.81,airDensity:1.0,uprightCdA:.65,tuckCdA:.25,packedFriction:.025,softFriction:.06,maxHorizontalSpeed:55};
 export function createSkier(point, next) {
-  return { x: point.x, z: point.z, vx: 0, vz: 0, heading: Math.atan2(next.x-point.x,next.z-point.z), speed: 0, distance: 0, turn: 0, steerInput:0, edge: 0, edgeRoll:0, edgeAngle:0, lastTurn:1, slip: 0, tuck: 0, poling:0, polePhase:0, edgeBrake:0 };
+  return { x: point.x, z: point.z, vx: 0, vz: 0, heading: Math.atan2(next.x-point.x,next.z-point.z), speed: 0, distance: 0, turn: 0, steerInput:0, turnHold:0, holdSide:0, edge: 0, edgeRoll:0, edgeAngle:0, lastTurn:1, slip: 0, tuck: 0, poling:0, polePhase:0, edgeBrake:0 };
 }
 
 // A/D banks the skis and turns the actual tangent velocity with a bounded lateral
@@ -11,11 +11,15 @@ export function createSkier(point, next) {
 export function stepSkier(s, input, terrain, dt, snow = 'packed') {
   dt=clamp(dt,0,1/30);
   const speed=Math.hypot(s.vx,s.vz),edge=clamp(input.edge||0,0,1),steering=clamp(input.steer||0,-1,1);
-  s.steerInput=steering;if(Math.abs(steering)>.1)s.lastTurn=Math.sign(steering);
+  s.steerInput=steering;
+  const intent=Math.abs(steering)>.1?Math.sign(steering):0;
+  if(intent){if(intent!==s.holdSide)s.turnHold=0;s.turnHold=Math.min(1.5,(s.turnHold||0)+dt*Math.abs(steering));s.holdSide=intent;s.lastTurn=intent;}
+  else{s.turnHold=Math.max(0,(s.turnHold||0)-dt*4);if(!s.turnHold)s.holdSide=0;}
   s.turn+=(steering-s.turn)*(1-Math.exp(-dt*(steering===0?32:26)));if(Math.abs(s.turn)<.001)s.turn=0;
   s.edge=edge;s.tuck+=(clamp(input.tuck||0,0,1)-s.tuck)*(1-Math.exp(-dt*5));
   const rollSide=Math.abs(s.turn)>.02?Math.sign(s.turn):s.lastTurn;
-  const targetRoll=rollSide*Math.min(.96,.50*Math.abs(s.turn)+edge*.82);
+  const engagement=clamp((s.turnHold||0)/1.25,0,1),progressiveBank=.32+.68*engagement;
+  const targetRoll=rollSide*Math.min(1.10,progressiveBank*Math.abs(s.turn)+edge*.82);
   s.edgeRoll=((s.edgeRoll||0)+(targetRoll-(s.edgeRoll||0))*(1-Math.exp(-dt*16)));
   s.edgeAngle=Math.abs(s.edgeRoll);
   const g=terrain.gradient(s.x,s.z),norm=1+g.x*g.x+g.z*g.z,sqrtNorm=Math.sqrt(norm),normalAcceleration=PHYSICS.gravity/sqrtNorm;
@@ -29,7 +33,7 @@ export function stepSkier(s, input, terrain, dt, snow = 'packed') {
     const force=Math.min(420,1800/Math.max(1,Math.abs(s.vx*Math.sin(s.heading)+s.vz*Math.cos(s.heading))))*contact;
     s.vx+=Math.sin(s.heading)*force/PHYSICS.mass*dt;s.vz+=Math.cos(s.heading)*force/PHYSICS.mass*dt;
   }
-  const lateralMu=(edge>.5?(snow==='packed'?.40:.32):(snow==='packed'?.70:.55))+edge*(snow==='packed'?.70:.65)+Math.abs(s.turn)*.25;
+  const lateralMu=(edge>.5?(snow==='packed'?.40:.32):(snow==='packed'?1.40:1.15))+edge*(snow==='packed'?.70:.65)+Math.abs(s.turn)*.25;
   const grip=normalAcceleration*lateralMu;
   let curveAcceleration=0;
   if(edge<.5){

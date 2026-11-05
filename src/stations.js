@@ -1,5 +1,6 @@
 import * as THREE from 'three';
-import {mergeGeometries} from 'three/addons/utils/BufferGeometryUtils.js';
+import {RoundedBoxGeometry} from 'three/addons/geometries/RoundedBoxGeometry.js';
+import {resortMaterials,mergeAssetGeometry} from './resort-assets.js';
 import {createTerrain,lonLatToUTM,pointAlongRoute} from './terrain.js';
 const specialNames=new Set(['Summit House','Campbell Basin Lodge','Green Valley Wheelhouse']);
 export const isDetailedLodge=f=>specialNames.has(f.properties.name);
@@ -53,8 +54,8 @@ function label(text,width=512){
 
 export function addStationStructures(scene,terrain,infrastructure,areas){
   const groups=[];
-  const metal=new THREE.MeshStandardMaterial({color:'#47565b',roughness:.55,metalness:.5}),wood=new THREE.MeshStandardMaterial({color:'#6a5140',roughness:.95}),snow=new THREE.MeshStandardMaterial({color:'#e6edf1',roughness:.94}),glass=new THREE.MeshStandardMaterial({color:'#294657',metalness:.3,roughness:.2});
-  const box=(group,w,h,d,x,y,z,mat)=>{const mesh=new THREE.Mesh(new THREE.BoxGeometry(w,h,d),mat);mesh.position.set(x,y,z);mesh.castShadow=mesh.receiveShadow=true;group.add(mesh);return mesh;};
+  const {metal,wood,snow,glass,stone,dark,paint}=resortMaterials();
+  const box=(group,w,h,d,x,y,z,mat)=>{const g=new THREE.BoxGeometry(w,h,d),uv=g.attributes.uv;for(let f=0;f<6;f++){const [u,v]=f<2?[d,h]:f<4?[w,d]:[w,h];for(let k=0;k<4;k++){const i=f*4+k;uv.setXY(i,uv.getX(i)*u/2,uv.getY(i)*v/2);}}const mesh=new THREE.Mesh(g,mat);mesh.position.set(x,y,z);mesh.castShadow=mesh.receiveShadow=true;group.add(mesh);return mesh;};
   const terminals=infrastructure.features.filter(f=>f.geometry.type==='LineString'&&(areas.some(a=>a.liftId===String(f.id))||f.properties.name==='Mt. Rainier Gondola'));
   for(const lift of terminals)for(const role of ['upper','lower']){
     let pts=lift.geometry.coordinates.map(ll=>project(terrain,ll));if(terrain.sample(pts[0].x,pts[0].z)>terrain.sample(pts.at(-1).x,pts.at(-1).z))pts.reverse();
@@ -63,7 +64,9 @@ export function addStationStructures(scene,terrain,infrastructure,areas){
     group.position.set(p.x,terrain.surface(p.x,p.z)-1200,p.z);group.rotation.y=heading;scene.add(group);groups.push(group);
     group.name=`${lift.properties.name} ${role} terminal`;
     for(const side of [-1,1])for(const z of [-5,5])box(group,.42,5.2,.48,side*3,2.6,z,metal);
-    box(group,7.5,1.4,15,0,5.6,0,metal);box(group,8,.24,16,0,6.42,0,snow);
+    const housing=new THREE.Mesh(new RoundedBoxGeometry(7.5,1.4,15,4,.45),paint);housing.position.set(0,5.6,0);group.add(housing);const cover=new THREE.Mesh(new RoundedBoxGeometry(8,.30,16,3,.14),snow);cover.position.set(0,6.46,0);group.add(cover);
+    for(const side of [-1,1]){box(group,.05,.14,12,side*3.76,5.34,0,dark);for(let z=-5.8;z<5.9;z+=.55)box(group,.08,.43,.08,side*3.78,5.69,z,dark);}
+    for(const z of [-6,6])for(const side of [-1,1])box(group,.08,.13,.12,side*2.9,5.1,z,metal);
     const wheel=new THREE.Mesh(new THREE.TorusGeometry(2.6,.2,8,32),metal);wheel.rotation.x=Math.PI/2;wheel.position.set(0,4.7,3.2);group.add(wheel);
     for(let i=0;i<8;i++){const spoke=box(group,5.1,.08,.10,0,4.7,3.2,metal);spoke.rotation.y=i*Math.PI/4;}
     for(const side of [-1,1])for(let z=-6;z<=5;z+=2){const roller=new THREE.Mesh(new THREE.CylinderGeometry(.35,.35,.22,12),metal);roller.rotation.z=Math.PI/2;roller.position.set(side*2.6,4.8,z);group.add(roller);}
@@ -73,7 +76,7 @@ export function addStationStructures(scene,terrain,infrastructure,areas){
     const sign=new THREE.Mesh(new THREE.PlaneGeometry(6,.9),label(lift.properties.name.toUpperCase()));sign.position.set(0,5.3,7.58);group.add(sign);
     const exit=new THREE.Mesh(new THREE.PlaneGeometry(3,.65),label(role==='upper'?'UNLOAD / EXIT':'LOAD / ENTRANCE'));exit.position.set(5,1.9,11);exit.rotation.y=-Math.PI/5;group.add(exit);
     // A small operator hut beside the terminal.
-    box(group,3.2,2.7,3.5,6.8,1.35,-2,wood);box(group,3.5,.3,3.8,6.8,2.85,-2,snow);box(group,2.3,1.2,.04,6.8,1.8,-.23,glass);
+    box(group,3.2,2.7,3.5,6.8,1.35,-2,wood);box(group,3.5,.3,3.8,6.8,2.85,-2,snow);box(group,2.3,1.2,.04,6.8,1.8,-.23,glass);box(group,.12,1.3,.06,6.8,1.8,-.19,metal);box(group,.9,2.05,.08,8.43,1.05,-2,glass);box(group,.045,.15,.06,8.49,1,-1.8,metal);box(group,1.1,.15,1.2,8.9,.07,-2,stone);
   }
   for(const f of infrastructure.features.filter(isDetailedLodge)){
     const points=f.geometry.coordinates[0].map(ll=>project(terrain,ll));let longest={length:0,angle:0};
@@ -82,12 +85,20 @@ export function addStationStructures(scene,terrain,infrastructure,areas){
     const width=Math.max(...us)-Math.min(...us),depth=Math.max(...vs)-Math.min(...vs),x=u*c-v*s,z=u*s+v*c;
     const group=new THREE.Group();group.position.set(x,terrain.surface(x,z)-1200,z);group.rotation.y=-angle;group.name=f.properties.name;scene.add(group);groups.push(group);
     const height=f.properties.name==='Summit House'?6:4.6;
-    box(group,width,1.1,depth,0,.5,0,new THREE.MeshStandardMaterial({color:'#747b79',roughness:1}));box(group,width,height-1,depth,0,(height+1)/2,0,wood);
+    box(group,width,1.1,depth,0,.5,0,stone);box(group,width,height-1,depth,0,(height+1)/2,0,wood);
     for(const side of [-1,1]){
       box(group,width*.90,2,.08,0,height*.58,side*(depth/2+.06),glass);
       for(let u=-width*.44;u<width*.45;u+=2.5)box(group,.16,2.2,.14,u,height*.58,side*(depth/2+.13),wood);
-      const roof=box(group,width+2,.4,Math.hypot(depth/2+1,2.8),0,height+1.4,side*(depth/4+.5),snow);roof.rotation.x=side*.32;
+      const pitch=Math.atan2(2.8,depth/2+1),roof=box(group,width+2,.30,Math.hypot(depth/2+1,2.8),0,height+1.4,side*(depth/4+.5),snow);roof.rotation.x=side*pitch;
+      box(group,width+2,.22,.20,0,height,side*(depth/2+1),wood);box(group,width,.12,.09,0,height*.58-1.05,side*(depth/2+.14),metal);
     }
+    for(const side of [-1,1]){
+      const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.Float32BufferAttribute([side*width/2,height,-depth/2,side*width/2,height,depth/2,side*width/2,height+2.8,0],3));g.setAttribute('uv',new THREE.Float32BufferAttribute([0,0,depth/2,0,depth/4,1.4],2));g.setIndex(side>0?[0,2,1]:[0,1,2]);g.computeVertexNormals();group.add(new THREE.Mesh(g,wood));
+      for(let z=-depth*.40;z<depth*.45;z+=2.7){box(group,.08,1.7,1.6,side*(width/2+.05),height*.58,z,glass);box(group,.12,1.8,.08,side*(width/2+.12),height*.58,z,wood);}
+      box(group,.16,2.2,.16,side*(width/2+1),height-1.1,depth/2+.6,metal);
+    }
+    box(group,width+2,.20,.18,0,height+2.9,0,snow);box(group,.75,2.4,.7,width*.30,height+2,0,stone);box(group,1,.14,.9,width*.30,height+3.3,0,metal);
+    box(group,1.4,2.5,.12,width*.25,1.3,depth/2+.16,glass);box(group,.08,2.6,.16,width*.25-.74,1.3,depth/2+.19,metal);box(group,.08,2.6,.16,width*.25+.74,1.3,depth/2+.19,metal);box(group,.08,.20,.08,width*.25+.5,1.3,depth/2+.27,metal);
     const front=depth/2+5;box(group,width+3,.5,9,0,.1,front,wood);
     for(let u=-width/2;u<=width/2;u+=3)box(group,.13,1.1,.13,u,.8,depth/2+9,wood);box(group,width,.12,.13,0,1.3,depth/2+9,wood);
     const sign=new THREE.Mesh(new THREE.PlaneGeometry(Math.min(width*.7,12),1.3),label(f.properties.name.toUpperCase()));sign.position.set(0,height-.8,depth/2+.15);group.add(sign);
@@ -96,6 +107,6 @@ export function addStationStructures(scene,terrain,infrastructure,areas){
   // Static station buildings share a handful of draw calls rather than one per beam.
   scene.updateMatrixWorld(true);const batches=new Map();
   for(const group of groups){group.traverse(object=>{if(!object.isMesh)return;const key=object.material.uuid;if(!batches.has(key))batches.set(key,{material:object.material,geometries:[]});batches.get(key).geometries.push(object.geometry.clone().applyMatrix4(object.matrixWorld));});scene.remove(group);group.traverse(o=>o.geometry?.dispose());}
-  for(const {material,geometries} of batches.values()){const geometry=mergeGeometries(geometries),mesh=new THREE.Mesh(geometry,material);mesh.castShadow=mesh.receiveShadow=true;scene.add(mesh);geometries.forEach(g=>g.dispose());}
+  for(const {material,geometries} of batches.values()){const geometry=mergeAssetGeometry(geometries),mesh=new THREE.Mesh(geometry,material);mesh.castShadow=mesh.receiveShadow=true;scene.add(mesh);geometries.forEach(g=>g.dispose());}
 
 }

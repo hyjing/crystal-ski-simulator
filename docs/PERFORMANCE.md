@@ -49,3 +49,10 @@ Terrain tile boundaries share the finest edge samples and DEM-gradient normals a
 - Snowfall stays at 2,400 sprites and reuses a typed vertex buffer. Sky uses one dome pass, photographed cloud detail plus five noise octaves, with no volumetric ray marcher or extra shadow cascade.
 - Initial raster cap is now 1.15. Sustained frame P95 above 21.5 ms reduces raster scale towards 0.85, including overview / scenery and development inspection views. This trades raster sharpness for frame pacing; it does not guarantee 60 FPS on all devices.
 - This update adds detail and forest density, so old benchmark figures are historical, not performance parity claims.
+
+
+## Stable forest and imported humanoid
+
+The final forest path no longer allocates / sorts nearest-tree lists or updates crown transforms while skiing. Fixed crowns and trunks are spatially instanced; the silhouette remains the same as the camera approaches. Independent static shadow proxies use lightweight geometry and submit no color-pass instances. This removes the former dynamic pool / dither-shadow transition work. Shadow texel snapping and distance fading address crawling / border changes.
+
+The humanoid adds a 724 KiB bundled GLB and native skinning / IK; no external runtime asset service is used. The shadow map increases from 2048² to 3072², which costs additional GPU memory. The initial/adaptive raster policy remains. Stronger storm haze is a composed material function, without a volumetric ray marcher. These are workload changes, not an assertion of identical frame time on all hardware.

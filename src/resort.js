@@ -2,8 +2,10 @@ import * as THREE from 'three';
 import {mergeGeometries} from 'three/addons/utils/BufferGeometryUtils.js';
 import {lonLatToUTM,pointAlongRoute} from './terrain.js';
 import {isDetailedLodge} from './stations.js';
-import {installDetailedTrees} from './trees.js';
+import {installForestIndex} from './trees.js';
 import {pisteHalfWidth} from './pistes.js';
+import {stableTreeShadowGeometry,createStableShadowBatch} from './render-stability.js';
+import {resortMaterials,detailedChair,detailedCabin,towerAccessories} from './resort-assets.js';
 
 export function geographicPoint(terrain,[lon,lat]){
   const p=lonLatToUTM(lon,lat);
@@ -52,22 +54,22 @@ export function addForest(scene,terrain,routes,landcover,texture,vegetation,stat
   const cards=[];
   for(let i=0;i<3;i++){const g=new THREE.PlaneGeometry(8,21);g.translate(0,10.5,0);g.rotateY(i*Math.PI/3);cards.push(g);}
   texture.colorSpace=THREE.SRGBColorSpace;texture.anisotropy=4;
-  const material=new THREE.MeshStandardMaterial({map:texture,alphaTest:.35,side:THREE.DoubleSide,roughness:1});
+  const material=new THREE.MeshStandardMaterial({map:texture,alphaTest:.35,alphaToCoverage:true,side:THREE.DoubleSide,roughness:1});
   // Spatial batches let the frustum discard forest behind / beside the camera.
-  const geometry=mergeGeometries(cards),tiles=new Map(),slots=[],dirty=new Set();
+  const geometry=mergeGeometries(cards),tiles=new Map();
   candidates.forEach((p,index)=>{const key=`${Math.floor(p.x/384)},${Math.floor(p.z/384)}`;if(!tiles.has(key))tiles.set(key,[]);tiles.get(key).push({p,index});});
-  const dummy=new THREE.Object3D();
+  const dummy=new THREE.Object3D(),trunkGeometry=new THREE.CylinderGeometry(.04,.20,18,6).translate(0,9,0),trunkMaterial=new THREE.MeshStandardMaterial({color:'#60564c',roughness:1}),shadowGeometry=stableTreeShadowGeometry(),shadowMaterial=new THREE.MeshBasicMaterial({colorWrite:false,depthWrite:false,fog:false});
   for(const members of tiles.values()){
-    const mesh=new THREE.InstancedMesh(geometry,material,members.length);mesh.castShadow=false;mesh.receiveShadow=true;mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
-    members.forEach(({p,index},slot)=>{p.y=terrain.surface(p.x,p.z)-1200-.2;p.scaleX=p.size*(.88+rng()*.24);dummy.position.set(p.x,p.y,p.z);dummy.scale.set(p.scaleX,p.size,p.size);dummy.rotation.y=p.rotation;dummy.updateMatrix();mesh.setMatrixAt(slot,dummy.matrix);slots[index]={mesh,slot};});
-    mesh.computeBoundingSphere();scene.add(mesh);
+    const tileGeometry=geometry;
+    const mesh=new THREE.InstancedMesh(tileGeometry,material,members.length),trunks=new THREE.InstancedMesh(trunkGeometry,trunkMaterial,members.length),shadow=createStableShadowBatch(shadowGeometry,shadowMaterial,members.length);mesh.castShadow=false;mesh.receiveShadow=true;
+    members.forEach(({p,index},slot)=>{p.y=terrain.surface(p.x,p.z)-1200-.2;p.scaleX=p.size*(.88+rng()*.24);dummy.position.set(p.x,p.y,p.z);dummy.scale.set(p.scaleX,p.size,p.size);dummy.rotation.y=p.rotation;dummy.updateMatrix();mesh.setMatrixAt(slot,dummy.matrix);shadow.setMatrixAt(slot,dummy.matrix);trunks.setMatrixAt(slot,dummy.matrix);});
+    mesh.name='Fixed snowy fir canopy';trunks.name='Fixed fir trunks';trunks.receiveShadow=true;mesh.computeBoundingSphere();trunks.computeBoundingSphere();shadow.computeBoundingSphere();scene.add(mesh,trunks,shadow);
   }
-  const forest={setMatrixAt(index,matrix){const {mesh,slot}=slots[index];mesh.setMatrixAt(slot,matrix);dirty.add(mesh);},instanceMatrix:{addUpdateRange(start,count){const {mesh,slot}=slots[start/16];mesh.instanceMatrix.addUpdateRange(slot*16,count);},set needsUpdate(value){if(value){for(const mesh of dirty)mesh.instanceMatrix.needsUpdate=true;dirty.clear();}}}};
-  cards.forEach(g=>g.dispose());installDetailedTrees(scene,forest,candidates);return candidates;
+  cards.forEach(g=>g.dispose());installForestIndex(candidates);return candidates;
 }
 
 export function addResort(scene,terrain,data){
-  const towers=[],chairs=[],cables=[],walls=[],roofs=[],windows=[];
+  const towers=[],chairs=[],cables=[],walls=[],roofs=[],windows=[],facadeFrames=[],buildingMaterials=resortMaterials();
   const height=(x,z)=>terrain.surface(x,z)-1200;
   const inside=p=>Math.abs(p.x)<(terrain.width-2)*terrain.spacing/2&&Math.abs(p.z)<(terrain.height-2)*terrain.spacing/2;
   for(const feature of data.features){
@@ -97,32 +99,37 @@ export function addResort(scene,terrain,data){
       for(let j=0;j<points.length-1;j++){
         const a=points[j],b=points[j+1],dx=b.x-a.x,dz=b.z-a.z,l=Math.hypot(dx,dz);if(l<4)continue;
         const g=new THREE.PlaneGeometry(l*.72,Math.min(1.4,h*.3));g.rotateY(-Math.atan2(dz,dx));g.translate((a.x+b.x)/2+dz/l*.06,y+h*.56,(a.z+b.z)/2-dx/l*.06);windows.push(g);
+        const heading=-Math.atan2(dz,dx),mx=(a.x+b.x)/2,mz=(a.z+b.z)/2;
+        const beam=(w,h,d,along,yy)=>{const frame=new THREE.BoxGeometry(w,h,d);frame.rotateY(heading);frame.translate(mx+dx/l*along+dz/l*.1,yy,mz+dz/l*along-dx/l*.1);facadeFrames.push(frame);};
+        beam(l,.12,.14,0,y+h+.12);beam(l*.74,.09,.11,0,y+h*.56-.73);beam(l*.74,.09,.11,0,y+h*.56+.73);
+        for(let u=-l*.34;u<l*.36;u+=2.2)beam(.075,1.5,.12,u,y+h*.56);
+
       }
     }
   }
   const addMerged=(geometries,material)=>{if(!geometries.length)return;const g=mergeGeometries(geometries);const m=new THREE.Mesh(g,material);m.castShadow=m.receiveShadow=true;scene.add(m);geometries.forEach(g=>g.dispose());};
-  addMerged(walls,new THREE.MeshStandardMaterial({color:'#776c5b',roughness:.9}));
-  addMerged(roofs,new THREE.MeshStandardMaterial({color:'#edf0f2',roughness:1,side:THREE.DoubleSide}));
-  addMerged(windows,new THREE.MeshStandardMaterial({color:'#314d61',roughness:.3,metalness:.2,side:THREE.DoubleSide}));
+  addMerged(walls,buildingMaterials.wood);
+  addMerged(roofs,buildingMaterials.snow);
+  addMerged(windows,buildingMaterials.glass);addMerged(facadeFrames,buildingMaterials.metal);
   for(const geometry of cables)scene.add(new THREE.Line(geometry,new THREE.LineBasicMaterial({color:'#36434b'})));
   const dummy=new THREE.Object3D();
   const pylons=new THREE.InstancedMesh(new THREE.CylinderGeometry(.38,.55,16,8),new THREE.MeshStandardMaterial({color:'#68787d',metalness:.6,roughness:.5}),towers.length);
   const crossbars=new THREE.InstancedMesh(new THREE.BoxGeometry(6,.45,.6),new THREE.MeshStandardMaterial({color:'#3b5058',metalness:.4,roughness:.5}),towers.length);
   towers.forEach((p,i)=>{dummy.position.set(p.x,p.y,p.z);dummy.rotation.y=p.heading;dummy.updateMatrix();pylons.setMatrixAt(i,dummy.matrix);dummy.position.y+=7.6;dummy.updateMatrix();crossbars.setMatrixAt(i,dummy.matrix);});
   pylons.castShadow=crossbars.castShadow=true;scene.add(pylons,crossbars);
-  const frameParts=[new THREE.BoxGeometry(.12,2.8,.12).translate(0,1.4,0),new THREE.BoxGeometry(2.4,.10,.9),new THREE.BoxGeometry(2.4,.65,.10).translate(0,.4,-.4),new THREE.BoxGeometry(2.4,.07,.07).translate(0,-.65,.8)];
-  const chairGeometry=mergeGeometries(frameParts);frameParts.forEach(g=>g.dispose());
-  const openChairs=chairs.filter(c=>!c.cabin),closedCabins=chairs.filter(c=>c.cabin);
-  const seats=new THREE.InstancedMesh(chairGeometry,new THREE.MeshStandardMaterial({color:'#35444c',metalness:.3,roughness:.6}),openChairs.length);seats.castShadow=true;scene.add(seats);
-  const cabinParts=[new THREE.BoxGeometry(2.4,1.8,2).translate(0,.6,0),new THREE.BoxGeometry(2.7,.18,2.2).translate(0,1.6,0),new THREE.BoxGeometry(.16,1.2,.16).translate(0,2.2,0)];
-  const cabins=new THREE.InstancedMesh(mergeGeometries(cabinParts),new THREE.MeshStandardMaterial({color:'#3a5965',metalness:.35,roughness:.32}),closedCabins.length);cabins.castShadow=true;scene.add(cabins);cabinParts.forEach(g=>g.dispose());
+  const detail=new THREE.InstancedMesh(towerAccessories(),new THREE.MeshStandardMaterial({color:'#394851',metalness:.6,roughness:.42}),towers.length);detail.castShadow=detail.receiveShadow=true;
+  towers.forEach((p,i)=>{dummy.position.set(p.x,p.y,p.z);dummy.rotation.set(0,p.heading,0);dummy.updateMatrix();detail.setMatrixAt(i,dummy.matrix);});scene.add(detail);
+  const materials=buildingMaterials,openChairs=chairs.filter(c=>!c.cabin),closedCabins=chairs.filter(c=>c.cabin);
+  const instances=(geometries,mats,count)=>geometries.map((geometry,i)=>{const mesh=new THREE.InstancedMesh(geometry,mats[i],count);mesh.castShadow=mesh.receiveShadow=true;scene.add(mesh);return mesh;});
+  const seats=instances(detailedChair(),[materials.metal,materials.seat,materials.paint],openChairs.length),cabins=instances(detailedCabin(),[materials.paint,materials.glass,materials.dark],closedCabins.length);
+
   return time=>{
-    const update=(vehicles,mesh)=>vehicles.forEach((chair,i)=>{
+    const update=(vehicles,meshes)=>vehicles.forEach((chair,i)=>{
       const distance=((chair.offset+time*2.5*chair.side)%chair.total+chair.total)%chair.total;
       const seg=chair.segments.find(s=>distance<=s.start+s.l)||chair.segments.at(-1),t=(distance-seg.start)/seg.l;
       dummy.position.set(THREE.MathUtils.lerp(seg.a.x,seg.b.x,t)+seg.rx,THREE.MathUtils.lerp(seg.a.y,seg.b.y,t)-Math.sin(Math.PI*t)*1.1-2.8,THREE.MathUtils.lerp(seg.a.z,seg.b.z,t)+seg.rz);
-      dummy.rotation.set(0,Math.atan2(seg.b.x-seg.a.x,seg.b.z-seg.a.z)+(chair.side<0?Math.PI:0),0);dummy.updateMatrix();mesh.setMatrixAt(i,dummy.matrix);
-    });update(openChairs,seats);update(closedCabins,cabins);seats.instanceMatrix.needsUpdate=cabins.instanceMatrix.needsUpdate=true;
+      dummy.rotation.set(0,Math.atan2(seg.b.x-seg.a.x,seg.b.z-seg.a.z)+(chair.side<0?Math.PI:0),0);dummy.updateMatrix();meshes.forEach(mesh=>mesh.setMatrixAt(i,dummy.matrix));
+    });update(openChairs,seats);update(closedCabins,cabins);for(const mesh of [...seats,...cabins])mesh.instanceMatrix.needsUpdate=true;
   };
 }
 

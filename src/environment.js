@@ -1,11 +1,13 @@
 import * as THREE from 'three';
+import {stableShadowTarget} from './render-stability.js';
+import {prepareAtmosphere} from './atmosphere.js';
 
 // One state drives the visible sky, illumination, fog and airborne snow.
 // Artistic mountain weather presets, not a forecast or solar-position calculation.
 export const WEATHER_PRESETS={
   clear:{label:'晴空',zenith:'#3478c5',horizon:'#d3e5f2',cloud:'#fff9ed',shadow:'#668bb7',sun:'#fff0da',ground:'#677994',elevation:38,azimuth:235,cover:.22,density:.000011,direct:3.15,ambient:1.35,exposure:.91,snow:0,wind:1.2},
   overcast:{label:'阴天',zenith:'#8498ac',horizon:'#c0cbd3',cloud:'#dbe1e4',shadow:'#7b8d9f',sun:'#e1e9ef',ground:'#728393',elevation:32,azimuth:235,cover:.91,density:.000075,direct:.55,ambient:2.0,exposure:.98,snow:0,wind:2.8},
-  snow:{label:'风雪',zenith:'#8c9caa',horizon:'#bac8d2',cloud:'#ccd6df',shadow:'#8495a6',sun:'#e1e9f0',ground:'#7e8f9f',elevation:28,azimuth:235,cover:1,density:.00070,direct:.20,ambient:1.85,exposure:1.0,snow:1,wind:5.5},
+  snow:{label:'风雪',zenith:'#8c9caa',horizon:'#bac8d2',cloud:'#ccd6df',shadow:'#8495a6',sun:'#e1e9f0',ground:'#7e8f9f',elevation:28,azimuth:235,cover:1,density:.0024,direct:.20,ambient:1.85,exposure:1.0,snow:1,wind:5.5},
   sunset:{label:'夕阳',zenith:'#4c5891',horizon:'#ecac9d',cloud:'#edbbc2',shadow:'#665d93',sun:'#ffb171',ground:'#666080',elevation:7,azimuth:258,cover:.36,density:.000024,direct:2.5,ambient:.95,exposure:.93,snow:0,wind:1.8}
 };
 export const snowLighting={sunDirection:{value:new THREE.Vector3(-.6,.65,-.4)},cloudCover:{value:.22}};
@@ -70,17 +72,18 @@ class FallingSnow{
 
 export class MountainWeather{
   constructor(scene,renderer,sun,hemisphere){
-    this.scene=scene;this.renderer=renderer;this.sun=sun;this.hemisphere=hemisphere;this.id='clear';this.state=weatherState('clear');this.from=this.state;this.to=this.state;this.progress=1;this.elapsed=0;
+    this.scene=scene;this.renderer=renderer;this.sun=sun;this.hemisphere=hemisphere;this.fogClock={value:0};this.id='clear';this.state=weatherState('clear');this.from=this.state;this.to=this.state;this.progress=1;this.elapsed=0;
     this.uniforms={cloudPhoto:{value:scene.background?.isTexture?scene.background:null},hasCloudPhoto:{value:scene.background?.isTexture?1:0},zenith:{value:this.state.zenith.clone()},horizon:{value:this.state.horizon.clone()},cloudColor:{value:this.state.cloud.clone()},cloudShadow:{value:this.state.shadow.clone()},sunColor:{value:this.state.sun.clone()},sunDirection:snowLighting.sunDirection,cover:snowLighting.cloudCover,time:{value:0}};
     this.sky=new THREE.Mesh(new THREE.SphereGeometry(58000,48,24),new THREE.ShaderMaterial({side:THREE.BackSide,depthWrite:false,fog:false,uniforms:this.uniforms,vertexShader:'varying vec3 vDirection;void main(){vDirection=position;gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.);}',fragmentShader:skyFragment}));
     this.sky.frustumCulled=false;this.sky.renderOrder=-10;scene.background=null;scene.add(this.sky);scene.fog=new THREE.FogExp2(this.state.horizon,this.state.density);this.snowfall=new FallingSnow(scene);
   }
+  prepareMaterials(scene=this.scene){prepareAtmosphere(scene,this.fogClock);}
   set(id){if(!WEATHER_PRESETS[id])return;this.id=id;this.from=blendWeather(this.state,this.state,1);this.to=weatherState(id);this.progress=0;}
   update(dt,camera,focus){
-    this.elapsed+=dt;this.progress=Math.min(1,this.progress+dt/5);const t=this.progress*this.progress*(3-2*this.progress);this.state=this.progress===1?this.to:blendWeather(this.from,this.to,t);const s=this.state;
+    this.elapsed+=dt;this.fogClock.value=this.elapsed;this.progress=Math.min(1,this.progress+dt/5);const t=this.progress*this.progress*(3-2*this.progress);this.state=this.progress===1?this.to:blendWeather(this.from,this.to,t);const s=this.state;
     for(const [uniform,key] of [['zenith','zenith'],['horizon','horizon'],['cloudColor','cloud'],['cloudShadow','shadow'],['sunColor','sun']])this.uniforms[uniform].value.copy(s[key]);
     snowLighting.sunDirection.value.copy(sunDirection(s));snowLighting.cloudCover.value=s.cover;this.uniforms.time.value=this.elapsed;
-    this.sky.position.copy(camera.position);this.sun.position.copy(focus).addScaledVector(snowLighting.sunDirection.value,700);this.sun.target.position.copy(focus);this.sun.target.updateMatrixWorld();
+    this.sky.position.copy(camera.position);const shadowFocus=stableShadowTarget(focus,snowLighting.sunDirection.value,this.sun.shadow.camera.right-this.sun.shadow.camera.left,this.sun.shadow.mapSize.x);this.sun.position.copy(shadowFocus).addScaledVector(snowLighting.sunDirection.value,700);this.sun.target.position.copy(shadowFocus);this.sun.target.updateMatrixWorld();
     this.sun.color.copy(s.sun);this.sun.intensity=s.direct;this.hemisphere.color.copy(s.horizon).lerp(s.zenith,.35);this.hemisphere.groundColor.copy(s.ground);this.hemisphere.intensity=s.ambient;
     this.scene.fog.color.copy(s.horizon);this.scene.fog.density=s.density;this.renderer.toneMappingExposure=s.exposure;this.scene.environmentIntensity=.12*(1-s.cover*.4);
     this.snowfall.update(this.elapsed,camera.position,s,this.renderer.getPixelRatio());
