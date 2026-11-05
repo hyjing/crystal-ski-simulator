@@ -51,13 +51,15 @@ Real terrain. Fresh tracks. Your line.
 
 ## 今天滑哪条？
 
-| 线路 | 当前可玩范围 | 大致长度 / 落差 |
-| :--- | :--- | :--- |
-| 🔵 **Green Valley** | 从坡面入口开始的已映射线路 | 1.1 km / ↓ 272 m |
-| 🔵 **Lucky Shot** | 已映射路段，尚非完整雪道 | 0.6 km / ↓ 213 m |
-| 🟢 **Tinkerbell** | 已映射线路 | 1.1 km / ↓ 191 m |
+现已收录 **78 条地图线路**：**38 条蓝道、37 条单黑道、3 条绿道**。可按难度筛选、按英文名称或原有中文别名搜索；列表独立滚动，「开始滑行」位于列表外。
 
-线路名称参考 [Crystal Mountain 官方雪道地图](https://www.crystalmountainresort.com/the-mountain/trail-maps)，路径采用 OpenStreetMap 数据并与 USGS 地形对齐。这里的长度和落差按原型数据计算。
+| 想滑哪种 | 试试这些线路 |
+| :--- | :--- |
+| ■ 蓝道 | Green Valley、Lucky Shot、Pro Course、Downhill、Mr Magoo、Gold Hills |
+| ◆ 单黑道 | Sunnyside、Middle Ferk's Run、Memorial Forest、Little Portillo、Lower North |
+| ● 绿道 | Tinkerbell、Quicksilver、Easy Street |
+
+路线使用 OpenStreetMap 中心线并与真实地形对齐。目录包含短分段和连接道，不等于官方完整雪道数量；部分横切道路仍受 DEM 起伏影响。查看 [完整线路、数据来源与通行验证范围](docs/TRAILS.md)，以及 [Crystal Mountain 官方雪道地图](https://www.crystalmountainresort.com/the-mountain/trail-maps)。
 
 ## 快速开始
 
@@ -102,7 +104,7 @@ npm run dev
 
 ## 继续往山里走
 
-- [x] 真实高程 + 三条命名线路
+- [x] 真实高程 + 78 条命名地图线路、难度筛选与搜索
 - [x] 粉雪压痕、雪边与雪雾
 - [x] 转弯、立刃、收身与检查点
 - [x] 航拍地图、覆雪林地、缆车与建筑
@@ -120,6 +122,7 @@ npm run dev
 | 卡顿优化、帧耗时和可复现测量 | [性能记录](docs/PERFORMANCE.md) |
 | 航拍、OSM、生成素材和完整提示词 | [资源来源](docs/ASSETS.md) |
 | 已验证内容与当前边界 | [验证记录](docs/VALIDATION.md) |
+| 完整线路目录与通行验证边界 | [线路目录](docs/TRAILS.md) |
 | 后续开发范围 | [Scope](docs/SCOPE.md) |
 | Demo 的录制与编码方式 | [媒体说明](docs/media/README.md) |
 

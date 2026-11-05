@@ -46,3 +46,9 @@ Locations reference OSM geometry. Lift support height, chairs, cable sag, speeds
 - NAIP is snow-free-season aerial reference, not a winter satellite photograph. The shader adds authored snow cover by elevation and slope, retaining more of the photographed glacier / rock pattern at high elevation. Shadows in the imagery are baked into the reference and are not a fully relightable photogrammetry material.
 - The mountain retains its real southwest bearing, summit height and distance. `V` opens a scenic camera on the west-facing local ridge and suspends the skiing simulation; returning preserves the run. This view uses a 46-degree vertical field of view.
 - New textures total ~1.36 MiB compressed. These are static meshes and maps, with no extra shadow passes or post-processing. Triangle-budget validation does not establish identical GPU performance on all devices.
+
+## Expanded blue / single-black trail import
+
+`crystal-trails.json` now retains 81 named OSM centerline ways in the Crystal area, grouped into 78 selectable entries: 38 intermediate, 37 advanced, 3 easy. The fetch uses `https://api.openstreetmap.org/api/0.6/map?bbox=-121.525,46.90,-121.435,46.985`, with name/type/grade/geometry filtering. Reproduce with `python3 scripts/fetch-trails.py`, or `--input` with a previously exported XML map. Original IDs and tags remain in the data. © OpenStreetMap contributors, ODbL 1.0.
+
+The current official winter map was inspected through the resort's [map page](https://www.crystalmountainresort.com/the-mountain/trail-maps); it marks Quicksilver and Easy Street green, overriding their OSM intermediate tags for the selector. No official map image is redistributed in the repository. See [TRAILS.md](TRAILS.md) for every source ID and scope limits.

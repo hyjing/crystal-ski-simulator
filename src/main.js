@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import './style.css';
-import { createTerrain, getRoutes } from './terrain.js';
+import { createTerrain, getRoutes, filterRoutes } from './terrain.js';
 import { createSkier, stepSkier, nearestOnRoute, clamp } from './physics.js';
 import { createSnowMaterial, SnowEffects } from './snow.js';
 import { addContextTerrain, addRainierTerrain, addAlpineSky } from './scenery.js';
@@ -16,6 +16,7 @@ let lastTime=0, accumulator=0, pausedFrom='running', soundOn=false, audio, noise
 let frameTime=1/60,physicsMs=0;
 let powderMs=0,frameSamples=[],frameP95=0,frameMax=0,slowFrames=0;
 let renderScale=Math.min(devicePixelRatio,1.25),qualityClock=0;
+let routeFilter='all',routeQuery='';
 let demoCapture,recordedInput=null,sceneryFrom='intro',sceneryView=false;
 let treePositions=[], trailPoints=[], mapBackground, snowEffects, sun, powder, speedRenderer, aerialImage, mapLayer='terrain', resortUpdate=()=>{};
 const baseElevation=1200, fixedStep=1/120;
@@ -69,8 +70,7 @@ async function init(){
       scene.remove(coarse);coarse.geometry.dispose();coarse.material.dispose();$('scenery').disabled=false;
     }catch(error){console.warn('Detailed scenery unavailable',error);toast('高清远景暂未载入，已保留基础远山');}
   }).catch(()=>toast('远山数据载入失败，近处地形仍可滑行'));
-  $('routes').innerHTML=routes.map((r,i)=>`<button class="route ${i===0?'active':''}" data-route="${r.id}" aria-pressed="${i===0}" style="--route:${r.color}"><span class="route-dot"></span><span class="route-text"><span class="route-name">${r.name}</span><span class="route-sub">${r.subtitle} · ${r.label}</span></span><span class="route-stat">${(r.length/1000).toFixed(1)} km<small>↓ ${Math.round(r.drop)} m</small></span></button>`).join('');
-  document.querySelectorAll('[data-route]').forEach(b=>b.addEventListener('click',()=>selectRoute(b.dataset.route)));
+  renderRouteList();
   selectRoute(route.id);speedRenderer.prepare();$('loading').classList.add('hidden'); $('start').disabled=false;
   if(import.meta.env.DEV&&new URLSearchParams(location.search).has('record-demo')){
     const {installDemoCapture}=await import('./capture-demo.js');
@@ -137,16 +137,19 @@ function createAthlete(){
 }
 
 function setRouteMarkers(){
-  if(routeGroup){ scene.remove(routeGroup);routeGroup.traverse(obj=>{obj.geometry?.dispose();if(obj.material) obj.material.dispose();}); }
+  if(routeGroup){ scene.remove(routeGroup);routeGroup.userData.signTexture?.dispose();routeGroup.traverse(obj=>{obj.geometry?.dispose();if(obj.material) obj.material.dispose();}); }
   routeGroup=new THREE.Group();
   const curve=new THREE.CatmullRomCurve3(route.points.map(p=>new THREE.Vector3(p.x,yAt(p.x,p.z)+1.5,p.z)),false,'centripetal');
   const pts=curve.getPoints(Math.ceil(route.length/8)).map(p=>new THREE.Vector3(p.x,yAt(p.x,p.z)+1.5,p.z));
   const line=new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts),new THREE.LineDashedMaterial({color:route.color,dashSize:8,gapSize:10,transparent:true,opacity:.18}));line.computeLineDistances();line.visible=false;routeGroup.add(line);
   const signCanvas=document.createElement('canvas');signCanvas.width=512;signCanvas.height=160;
-  const signContext=signCanvas.getContext('2d');signContext.fillStyle=route.id==='tinkerbell'?'#22684b':'#245d80';signContext.fillRect(0,0,512,160);signContext.strokeStyle='#ffffff';signContext.lineWidth=7;signContext.strokeRect(6,6,500,148);signContext.fillStyle='#ffffff';signContext.font='bold 48px sans-serif';signContext.textAlign='center';signContext.fillText(route.name,256,100);
+  const signContext=signCanvas.getContext('2d');signContext.fillStyle=route.difficulty==='easy'?'#22684b':route.difficulty==='advanced'?'#172a34':'#245d80';signContext.fillRect(0,0,512,160);signContext.strokeStyle='#ffffff';signContext.lineWidth=7;signContext.strokeRect(6,6,500,148);signContext.fillStyle='#ffffff';signContext.font=`bold ${Math.min(48,720/route.name.length)}px sans-serif`;signContext.textAlign='center';signContext.fillText(route.name,256,100);
   const signTexture=new THREE.CanvasTexture(signCanvas);signTexture.colorSpace=THREE.SRGBColorSpace;
-  route.points.forEach((p,i)=>{
-    const next=route.points[Math.min(i+1,route.points.length-1)],prev=route.points[Math.max(i-1,0)];
+  routeGroup.userData.signTexture=signTexture;
+  const markerCount=Math.min(20,Math.max(1,Math.ceil(route.length/80)));
+  const markerPoints=curve.getSpacedPoints(markerCount);
+  markerPoints.forEach((p,i)=>{
+    const next=markerPoints[Math.min(i+1,markerPoints.length-1)],prev=markerPoints[Math.max(i-1,0)];
     const dx=next.x-prev.x,dz=next.z-prev.z,len=Math.hypot(dx,dz)||1;
     const marker={x:p.x+dz/len*9,z:p.z-dx/len*9},y=yAt(marker.x,marker.z);
     const pole=new THREE.Mesh(new THREE.CylinderGeometry(.045,.06,2.5,6),new THREE.MeshStandardMaterial({color:'#5e625d'}));pole.position.set(marker.x,y+1.25,marker.z);pole.castShadow=true;routeGroup.add(pole);
@@ -155,9 +158,24 @@ function setRouteMarkers(){
   scene.add(routeGroup);
 }
 
+const escapeHTML=value=>String(value).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+function renderRouteList(){
+  const visible=filterRoutes(routes,routeFilter,routeQuery);
+  $('route-count').textContent=`${visible.length} / ${routes.length} 条`;
+  $('routes').innerHTML=visible.length?visible.map(r=>`<button class="route difficulty-${r.difficulty} ${r.id===route.id?'active':''}" data-route="${r.id}" aria-pressed="${r.id===route.id}" style="--route:${r.color}" title="${escapeHTML(r.name)}"><span class="route-dot"></span><span class="route-text"><span class="route-name">${escapeHTML(r.name)}</span><span class="route-sub">${escapeHTML(r.label)}</span></span><span class="route-stat">${(r.length/1000).toFixed(1)} km<small>↓ ${Math.round(r.drop)} m</small></span></button>`).join(''):'<p class="route-empty">没找到这条雪道，换个名称试试。</p>';
+}
+$('routes').addEventListener('click',event=>{const button=event.target.closest('[data-route]');if(button)selectRoute(button.dataset.route);});
+$('route-search').addEventListener('input',event=>{routeQuery=event.target.value;renderRouteList();});
+$('route-filters').addEventListener('click',event=>{
+  const button=event.target.closest('[data-difficulty]');if(!button)return;routeFilter=button.dataset.difficulty;
+  document.querySelectorAll('[data-difficulty]').forEach(b=>{const active=b===button;b.classList.toggle('selected',active);b.setAttribute('aria-pressed',active);});
+  renderRouteList();$('routes').scrollTop=0;
+});
+
 function selectRoute(id){
   route=routes.find(r=>r.id===id); checkpoint=0;
   document.querySelectorAll('[data-route]').forEach(b=>{const active=b.dataset.route===id;b.classList.toggle('active',active);b.setAttribute('aria-pressed',active);});
+  $('route-selection').textContent=`已选：${route.name} · ${route.label}`;
   $('map-label').textContent=route.name.toUpperCase();$('session-name').textContent=route.name.toUpperCase();
   setRouteMarkers(); resetPosition(true); updateAthlete(0); updateCamera(1,true); drawMap();
 }
@@ -203,7 +221,7 @@ function updatePhysics(dt){
   const boundsX=(terrain.width-1)*terrain.spacing/2-20,boundsZ=(terrain.height-1)*terrain.spacing/2-20;
   if(Math.abs(skier.x)>boundsX||Math.abs(skier.z)>boundsZ){resetPosition();toast('已到地形边界，返回检查点');return;}
   const p=route.points[Math.min(checkpoint+1,route.points.length-1)];
-  if(Math.hypot(skier.x-p.x,skier.z-p.z)<65){
+  if(Math.hypot(skier.x-p.x,skier.z-p.z)<Math.min(65,Math.max(8,route.length*.18))){
     checkpoint++;
     if(checkpoint===route.points.length-1){finishRun();return;}
     toast(`检查点 ${checkpoint} / ${route.points.length-1}`);
@@ -364,6 +382,7 @@ document.querySelectorAll('[data-key]').forEach(b=>{
   for(const type of ['pointerup','pointercancel','lostpointercapture'])b.addEventListener(type,()=>keys.delete(b.dataset.key));
 });
 addEventListener('keydown',e=>{
+  if(e.target instanceof HTMLInputElement)return;
   if(['Space','ArrowLeft','ArrowRight','ArrowDown','ArrowUp'].includes(e.code))e.preventDefault();
   if(e.repeat)return;
   if(e.code==='KeyV'){toggleScenery();return;}

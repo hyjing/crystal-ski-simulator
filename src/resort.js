@@ -15,17 +15,26 @@ export function forestLikelihood(terrain,landcover,x,z){
 export function addForest(scene,terrain,routes,landcover,texture){
   let seed=84;const rng=()=>{seed=(Math.imul(seed,1664525)+1013904223)|0;return(seed>>>0)/4294967296;};
   const candidates=[];
+  // Index all route segments once; hundreds of ways should not multiply forest startup work.
+  const cells=new Map(),cellSize=100,clearance=18;
+  for(const route of routes)for(let i=1;i<route.points.length;i++){
+    const a=route.points[i-1],b=route.points[i],segment={a,b};
+    for(let x=Math.floor((Math.min(a.x,b.x)-clearance)/cellSize);x<=Math.floor((Math.max(a.x,b.x)+clearance)/cellSize);x++)
+      for(let z=Math.floor((Math.min(a.z,b.z)-clearance)/cellSize);z<=Math.floor((Math.max(a.z,b.z)+clearance)/cellSize);z++){
+        const key=`${x},${z}`;if(!cells.has(key))cells.set(key,[]);cells.get(key).push(segment);
+      }
+  }
   for(let i=0;i<14000;i++){
     const p=terrain.world(8+rng()*(terrain.width-16),8+rng()*(terrain.height-16));
     const probability=forestLikelihood(terrain,landcover,p.x,p.z);
     if(rng()>probability*.85||terrain.sample(p.x,p.z)<1180)continue;
     // A small clearance around source centerlines prevents proxy trees on a run.
     let clear=false;
-    for(const route of routes){for(let j=0;j<route.points.length-1;j++){
-      const a=route.points[j],b=route.points[j+1],dx=b.x-a.x,dz=b.z-a.z;
-      const t=THREE.MathUtils.clamp(((p.x-a.x)*dx+(p.z-a.z)*dz)/(dx*dx+dz*dz),0,1);
-      if(Math.hypot(p.x-a.x-t*dx,p.z-a.z-t*dz)<18){clear=true;break;}
-    }if(clear)break;}
+    for(const {a,b} of cells.get(`${Math.floor(p.x/cellSize)},${Math.floor(p.z/cellSize)}`)||[]){
+      const dx=b.x-a.x,dz=b.z-a.z,l2=dx*dx+dz*dz;
+      const t=l2?THREE.MathUtils.clamp(((p.x-a.x)*dx+(p.z-a.z)*dz)/l2,0,1):0;
+      if(Math.hypot(p.x-a.x-t*dx,p.z-a.z-t*dz)<clearance){clear=true;break;}
+    }
     if(clear)continue;
     candidates.push({...p,size:.65+rng()*.8,rotation:rng()*Math.PI});
   }

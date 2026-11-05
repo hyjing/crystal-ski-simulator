@@ -44,3 +44,11 @@ The HUD reports FPS, raw frame interval P95 / maximum, hitch count, raster scale
 - Browser checks: the new winter shader compiles without console warnings/errors; scenic view works at narrow and 1280 × 720 desktop layouts; returning restores the active run rather than resetting its position/time.
 - New real-frame screenshot: `docs/media/crystal-rainier.png`. The existing README video predates this scenery update.
 - Texture registration and the DEM are real; winter cover, local viewing height and the snow shader remain authored approximations. No new instrumented GPU benchmark was performed.
+
+## Expanded trail catalog
+
+- 29 tests pass. All 81 imported centerlines are accounted for exactly once across 78 route entries; IDs are unique and all points lie within the original DEM.
+- Route search, apostrophe normalization, grade filters, connected-fragment assembly, and disconnected-line handling have regression coverage.
+- The former three-route completion check is now an explicitly named representative downhill check: the original three plus seven new blue/black runs, in both snow modes. It does not assert that all imported road/traverse geometry can be completed. A separate simple soft-snow audit completed 62 of 78 entries; limitations are recorded in [TRAILS.md](TRAILS.md).
+- Short sections have a smaller finish radius so a 63 m section does not complete immediately on spawn. Route signs are capped at 21 locations; forest clearance uses a spatial index to avoid multiplying tree-placement work by the full catalog.
+- Browser: original Green Valley and new Sunnyside start correctly after selection; difficulty/search selection uses a bounded list so the start button is not pushed below a 78-row list.

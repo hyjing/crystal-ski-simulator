@@ -37,15 +37,71 @@ export function lonLatToUTM(lon,lat){
   return {e:500000+k*N*(A+(1-T+C)*A**3/6+(5-18*T+T*T+72*C-58*ep)*A**5/120),n:k*(M+N*Math.tan(p)*(A*A/2+(5-T+9*C+4*C*C)*A**4/24+(61-58*T+T*T+600*C-330*ep)*A**6/720))};
 }
 
+export const difficultyStyles={
+  easy:{label:'绿道',color:'#91bd70',symbol:'●'},
+  intermediate:{label:'蓝道',color:'#368bbb',symbol:'■'},
+  advanced:{label:'黑道',color:'#263c48',symbol:'◆'},
+};
+
+// Only join actual shared OSM endpoints; never bridge disconnected segments.
+export function joinTrailWays(features){
+  const remaining=features.map(f=>({coordinates:f.geometry.coordinates.map(p=>[...p]),ids:[String(f.id)]})),chains=[];
+  const same=(a,b)=>Math.abs(a[0]-b[0])<1e-9&&Math.abs(a[1]-b[1])<1e-9;
+  while(remaining.length){
+    const chain=remaining.shift();let joined=true;
+    while(joined){
+      joined=false;
+      for(let i=0;i<remaining.length;i++){
+        const c=chain.coordinates,p=remaining[i].coordinates;
+        if(same(c.at(-1),p[0]))c.push(...p.slice(1));
+        else if(same(c.at(-1),p.at(-1)))c.push(...p.slice(0,-1).reverse());
+        else if(same(c[0],p.at(-1)))c.unshift(...p.slice(0,-1));
+        else if(same(c[0],p[0]))c.unshift(...p.slice(1).reverse());
+        else continue;
+        chain.ids.push(...remaining[i].ids);remaining.splice(i,1);joined=true;break;
+      }
+    }
+    chains.push(chain);
+  }
+  return chains;
+}
+
+export function filterRoutes(routes,difficulty='all',query=''){
+  const normalize=s=>s.toLowerCase().replace(/[’']/g,'').trim();
+  const term=normalize(query);
+  return routes.filter(r=>(difficulty==='all'||r.difficulty===difficulty)&&normalize(`${r.name} ${r.subtitle}`).includes(term));
+}
+
 export function getRoutes(terrain,trailData) {
-  return routeDefinitions.map(route => {
-    const feature=trailData.features.find(f=>String(f.id)===route.osmWayId);
-    if(!feature)throw new Error(`Missing trail geometry: ${route.name}`);
-    const centerE=terrain.originUTM[0]+(terrain.width-1)*terrain.spacing/2,centerN=terrain.originUTM[1]-(terrain.height-1)*terrain.spacing/2;
-    let points=feature.geometry.coordinates.map(([lon,lat])=>{const p=lonLatToUTM(lon,lat);return{x:p.e-centerE,z:centerN-p.n};});
-    if(terrain.sample(points[0].x,points[0].z)<terrain.sample(points.at(-1).x,points.at(-1).z))points.reverse();
-    points=points.slice(route.skipStart||0);
-    const length = points.slice(1).reduce((sum,p,i) => sum + Math.hypot(p.x-points[i].x,p.z-points[i].z),0);
-    return { ...route, points, length, sourceUrl:feature.properties.sourceUrl,drop: terrain.sample(points[0].x,points[0].z)-terrain.sample(points.at(-1).x,points.at(-1).z) };
+  const groups=new Map();
+  for(const f of trailData.features){
+    if(f.geometry.type!=='LineString'||f.properties['area']==='yes')continue;
+    const name=f.properties.name;if(!groups.has(name))groups.set(name,[]);groups.get(name).push(f);
+  }
+  const centerE=terrain.originUTM[0]+(terrain.width-1)*terrain.spacing/2,centerN=terrain.originUTM[1]-(terrain.height-1)*terrain.spacing/2;
+  const routes=[];
+  for(const [name,features] of groups){
+    const preset=routeDefinitions.find(r=>r.name===name)||{};
+    // These two OSM difficulty tags disagree with the current official winter map.
+    const difficulty=['Quicksilver','Easy Street'].includes(name)?'easy':features[0].properties['piste:difficulty'];
+    const style=difficultyStyles[difficulty];if(!style)continue;
+    const chains=joinTrailWays(features);
+    chains.forEach((chain,part)=>{
+      let points=chain.coordinates.map(([lon,lat])=>{const p=lonLatToUTM(lon,lat);return{x:p.e-centerE,z:centerN-p.n};});
+      if(terrain.sample(points[0].x,points[0].z)<terrain.sample(points.at(-1).x,points.at(-1).z))points.reverse();
+      points=points.slice(preset.skipStart||0);
+      const length=points.slice(1).reduce((sum,p,i)=>sum+Math.hypot(p.x-points[i].x,p.z-points[i].z),0);
+      const drop=terrain.sample(points[0].x,points[0].z)-terrain.sample(points.at(-1).x,points.at(-1).z);
+      const id=(preset.id||name.toLowerCase().replace(/['’.]/g,'').replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,''))+(part?`-${part+1}`:'');
+      routes.push({...preset,id,name,subtitle:preset.subtitle||'真实地图线路',difficulty,color:style.color,symbol:style.symbol,
+        label:`${style.label} · ${drop/length<.1?'连接路段':'已映射路段'}${chains.length>1?` ${part+1}/${chains.length}`:''}`,
+        points,length,drop,osmWayId:chain.ids[0],osmWayIds:chain.ids,
+        sourceUrl:`https://www.openstreetmap.org/way/${chain.ids[0]}`});
+    });
+  }
+  const priority=['green-valley','lucky-shot','tinkerbell'];
+  return routes.sort((a,b)=>{
+    const rank=r=>priority.includes(r.id)?priority.indexOf(r.id):-1;
+    return (rank(a)<0?99:rank(a))-(rank(b)<0?99:rank(b))||a.name.localeCompare(b.name);
   });
 }

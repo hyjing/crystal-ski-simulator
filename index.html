@@ -13,8 +13,11 @@
       <div class="eyebrow"><span>01 / MOUNTAIN EXPLORER</span><span class="alpha">EARLY ACCESS</span></div>
       <h1>Follow the<br> <em>fall line.</em></h1>
       <p class="lede">循着山势，滑向山谷。<br>在 Crystal Mountain 的真实地形上，找到自己的线路。</p>
-      <div class="section-label">CHOOSE YOUR LINE <span>选择线路</span></div>
+      <div class="section-label">CHOOSE YOUR LINE <span id="route-count">选择线路</span></div>
+      <div id="route-filters" class="route-filters" role="group" aria-label="雪道难度"><button data-difficulty="all" class="selected" aria-pressed="true">全部</button><button data-difficulty="intermediate" aria-pressed="false">■ 蓝道</button><button data-difficulty="advanced" aria-pressed="false">◆ 黑道</button><button data-difficulty="easy" aria-pressed="false">● 绿道</button></div>
+      <input id="route-search" class="route-search" type="search" placeholder="搜索雪道名称…" aria-label="搜索雪道名称" autocomplete="off" />
       <div id="routes" class="routes"></div>
+      <p id="route-selection" class="route-selection"></p>
       <div class="snow-row"><span>雪面设定</span><div class="segmented" role="group" aria-label="雪面"><button data-snow="packed">硬实雪</button><button data-snow="soft" class="selected">粉雪</button></div></div>
       <button id="start" class="start">开始滑行 <span>DROP IN ↗</span></button>
       <p class="data-note"><span class="tiny-dot"></span>真实 USGS 高程 · 约 20m 采样<br><span>真实雪道 / 航拍约束林地 / 局部粉雪形变</span></p>
