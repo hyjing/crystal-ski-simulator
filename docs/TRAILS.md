@@ -2,7 +2,7 @@
 
 The menu now contains 10 lift-to-lift itineraries, rather than 78 independently selectable map fragments. Runs shorter than 400 m are excluded. Short named segments remain in the routing network when they connect a complete run.
 
-The four requested corrections are explicit: Green Valley starts at the Green Valley upper terminal and ends at its lower terminal; Lucky Shot uses Rainier Express; Mr Magoo and Chappelle’s use Forest Queen Express. The skier starts on a clear snow exit 35–150 m along the approach, avoiding the current building proxies and camera obstruction. The map's S/F pins still mark the actual mapped lift endpoints. Finishing requires reaching within 18 m of the lower terminal.
+The four requested corrections are explicit: Green Valley starts at the Green Valley upper terminal and ends at its lower terminal; Lucky Shot uses Rainier Express; Mr Magoo and Chappelle’s use Forest Queen Express. The skier starts at rest on an authored gentle unloading apron, 35–150 m along the approach, avoiding building proxies and camera obstruction. All ten current spawn slopes test below 3°. The map's S/F pins still mark the actual mapped lift endpoints. Finishing requires reaching the visible 18 m lower-terminal arrival zone; intermediate checkpoint progression is not required to enter it. The finish button restarts at the upper exit, without an animated lift ride.
 
 | Run | Lift | Approximate itinerary length | Via |
 | --- | --- | ---: | --- |
@@ -26,13 +26,13 @@ The four requested corrections are explicit: Green Valley starts at the Green Va
 
 ## Ground and forest limits
 
-Near terrain now uses a 4.928 m USGS elevation export on the same footprint as the original tile, rendered with static 5/10/20 m LOD meshes. Denser sampling preserves more of the service's slope and gully shape; it does not establish the native resolution or recover every small cliff. No random cliffs or route-edge walls were added. Overhangs and airborne landing physics are not modeled.
+Near terrain now uses a 4.928 m USGS elevation export on the same footprint as the original tile, rendered with static 5/10/20 m LOD meshes. Denser sampling preserves more of the service's slope and gully shape; it does not establish the native resolution or recover every small cliff. Piste edges now use authored snowbanks and inferred corridor widths, and groomed traverses receive shallow benches. Station plazas are separately leveled to gentle pitches. These overlays are applied over the retained source heights; they are not surveyed winter edge geometry. Overhangs and airborne landing physics are not modeled.
 
 Tree candidates come from RGB vegetation and canopy-texture peaks in the 2056 × 2568 NAIP image, with georeferenced pixel centers and a narrow 5 m clearance at mapped lines. This estimates forest placement rather than surveying individual trees. The far forest cover uses the same georeferenced canopy mask. See [ASSETS.md](ASSETS.md).
 
 ## Validation boundaries
 
-Tests verify the lift endpoint coordinates, minimum run length, clear station exits, ground registration and low-speed pole behavior. The original source-section physics regressions still cover representative downhill segments; they do not prove all 10 full itineraries can be followed continuously on the current DEM. A simple waypoint-controller audit on the detailed ground completed 5 of the 10 full itineraries and failed to follow the others, especially traverses. Manual control can differ; road benches, route junctions and complete-run physics calibration remain work in progress.
+Tests verify the lift endpoint coordinates, minimum run length, clear gentle station exits, ground registration and pole acceleration at both low and higher speeds. The original source-section physics regressions still cover representative downhill segments; they do not prove all 10 full itineraries can be followed continuously on the current DEM. A simple waypoint-controller audit on the detailed ground completed 5 of the 10 full itineraries and failed to follow the others, especially traverses. Manual control can differ; complete-run traversal after the new authored benches / station aprons has not been exhaustively validated, and route junctions and full-run calibration remain work in progress.
 
 ## Source inventory — raw mapped sections, not menu entries
 

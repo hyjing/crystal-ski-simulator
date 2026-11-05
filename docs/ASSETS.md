@@ -30,7 +30,7 @@ Locations reference OSM geometry. Lift support height, chairs, cable sag, speeds
 
 ## Powder and speed effects
 
-- Near-field snow: a static 48 m square tessellated patch with GPU elevation / normal sampling, 0.1875 m vertex spacing, over the unchanged USGS ground model. Snow thickness and wind mounds are artistic parameters.
+- Near-field snow: a static 48 m square tessellated patch with GPU elevation / normal sampling, 0.1875 m vertex spacing, over the USGS ground model with the authored piste / station overlays described below. Snow thickness and wind mounds are artistic parameters.
 - Compression: bounded sparse world-coordinate field, retaining up to 180,000 cells at 0.125 m spacing. The 512 × 512 visible displacement texture covers 64 m; ski imprints depress the surface and add raised rims.
 - Patch boundaries feather back into the base terrain. No granular particle mass-conservation, subsurface fracture or snow-water content is modeled.
 - Far session trails retain lightweight ribbons; near powder supplies the actual mesh deformation.
@@ -57,7 +57,22 @@ The current official winter map was inspected through the resort's [map page](ht
 
 - Local source image is now 2056 × 2568 RGB pixels (~2.46 m export pixels), from the same public-domain USGS / USDA NAIP service and exact extent recorded in `crystal-landcover.json`. Reproduce with `scripts/fetch-aerial.py`.
 - `crystal-detail-dem.json` + `.bin` contain a 1025 × 1281 USGS bare-earth export, 4.928004 m spacing, Float32 little-endian heights in meters. Its pixel-center footprint matches the original local DEM exactly. Reproduce with `scripts/fetch-ground-detail.py`. Export spacing does not establish the native source survey resolution; local 1 m lidar availability has not been verified here.
-- Terrain appearance: `src/ground.js` builds static 5/10/20 m LOD meshes, with downward skirts to close tile seams. Cliffs, gullies and banks follow the source heights; no decorative obstacle cliffs were added. Bare-rock coloring is authored from surface steepness.
+- Terrain appearance: `src/ground.js` builds static 5/10/20 m LOD meshes, with shared finest-resolution perimeter samples and globally sampled normals across LODs to close tile seams without dark skirts. Large landforms follow source heights; authored piste / station overlays are described below. Bare-rock coloring is authored from surface steepness.
 - `crystal-canopy.png` and `crystal-vegetation.json`: derived locally from the aerial image using RGB vegetation rules, canopy texture maxima and minimum 8 m candidate spacing. Candidate centers remain at real image pixels; size and orientation remain artistic. Up to 20,000 candidates are retained. This is an image-derived approximation, not a canopy-height or individual-tree survey. `scripts/derive-vegetation.py` reproduces them.
 - Forest line clearance is reduced from 18 m to 5 m so inferred trees no longer cut a broad uniform empty lane through the photographic forest. The same mask shades distant forest cover on the terrain. Extents are transformed independently of the DEM resolution.
 - Lift itineraries combine OSM source centerlines with authored short station aprons / junction connections. Details and bounds are explicit in [TRAILS.md](TRAILS.md).
+
+
+## Station, piste and character update — November 5, 2026
+
+- `src/stations.js` builds both terminals for the selected lifts and Mt. Rainier Gondola, including approximate bullwheels, roller banks, machinery roofs, operator huts, ramps and rails. Summit House, Campbell Basin Lodge and Green Valley Wheelhouse use OSM footprint position / orientation with authored timber facades, windows, roofs and terraces. These are procedural approximations, not photogrammetry or manufacturer models. The resort describes [Summit House beside the Gondola / Rainier Express](https://www.crystalmountainresort.com/things-to-do/dining/summit-house-restaurant) and [Campbell Basin at the top of Forest Queen](https://www.crystalmountainresort.com/things-to-do/dining).
+- `preparePisteTerrain` adds inferred groomed corridors and raised snowbanks along mapped centerlines. Half widths are authored (roughly 6–22 m), with up to 3 m corridor adjustment and roughly 1.15 m edge mounds. `prepareStationTerrain` adds shallow unloading / loading aprons and lodge foundations. These edits are applied to a copied height array and shared by rendering, powder and physics; checked-in USGS source heights are retained unchanged. They do **not** establish surveyed piste boundaries, real small cliffs or measured earthworks.
+- `src/trees.js` adds three shared procedural branch / needle / snow prototypes, with at most 24 nearby trees within 110 m replaced by meshes. Far trees retain the generated crossed cards. Aerial-derived placement remains approximate. Collision is against a swept trunk circle plus the skier radius, not the canopy.
+- `src/athlete.js` is an authored articulated procedural model: flexing legs, counter-rotating shoulders, curved goggles, clothing detail, boots / bindings and cyclic double-pole strokes. It is not a scanned or fully skinned production character. Animation is driven by controller state rather than motion capture.
+
+## Photographed HDR sky
+
+- File: `public/assets/partly-cloudy-sky.hdr`, 2K Radiance HDR, 5,451,493 bytes.
+- Source: [Kloofendal 48d Partly Cloudy (Pure Sky), Poly Haven](https://polyhaven.com/a/kloofendal_48d_partly_cloudy_puresky), [direct HDR download](https://dl.polyhaven.org/file/ph-assets/HDRIs/hdr/2k/kloofendal_48d_partly_cloudy_puresky_2k.hdr).
+- Authors: Greg Zaal (original), Jarod Guest (sky edits). License: CC0. Retrieved November 5, 2026, Pacific time.
+- Rendered as the equirectangular background and a prefiltered environment map for materials. It is a real photographed sky, **not a Crystal Mountain photograph or live weather**. Directional sunlight is authored, not calibrated to the photographed sun. A procedural sky remains available as a loading-error fallback.

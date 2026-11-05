@@ -24,15 +24,17 @@ npm run preview
 | Input | Action |
 | --- | --- |
 | A / D or Left / Right | Hold to complete a turn and control speed |
-| Space or Down | Roll onto an edge and enter an arc on the last selected side |
+| Space or Down | Edge into a turn; hold after turning across the slope to skid / stop |
+| Shift | Rhythmic double-pole propulsion, no speed cutoff |
 | W or Up | Tuck: lower posture and aerodynamic drag |
 | N / visible Restart button | Restart the entire run, clearing time, distance and tracks |
 | R | Return to the latest checkpoint; preserve session stats |
-| O | Follow / overview camera |
+| O | Follow / overview camera; near terminals, frame the station |
+| Drag / C | Orbit the follow view / reset look direction |
 | Esc / P | Pause / resume |
 | H | Help |
 
-Space enters a turn rather than applying pedal-style direct deceleration. A / D select its direction. Skiing across the slope reduces downhill acceleration; turning and lateral skid dissipate energy. Tucking reduces drag and cannot accelerate a stationary skier on flat ground.
+Space engages an edge, and A / D select the turn direction. Once turned across the slope, releasing A / D while holding Space retains the skid / static hold rather than automatically continuing an arc. Skiing across the slope reduces downhill acceleration; turning and lateral skid dissipate energy. Tucking reduces drag and cannot accelerate a stationary skier on flat ground.
 
 ## v0.3.1 — responsiveness and frame pacing
 
@@ -40,7 +42,7 @@ Steering / reversal and camera response are faster, and releasing input stops id
 
 See [measurements and reproduction](PERFORMANCE.md). `npm run bench:powder` measures CPU powder updates; hover the FPS HUD for frame-interval P95 / maximum and hitch count.
 
-## v0.3 changes
+## v0.3 changes (historical; current braking behavior above supersedes the original Space arc)
 
 - **Powder is the default.** The near-field tessellated snow layer compresses under the skis and forms displaced rims, with world-coordinate imprints retained in a bounded field. Loose snow spray accompanies sliding / edge engagement. Hard snow remains selectable.
 - Snow grain uses irregular multiscale noise, replacing the repeating ribbed appearance.
@@ -60,7 +62,8 @@ Derived from the [USGS National Map 3DEP Elevation ImageServer](https://elevatio
 
 | Grid | Requested geographic bounds | Export size | Pixel spacing |
 | --- | --- | --- | --- |
-| Ski area | -121.51, 46.91, -121.445, 46.965 | 257 × 321 | ~19.712 m |
+| Ski area, fine runtime source | -121.51, 46.91, -121.445, 46.965 | 1025 × 1281 | ~4.928 m |
+| Ski area, backup | same footprint | 257 × 321 | ~19.712 m |
 | Surrounding mountains | -121.9, 46.75, -121.3, 47.08 | 385 × 321 | ~120.366 m |
 
 Both exports are Float32 GeoTIFF in EPSG:32610, resampled bilinearly. Pixel-center origins and square-pixel spacing come from the actual GeoTIFF tags. All distances / heights are meters, without vertical exaggeration. Rendering subtracts a 1,200 m local altitude origin.
@@ -69,15 +72,9 @@ Both exports are Float32 GeoTIFF in EPSG:32610, resampled bilinearly. Pixel-cent
 
 ### Trails
 
-`public/data/crystal-trails.json` contains three unchanged source LineStrings from **© OpenStreetMap contributors**, under [ODbL 1.0](https://opendatacommons.org/licenses/odbl/1-0/), with source IDs and URLs. See [OSM attribution and copyright](https://www.openstreetmap.org/copyright).
+`public/data/crystal-trails.json` retains 81 OSM centerline ways grouped into 78 raw named entries. The menu uses ten full lift itineraries from `crystal-lift-runs.json`, assembled using 93 ways in `crystal-trail-network.json`. © OpenStreetMap contributors, [ODbL 1.0](https://opendatacommons.org/licenses/odbl/1-0/). See [source inventory, lift assignments and connection limits](TRAILS.md).
 
-| Trail | Source way | Playable coverage |
-| --- | --- | --- |
-| Green Valley | [127128250](https://www.openstreetmap.org/way/127128250) | Mapped line, starting at its second node, ~19 m below its initial connection |
-| Lucky Shot | [127128246](https://www.openstreetmap.org/way/127128246) | Only the available mapped section; not represented as the complete named run |
-| Tinkerbell | [127128768](https://www.openstreetmap.org/way/127128768) | Available mapped line |
-
-Coordinates are converted from WGS84 to UTM 10N and placed directly on the USGS grid. Names were cross-checked against the [official resort trail map](https://www.crystalmountainresort.com/the-mountain/trail-maps). OSM geometry is community mapping, not verified resort survey data. The first Green Valley connection falls on a locally opposing bare-earth slope, so spawning begins at the second source node without altering the retained source data.
+Coordinates are converted from WGS84 to UTM 10N and placed on the USGS footprint. Names were cross-checked against the [official resort trail map](https://www.crystalmountainresort.com/the-mountain/trail-maps). Geometry is community mapping, not verified resort survey data. Authored piste benches, edge banks and station aprons modify a runtime copy of the ground, with the same modified surface used by physics and rendering. Source elevation arrays remain unchanged on disk.
 
 Snow and the skier use authored procedural models; the fir texture is generated and vegetation placement is constrained by aerial imagery. A [Crystal Mountain skier's photo](https://www.ingridbackstrom.com/thoughts-from-a-skier-mom-blog/2019/1/6/the-great-family-ski-road-trip-part-2-crystal-mountain) informed the cold-shadow / warm-sun contrast and snow-laden conifer direction; its photography is not bundled or redistributed. Tree positions are not surveyed vegetation boundaries. No official logos, photographs, or map artwork are redistributed.
 
@@ -119,6 +116,13 @@ Mount Rainier now has a separate georeferenced 36.18 m DEM export and NAIP textu
 
 ## Lift-run / local ground update
 
-`getRoutes` retains the raw OSM inventory for data checks and tree clearance. The menu uses `getLiftRuns`, built from `crystal-lift-runs.json`, with actual lift coordinates and explicit authored station / junction links. Short source sections are no longer menu entries. `liftExitSpawn` chooses an unobstructed snow exit near the station and includes space for the trailing camera. Shift provides bounded low-speed pole work.
+`getRoutes` retains the raw OSM inventory for data checks and tree clearance. The menu uses `getLiftRuns`, built from `crystal-lift-runs.json`, with actual lift coordinates and explicit authored station / junction links. Short source sections are no longer menu entries. `liftExitSpawn` chooses an unobstructed snow exit near the station and includes space for the trailing camera. Shift provides rhythmic pole work at any speed, bounded by an authored 420 N force / 1800 W peak-power model. These sprint-like gameplay settings are not measured athlete performance.
 
 The fine DEM uses a binary height array on the original footprint. `src/ground.js` prebuilds terrain LOD tiles; geometry is not rebuilt while skiing. Vegetation comes from georeferenced aerial canopy peaks and distant canopy cover. Fine export spacing is not native survey accuracy. See [TRAILS.md](TRAILS.md) and [ASSETS.md](ASSETS.md) for limitations and reproduction.
+
+
+## Station scene and braking update — November 5, 2026
+
+The init pipeline builds piste corridors, then station aprons, before creating render / snow / physics terrain. All ten spawns start at zero velocity on gentle ground. Terminal and lodge details are merged by material into static geometry. The lower terminal has an 18 m arrival ring and a return-to-start action. An explicit development-only `?station-qa` fixture places the player just outside this ring to exercise arrival and return; it is excluded from production.
+
+Lateral snow shear is force-limited, with slip / edge-dependent drag and a static-friction hold. A latched high-edge cross-slope skid disables automatic arc steering until edge input is released. This is still a ground-constrained approximation, not independent ski contact / flex simulation. The pole cycle also drives arm, torso and basket animation. Sky uses a local CC0 HDR photograph and a prefiltered environment map; see [assets](ASSETS.md).

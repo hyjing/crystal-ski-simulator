@@ -33,3 +33,10 @@ One local run after optimization reported an initial empty-window update of 0.20
 The test suite checks quick engagement / reversal, released-input pivot, unchanged vertex-buffer versions across rebases, and preservation of powder imprints across rolling texture windows. Route traversal continues to pass on both packed and powder snow.
 
 A short 1280 × 900 browser trial reported a P95 frame interval around 18.5 ms, maximum 18.7 ms and no >25 ms intervals in the observed sample after automatic raster adjustment. This is a small observation under browser automation, not a sustained benchmark or an input-to-photon latency measurement.
+
+
+## Station and forest budget — November 5, 2026
+
+Station beams, roofs, windows and machinery are merged into static material batches rather than retaining one draw call per part. Nearby procedural trees use three shared prototypes with a maximum of eight instances each (24 total), selected within 110 m at most every 650 ms. Only replaced far-card instance ranges are uploaded. Tree collision queries use a 16 m spatial grid rather than scanning the entire forest at each physics step.
+
+Terrain tile boundaries share the finest edge samples and DEM-gradient normals across 5/10/20 m LODs; no per-frame geometry reconstruction or dark downward skirts are required. The photographed sky adds a 5.2 MiB HDR asset and a prefiltered environment texture. These are budget measures, not proof of unchanged frame times; no new sustained hardware benchmark has been performed for this scene update.

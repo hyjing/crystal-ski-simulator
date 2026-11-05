@@ -27,23 +27,27 @@ export function addDetailedGround(scene,terrain,renderer,canopy,extent){
     const center=terrain.world(x+nx/2,z+nz/2),cy=terrain.sample(center.x,center.z)-1200;
     const lod=new THREE.LOD();lod.position.set(center.x,cy,center.z);
     for(const [step,distance] of [[1,0],[2,1000],[4,2200]]){
-      const cols=nx/step+1,rows=nz/step+1,positions=[],colors=[],uvs=[],indices=[];
+      const cols=nx/step+1,rows=nz/step+1,positions=[],colors=[],uvs=[],normals=[],indices=[],grid=[];
       const white=new THREE.Color('#e8f0eb'),ice=new THREE.Color('#a9c4d1'),rock=new THREE.Color('#697879');
-      for(let j=0;j<rows;j++)for(let i=0;i<cols;i++){
-        const gx=x+i*step,gz=z+j*step,p=terrain.world(gx,gz),e=terrain.heights[gz*terrain.width+gx],g=terrain.gradient(p.x,p.z),slope=Math.hypot(g.x,g.z);
-        positions.push(p.x-center.x,e-1200-cy,p.z-center.z);uvs.push((p.x+fullW/2)/fullW,1-(p.z+fullH/2)/fullH);
-        const c=white.clone().lerp(ice,Math.min(.48,slope*.25));
-        c.lerp(rock,THREE.MathUtils.smoothstep(slope,.8,1.65)*.88);colors.push(c.r,c.g,c.b);
-        if(i<cols-1&&j<rows-1){const a=j*cols+i;indices.push(a,a+cols,a+1,a+1,a+cols,a+cols+1);}
+      function vertex(gx,gz){
+        const p=terrain.world(gx,gz),e=terrain.surface(p.x,p.z),g=terrain.gradient(p.x,p.z),slope=Math.hypot(g.x,g.z),n=Math.hypot(g.x,1,g.z),index=positions.length/3;
+        positions.push(p.x-center.x,e-1200-cy,p.z-center.z);uvs.push((p.x+fullW/2)/fullW,1-(p.z+fullH/2)/fullH);normals.push(-g.x/n,1/n,-g.z/n);
+        const color=white.clone().lerp(ice,Math.min(.48,slope*.25));color.lerp(rock,THREE.MathUtils.smoothstep(slope,.8,1.65)*.88);colors.push(color.r,color.g,color.b);grid.push({gx,gz});return index;
       }
-      // Downward skirts close LOD seams; they never raise or reshape the measured surface.
-      const edge=[];for(let i=0;i<cols;i++)edge.push(i);for(let j=1;j<rows;j++)edge.push(j*cols+cols-1);for(let i=cols-2;i>=0;i--)edge.push((rows-1)*cols+i);for(let j=rows-2;j>0;j--)edge.push(j*cols);
-      for(let j=0;j<edge.length;j++){
-        const a=edge[j],b=edge[(j+1)%edge.length],u=positions.length/3;
-        for(const k of [a,b]){positions.push(positions[k*3],positions[k*3+1]-18,positions[k*3+2]);colors.push(...colors.slice(k*3,k*3+3));uvs.push(...uvs.slice(k*2,k*2+2));}
-        indices.push(a,u,b,b,u,u+1);
+      for(let j=0;j<rows;j++)for(let i=0;i<cols;i++)vertex(x+i*step,z+j*step);
+      function triangle(a,b,c){
+        const polygon=[];
+        for(const [u,v] of [[a,b],[b,c],[c,a]]){
+          polygon.push(u);const p=grid[u],q=grid[v];
+          const boundary=(p.gx===q.gx&&(p.gx===x||p.gx===x+nx))||(p.gz===q.gz&&(p.gz===z||p.gz===z+nz));
+          if(boundary){const count=Math.max(Math.abs(p.gx-q.gx),Math.abs(p.gz-q.gz));for(let k=1;k<count;k++)polygon.push(vertex(p.gx+(q.gx-p.gx)*k/count,p.gz+(q.gz-p.gz)*k/count));}
+        }
+        if(polygon.length===3){indices.push(a,b,c);return;}
+        const centerIndex=vertex((grid[a].gx+grid[b].gx+grid[c].gx)/3,(grid[a].gz+grid[b].gz+grid[c].gz)/3);
+        for(let i=0;i<polygon.length;i++)indices.push(centerIndex,polygon[i],polygon[(i+1)%polygon.length]);
       }
-      const geometry=new THREE.BufferGeometry();geometry.setAttribute('position',new THREE.Float32BufferAttribute(positions,3));geometry.setAttribute('color',new THREE.Float32BufferAttribute(colors,3));geometry.setAttribute('uv',new THREE.Float32BufferAttribute(uvs,2));geometry.setIndex(indices);geometry.computeVertexNormals();geometry.computeBoundingSphere();
+      for(let j=0;j<rows-1;j++)for(let i=0;i<cols-1;i++){const a=j*cols+i;triangle(a,a+cols,a+1);triangle(a+1,a+cols,a+cols+1);}
+      const geometry=new THREE.BufferGeometry();geometry.setAttribute('position',new THREE.Float32BufferAttribute(positions,3));geometry.setAttribute('color',new THREE.Float32BufferAttribute(colors,3));geometry.setAttribute('uv',new THREE.Float32BufferAttribute(uvs,2));geometry.setAttribute('normal',new THREE.Float32BufferAttribute(normals,3));geometry.setIndex(indices);geometry.computeBoundingSphere();
       const mesh=new THREE.Mesh(geometry,material);mesh.receiveShadow=true;lod.addLevel(mesh,distance,.12);
     }
     scene.add(lod);

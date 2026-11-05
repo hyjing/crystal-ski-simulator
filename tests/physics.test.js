@@ -29,7 +29,7 @@ test('baseline and representative new downhill routes finish in packed and powde
     for(let i=0;i<120*240&&next<route.points.length;i++){
       const p=route.points[next];let angle=Math.atan2(p.x-s.x,p.z-s.z)-s.heading;
       angle=Math.atan2(Math.sin(angle),Math.cos(angle));
-      stepSkier(s,{steer:clamp(-angle*2,-1,1),edge:s.speed>15||Math.abs(angle)>1?1:0},terrain,1/120,snow);
+      stepSkier(s,{steer:clamp(-angle*2,-1,1),edge:s.speed>15||Math.abs(angle)>1?.18:0,pole:s.speed<4},terrain,1/120,snow);
       if(Math.hypot(s.x-p.x,s.z-p.z)<65)next++;
     }
     assert.equal(next,route.points.length,`${snow}: ${route.name} must finish within four simulated minutes`);
@@ -168,6 +168,6 @@ test('USGS grid has valid dimensions, units, and consistent interpolation',()=>{
   for(const r of getRoutes(t,trailData)){
     assert.ok(r.drop>5&&r.length>50);
     for(const p of r.points)assert.ok(Number.isFinite(t.sample(p.x,p.z)));
-    const s=createSkier(r.points[0],r.points[1]);simulate(s,neutral,5,t);assert.ok(s.distance>2,`${r.name} must start moving under gravity`);
+    const s=createSkier(r.points[0],r.points[1]);simulate(s,{...neutral,pole:1},5,t);assert.ok(s.distance>2,`${r.name} can leave a slow source section with pole work`);
   }
 });

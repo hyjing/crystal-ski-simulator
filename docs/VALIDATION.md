@@ -34,7 +34,7 @@ The HUD reports FPS, raw frame interval P95 / maximum, hitch count, raster scale
 - No measured snow friction / edge calibration or flight / landing physics.
 - OSM lines may not coincide precisely with winter snow and grooming.
 - Near powder displaces a heightfield, not a physically conserved volume of snow; far trails remain lightweight ribbons.
-- Forest placement follows an aerial-derived heuristic; individual tree positions / heights are not surveyed. Crossed fir alpha cards are a visual approximation.
+- Forest placement follows an aerial-derived heuristic; individual tree positions / heights are not surveyed. Nearby procedural meshes and far crossed fir cards remain visual approximations.
 - OSM infrastructure positions use approximate authored appearance and support heights.
 - The surrounding 120 m DEM reproduces large mountain form, not detailed glaciers or cliffs.
 
@@ -60,3 +60,15 @@ The HUD reports FPS, raw frame interval P95 / maximum, hitch count, raster scale
 - A simple controller audit on full itineraries, with detailed ground and pole input, completed 5/10 before the station-exit refinement. This audit is not a manual-playability certification; it does not justify claiming all station-to-station traverses are validated.
 - Browser checks verify the Lucky Shot spawn near the Rainier Express upper terminal and outside building proxies, terrain shader compilation, the bounded run selector and the more detailed forest layout.
 - Additional geometry / texture memory comes from static terrain LOD meshes and the finer DEM texture. No frame-time equality with the previous build is claimed.
+
+
+## Station, snow edges and skier update — November 5, 2026
+
+- **37 automated tests pass**, plus the static production build. The earlier counts above are historical snapshots.
+- All ten station spawns have a physical surface pitch below 3°. Pole work is checked at low speed and at 12 m/s; trunk collision uses a swept test that excludes canopy-only proximity.
+- A regression starts at 12 m/s on constant 10°, 20° and 30° pitches, turns the skis across the slope with high edge input, then releases steering while retaining edge. Each case stops and remains stationary for a further two seconds. This validates controller behavior, not measured real ski friction.
+- All terrain LODs share identical perimeter coordinates, heights and normals in a synthetic tile fixture, preventing the former dark grid / skirt seams.
+- Representative source-section completion tests remain successful in both snow modes. Their controller uses light edge input (0.18), reserving strong edge for a deliberate stop, and uses poles at low speed. These checks do not establish completion of all ten full lift itineraries on the new authored terrain.
+- Browser checks: Lucky Shot starts at 0 km/h on a 2° exit; Shift moves the skier from rest; station overview shows terminal models and Summit House; drag-to-look shows the photographed cloud sky. No runtime or shader errors were observed. A development hot-reload session reported a duplicate Three.js import warning; the production build succeeds.
+- Arrival / return was exercised with the development fixture: enter the lower ring from 23 m away under normal physics, show the finish panel, then return to a stationary gentle upper exit. This is an interaction test, not a manual full-run playthrough. Return is instantaneous, without a lift-ride animation.
+- The new station / sky screenshot is `docs/media/crystal-stations.png`. The README video still predates this update. No new sustained GPU / frame-time benchmark was performed.

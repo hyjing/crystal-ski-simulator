@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import {HDRLoader} from 'three/addons/loaders/HDRLoader.js';
 
 // All terrain shares the local tile's UTM origin and metric vertical datum.
 export function gridBounds(grid,local){
@@ -67,7 +68,7 @@ export function addRainierTerrain(scene,grid,local,texture){
   scene.userData.rainierPeak=peak;return mesh;
 }
 
-export function addAlpineSky(scene){
+function addFallbackSky(scene){
   const sky=new THREE.Mesh(new THREE.SphereGeometry(58000,32,16),new THREE.ShaderMaterial({side:THREE.BackSide,depthWrite:false,
     uniforms:{zenith:{value:new THREE.Color('#5389b4')},horizon:{value:new THREE.Color('#d9e4eb')}},
     vertexShader:'varying vec3 vDirection;void main(){vDirection=position;gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.);}',
@@ -76,4 +77,13 @@ export function addAlpineSky(scene){
   // Keep preprocessor directives on their own lines for WebGL compilers.
   sky.material.fragmentShader=sky.material.fragmentShader.replace(';#include',';\n#include');
   scene.add(sky);
+}
+
+
+export async function addAlpineSky(scene,renderer){
+  try{
+    const texture=await new HDRLoader().loadAsync(`${import.meta.env.BASE_URL}assets/partly-cloudy-sky.hdr`);
+    texture.mapping=THREE.EquirectangularReflectionMapping;scene.background=texture;scene.backgroundIntensity=.78;
+    const pmrem=new THREE.PMREMGenerator(renderer);scene.environment=pmrem.fromEquirectangular(texture).texture;scene.environmentIntensity=.22;pmrem.dispose();
+  }catch(error){console.warn('Photo sky unavailable',error);addFallbackSky(scene);}
 }
