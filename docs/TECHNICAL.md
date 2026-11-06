@@ -203,3 +203,7 @@ Swept player-to-NPC contact uses a combined 0.9m horizontal radius and vertical 
 V opens a drone follow view; free mode freezes player and NPC simulation and moves only the camera. WASD / arrows translate, Q/E descend / ascend, Shift boosts speed. The camera stays within the active DEM tile and at least 5m above its surface. Exiting restores normal camera settings and the previous skiing mode / location.
 
 Normal follow samples the near grade and the grade 24–32m ahead. A convex downhill transition smoothly adds up to 5.5m camera height / 3m pullback and aims farther down the slope; uniformly steep slopes do not trigger this lift. Sixteen terrain samples keep the crest sightline clear. Close equipment viewing, air spins and large manual orbits disable anticipation.
+
+## Stable natural crest contact
+
+Automatic takeoff now samples curvature across a 2.5–6m span tied to DEM spacing, rather than 1–2m triangle-scale creases. It also checks ballistic clearance at 0.04s / 0.12s / 0.30s (>0.5cm / 6cm / 18cm), plus negative required support, and requires the conditions to persist for 25ms. The short probe prevents launching into an immediately rising surface even if longer lookahead sees a drop. A natural release starts with only 6mm numerical clearance, rather than a visible 25mm pop. Landing clears candidate state and uses a 450ms cooldown. Manual J retains its assisted impulse and bypasses natural-crest qualification. This deliberately lets the skier absorb small surface variations instead of bouncing at every DEM crease.

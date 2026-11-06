@@ -145,3 +145,7 @@ The HUD reports FPS, raw frame interval P95 / maximum, hitch count, raster scale
 ## Beanie and shorter neck
 
 89 local tests pass. Both GLBs contain the integrated beanie / cuff and no helmet group; cap material is rough and nonmetallic, both cloth parts retain wardrobe recoloring, and the Head joint segment measures ~4.6cm after shortening. Finite animated / grab bounds and prior anatomical separation tests pass. Validation remains unit tests plus production bundling, with no additional browser tests.
+
+## Crest micro-hop regression
+
+92 unit tests pass. A local 16m/s fixture over a 10cm bump previously produced a natural takeoff followed by a landing after ~0.192s. Revised tests cover 5–10cm bumps across 1/5/7.4m terrain spacings with zero takeoffs / zero free points; a genuine convex crest still launches once and lands after >0.3s; a sharp rising approach no longer launches and immediately recontacts. Existing manual J airtime, controlled 360 / grab, and landing tests remain passing. No browser tests were added.

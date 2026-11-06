@@ -22,3 +22,19 @@ test('assisted pop allows a controlled 360 plus grab and a clean landing',()=>{
  for(let i=0;i<240&&s.airborne;i++){stepAirborne(s,{spin:i<96?1:0,grab:true},flat,1/120);if(s.airEvent)landing=s.airEvent;}
  assert.equal(landing?.type,'land');assert.equal(landing.rotation,360);assert.equal(landing.grab,true);assert.equal(s.freestyleScore,450);
 });
+test('small DEM-scale bumps are absorbed without repeated micro takeoffs or free points',()=>{
+ for(const spacing of [1,5,7.4])for(const amplitude of [.05,.10]){
+  const h=z=>1500-.10*z+amplitude*Math.exp(-z*z/2),terrain={surface:(_,z)=>h(z),gradient:(_,z)=>({x:0,z:-.10-amplitude*z*Math.exp(-z*z/2)}),spacing},s={...fresh(),z:-8,vz:16,speed:16};let takeoffs=0;
+  for(let i=0;i<360;i++){stepAirborne(s,{},terrain,1/120);if(s.airEvent?.type==='takeoff')takeoffs++;}assert.equal(takeoffs,0,`spacing ${spacing}, amplitude ${amplitude}`);assert.equal(s.freestyleScore,0);
+ }
+});
+test('a real convex launch stays airborne meaningfully instead of immediately recontacting',()=>{
+ const h=z=>1500+2*Math.exp(-z*z/8),terrain={surface:(_,z)=>h(z),gradient:(_,z)=>({x:0,z:-z*.5*Math.exp(-z*z/8)}),spacing:1},s={...fresh(),z:-2,vz:16,speed:16};let count=0,landing;
+ for(let i=0;i<480;i++){stepAirborne(s,{},terrain,1/120);if(s.airEvent?.type==='takeoff')count++;if(s.airEvent?.type==='land'||s.airEvent?.type==='crash')landing=s.airEvent;}
+ assert.equal(count,1);assert.ok(landing);assert.ok(landing.airTime>.3);assert.equal(s.airborne,false);
+});
+test('a sharp rising approach cannot trigger an immediate one-frame false launch',()=>{
+ const h=z=>1500-.1*z+2*Math.exp(-z*z/2),terrain={surface:(_,z)=>h(z),gradient:(_,z)=>({x:0,z:-.1-2*z*Math.exp(-z*z/2)}),spacing:5},s={...fresh(),z:-8,vz:16,speed:16};let landing;
+ for(let i=0;i<720;i++){stepAirborne(s,{},terrain,1/120);if(s.airEvent?.type==='land'||s.airEvent?.type==='crash')landing=s.airEvent;}
+ assert.ok(landing);assert.ok(landing.airTime>.3);
+});
