@@ -7,6 +7,7 @@ import {trafficPoint,sweptContact} from './traffic-brain.js';
 import {crowdRoutes,lodgeAnchors,insideFootprint,poseInterval,SKIER_COUNT,CROWD_LIMIT,VISIBLE_CROWD_LIMIT} from './crowd-activities.js';
 import {makeVisitorSite,siteLocal,sitePoint,beginVisitor,advanceVisitor,visitorSurface,advanceSkierRoutine,fallAnimation} from './npc-routines.js';
 import {createRestArea,setVisitorProp,updateVisitorProp} from './rest-area.js';
+import {targetNpcPose,blendNpcPose} from './npc-pose.js';
 import {fitSnowContact} from './ground-contact.js';
 export {trafficPoint} from './traffic-brain.js';
 export const TRAFFIC_LIMIT=CROWD_LIMIT;
@@ -39,8 +40,8 @@ export class SkiTraffic{
    s.avoid+=(s.avoidTarget-s.avoid)*(1-Math.exp(-dt*2));const remaining=s.route.length-22-s.progress,target=remaining<10?0:s.target;
    s.speed+=(target-s.speed)*(1-Math.exp(-dt*(s.brake<.7?4:1.2)));s.progress=Math.min(s.route.length-22,s.progress+s.speed*dt);s.point=trafficPoint(s.route,s.progress,s.time,i,s.avoid);
    const dx=s.point.x-old.x,dz=s.point.z-old.z;if(Math.hypot(dx,dz)>.00001)s.point.heading=Math.atan2(dx,dz);
-   if(s.activity==='pause')s.point.heading+=s.parkingSide*1.1;
-   const yaw=Math.atan2(Math.sin(s.point.heading-s.heading),Math.cos(s.point.heading-s.heading));s.heading+=yaw*(1-Math.exp(-dt*10));const rate=Math.atan2(Math.sin(s.heading-s.previousHeading),Math.cos(s.heading-s.previousHeading))/Math.max(dt,.001);s.previousHeading=s.heading;
+   if(s.activity==='pause'&&s.speed<.15){s.point={...old};}else if(Math.hypot(dx,dz)<.001)s.point.heading=s.heading;
+   const yaw=Math.atan2(Math.sin(s.point.heading-s.heading),Math.cos(s.point.heading-s.heading));s.heading+=clamp(yaw*(1-Math.exp(-dt*6)),-dt*1.8,dt*1.8);const rate=Math.atan2(Math.sin(s.heading-s.previousHeading),Math.cos(s.heading-s.previousHeading))/Math.max(dt,.001);s.previousHeading=s.heading;
    s.roll+=(clamp(-Math.atan(rate*s.speed/9.81),-.55,.55)-s.roll)*(1-Math.exp(-dt*6));s.tuck+=((s.speed>8.5&&Math.abs(s.roll)<.12?.5:.08)-s.tuck)*(1-Math.exp(-dt*2));s.poling=s.activity==='ski'&&s.speed<3&&s.slope<.10?.65:0;s.phase=(s.phase+dt*1.15)%1;
   }
   for(let i=0;i<this.sites.length;i++){const site=this.sites[i],open=this.states.some(s=>s.kind==='lodge'&&s.site===site&&(s.wantDoor||(!s.indoor&&Math.hypot(s.point.x-sitePoint(site,0,-2.5).x,s.point.z-sitePoint(site,0,-2.5).z)<1.5)));site.doorOpen+=((open?1:0)-site.doorOpen)*(1-Math.exp(-dt*6));this.restAreas[i]?.update();}
@@ -61,16 +62,16 @@ export class SkiTraffic{
    if(Math.abs(separation)<1.6&&sweptContact(from,player,p,s.kind==='lodge'?.75:.9)){s.fall=1.5;s.fallDuration=1.5;s.cooldown=4;s.speed=0;return i;}
   }return null;
  }
- update(dt,player,active,enabled=true,camera){
+ update(dt,player,active,enabled=true,camera,frameDt=dt){
   if(!this.route)return;if(!active||!enabled){for(const a of this.actors)a.visible=false;this.lastPoseMs=0;this.lastVisibleCount=0;return;}const start=performance.now();if(dt>0)this.step(dt,player,enabled);const {up,forward,right,basis}=this;this.viewPoint={x:camera?.position.x??player.x,z:camera?.position.z??player.z};if(camera){camera.updateMatrixWorld();this.frustum.setFromProjectionMatrix(this.projection.multiplyMatrices(camera.projectionMatrix,camera.matrixWorldInverse));}
   const visible=[];
-  for(let i=0;i<this.actors.length;i++){const actor=this.actors[i],s=this.states[i],p=s.point,wasVisible=actor.visible,distance=Math.hypot(p.x-this.viewPoint.x,p.z-this.viewPoint.z);actor.visible=false;if(s.indoor||distance>480)continue;this.sphere.center.set(p.x,this.terrain.surface(p.x,p.z)-1200+.8,p.z);if(camera&&!this.frustum.intersectsSphere(this.sphere))continue;visible.push({i,distance,priority:distance-(wasVisible?30:0)});}
+  for(let i=0;i<this.actors.length;i++){const actor=this.actors[i],s=this.states[i],p=s.point,wasVisible=actor.visible,distance=Math.hypot(p.x-this.viewPoint.x,p.z-this.viewPoint.z);actor.visible=false;if(s.indoor||distance>(wasVisible?500:470))continue;this.sphere.center.set(p.x,this.terrain.surface(p.x,p.z)-1200+.8,p.z);this.sphere.radius=wasVisible?4:2.2;if(camera&&!this.frustum.intersectsSphere(this.sphere))continue;visible.push({i,distance,wasVisible,priority:distance-(wasVisible?60:0)});}
   visible.sort((a,b)=>a.priority-b.priority);this.lastVisibleCount=Math.min(visible.length,VISIBLE_CROWD_LIMIT);
-  for(const {i,distance} of visible.slice(0,VISIBLE_CROWD_LIMIT)){
+  for(const {i,distance,wasVisible} of visible.slice(0,VISIBLE_CROWD_LIMIT)){
    const actor=this.actors[i],s=this.states[i],p=s.point,walking=s.kind==='lodge';actor.visible=true;const snow=(x,z)=>walking?visitorSurface(s.site,x,z,(u,v)=>this.terrain.surface(u,v)):this.terrain.surface(x,z),base=snow(p.x,p.z),ground=walking?base+((s.seatGround??base)-base)*(s.sit||0):base;actor.position.set(p.x,ground-1200-.07,p.z);
    const gradient=walking?{x:0,z:0}:this.terrain.gradient(p.x,p.z),heading=s.heading;
    up.set(-gradient.x,1,-gradient.z).normalize();forward.set(Math.sin(heading),gradient.x*Math.sin(heading)+gradient.z*Math.cos(heading),Math.cos(heading)).normalize();right.crossVectors(up,forward).normalize();basis.makeBasis(right,up,forward);actor.quaternion.setFromRotationMatrix(basis);const fall=fallAnimation(s.fall,s.fallDuration||1.5);if(s.fall>0)actor.rotateZ(fall.amount*1.25);
-   const interval=poseInterval(distance),tick=Math.floor((this.elapsed+i*.013)/interval);if(s.poseAge>=interval||tick!==s.poseTick){s.poseTick=tick;if(s.poseAge>.5)actor.userData.plant={};updateAthletePose(actor,{speed:s.speed,heading,downhillHeading:Math.atan2(-gradient.x,-gradient.z),vx:Math.sin(heading)*s.speed,vz:Math.cos(heading)*s.speed,turn:s.roll,steerInput:clamp(s.roll*3,-1,1),edgeRoll:s.roll,edgeAngle:Math.abs(s.roll),tuck:s.tuck,poling:s.poling||0,polePhase:s.phase,walkAmount:s.walkAmount,walkPhase:s.walkPhase,idleShift:walking?Math.sin(s.time*.5+i)*.35:0,headLook:walking?Math.sin(s.time*.32+i)*.3:0,idleGesture:'',pedestrian:walking,sitAmount:walking?s.sit:0,riseLean:s.riseLean||0,holding:walking?s.prop:null,consumeAmount:s.consume||0,fallAmount:fall.amount,fallBrace:fall.brace,activityTime:s.time,softHands:true,crashRemaining:s.fall},Math.min(s.poseAge,.2),(x,z)=>snow(x,z)-1200);s.poseAge=0;}
+   const interval=poseInterval(distance),tick=Math.floor((this.elapsed+i*.013)/interval);if(!wasVisible||s.poseAge>=interval||tick!==s.poseTick){s.poseTick=tick;if(s.poseAge>.5)actor.userData.plant={};targetNpcPose(actor,()=>updateAthletePose(actor,{speed:s.speed,heading,downhillHeading:Math.atan2(-gradient.x,-gradient.z),vx:Math.sin(heading)*s.speed,vz:Math.cos(heading)*s.speed,turn:s.roll,steerInput:clamp(s.roll*3,-1,1),edgeRoll:s.roll,edgeAngle:Math.abs(s.roll),tuck:s.tuck,poling:s.poling||0,polePhase:s.phase,walkAmount:s.walkAmount,walkPhase:s.walkPhase,idleShift:walking?Math.sin(s.time*.5+i)*.35:0,headLook:walking?Math.sin(s.time*.32+i)*.3:0,idleGesture:'',pedestrian:walking,sitAmount:walking?s.sit:0,riseLean:s.riseLean||0,holding:walking?s.prop:null,consumeAmount:s.consume||0,fallAmount:fall.amount,fallBrace:fall.brace,activityTime:s.time,softHands:true,crashRemaining:s.fall},Math.min(s.poseAge,.2),(x,z)=>snow(x,z)-1200));s.poseAge=0;}blendNpcPose(actor,frameDt,!wasVisible);
    if(actor.userData.skiRig){actor.userData.skiRig.visible=!walking;for(const arm of actor.userData.arms){arm.pole.visible=!walking;arm.basket.visible=false;}}if(!walking||s.sit<.95)fitSnowContact(actor,snow,walking);if(walking)updateVisitorProp(actor,s.fall<=0,s.consume||0);
   }
   this.lastPoseMs=performance.now()-start;

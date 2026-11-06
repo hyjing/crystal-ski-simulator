@@ -166,3 +166,10 @@ For all three ski profiles in both bank directions, tests transform every render
 120 local unit tests pass and the production Pages-path build succeeds. New cases exercise complete rest / walk / reseat loops, waiting at blocked waypoints, door-gated indoor entry and exit, two visitors sharing a cabin without seat deadlock, actual geometric doorway ray tests, natural pedestrian wrist orientation, seated IK and refreshments following the hand, different skier speeds / pauses / falls, and eased player/NPC fall envelopes.
 
 Facility tests sweep a fast skier through a thin wall, check rotated boxes rather than broad AABBs, tower / house solidity, vertical clearance, a closed versus open door using the player capsule, and moving chair transforms. A real Crystal fixture builds and batches station geometry, retains its collision snapshots, checks all 11 itinerary spawns remain clear, and verifies moving carrier collision bodies. Lift tests verify active-lift selection, carrier-seat alignment, movement, visibility cap and disabling. Canvas label drawing is mocked only in that Node fixture; no browser inspection was performed. Visual quality, GPU cost, complete route traversal and all Snoqualmie station clearances are not verified by these tests.
+
+
+## Touch controls, local launchers and NPC continuity
+
+126 local unit tests pass; the Pages-path production build succeeds. New regression tests verify multi-finger / keyboard ownership, pointer-cancel release and paused-input guards; rendered bone interpolation; nearby visible chair occupancy when the active lift is elsewhere; bounded NPC heading rate and parked positions; and stable 12-actor selection during small camera jitter.
+
+The macOS local launcher was exercised through first dependency installation, repeat startup without reinstalling, a successful localhost HTTP response and SIGTERM shutdown, with browser auto-open disabled. Windows launcher execution, actual browser auto-opening and mobile rendering / touch gestures were not tested. Responsive CSS and hardware rendering changes were built locally; no browser testing was performed, as requested.

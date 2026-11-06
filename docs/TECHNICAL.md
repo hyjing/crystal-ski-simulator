@@ -230,3 +230,14 @@ NPC heading follows actual lateral travel; bank angles track turn rate, rather t
 Eight additional independently posed actors occupy four open chairs on the selected lift; at most four are rendered. Rider positions and orientations derive from the exact carrier instance matrix. Seated boots / skis hang forward, poles are hidden and head poses update at 2Hz. They share the cached NPC asset and the Equipment visibility toggle.
 
 `structure-collision.js` indexes static collision shapes in 32m cells. Mapped houses use extruded polygons, towers use cylinders, and station / cabin parts use oriented boxes. Station shapes are snapshotted before render batching. Dynamic doors and moving carriers retain current transforms. A radius-0.34m three-sphere player approximation sweeps in <=0.10m increments, clips motion and removes velocity into the surface. Impacts over 4.5m/s trigger a 1.6s fall and nearby recovery; recovery checks structures as well as trees. This is bounded gameplay collision, not a rigid-body engine, rideable-chair system or roof/platform locomotion solver. Fine handles and cables are not individually solid.
+
+
+## Touch input and NPC continuity
+
+`HeldControls` tracks each finger / keyboard source separately. Releasing one source preserves other held keys; global clear removes all owners on pause, blur and visibility changes. Touch capture cancellation / loss also releases its source. Mobile and coarse-pointer layouts provide separate steering / action groups, jump / air tricks, recenter, collapsible navigation and map, safe-area spacing, scrolling menus and compact landscape HUD. Free drone mode swaps to movement / elevation buttons. Canvas orbit owns one pointer ID, preventing a second finger from overwriting its drag.
+
+Touch devices cap initial pixel ratio at 1.0 and use a 2048px shadow map (desktop cap 1.15 / shadow 3072px). This reduces rendering cost but does not establish mobile compatibility or FPS.
+
+Lift riders now refresh their assignment among nearby in-frustum open chairs every 0.5s, with a retention bias and a preference for the active lift. A deterministic one-in-three chair candidate set keeps some chairs empty. Their eight-actor / four-visible budget remains unchanged. This fixes the previous allocation to only four widely separated chairs, which could leave all nearby chairs empty.
+
+Ground NPCs keep staggered IK but save bone targets and interpolate local quaternion / position every render frame. Newly visible actors receive a fresh pose immediately; frustum / distance margins and selection bias reduce visibility churn. Heading changes are capped at 1.8rad/s; parked agents hold their actual point and heading rather than rotating from tiny displacement noise. This is a targeted continuity fix, not proof that all visual artifacts are eliminated.

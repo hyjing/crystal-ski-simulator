@@ -100,3 +100,8 @@ The updated 900-frame CPU-only fixture measured 24 actors, up to 11 visible: med
 Ground traffic remains 24 actors / at most 12 visible. Eight additional lift riders share the cached source and are capped at four visible with 2Hz seated-pose updates; total rendered NPC budget is 16. Three fixed authored cabins add doors, benches and shared material geometry. Static station / chair refinements remain material-batched or instanced. Dynamic doors are queried separately; static facility colliders use a 32m spatial grid and moving chairs are distance-filtered.
 
 The updated 900-frame ground-crowd CPU fixture measured median 0.904ms / P95 2.445ms / max 21.043ms on this machine, with all 24 actors and up to 12 visible. This supersedes the preceding activity-crowd benchmark for the current build. It excludes lift riders, facility collisions, GPU rendering and the live forest-neighbor callback; it is not an end-to-end frame-rate claim. No browser/GPU performance test was run in this iteration, at the user's request.
+
+
+## Interpolated crowd poses and touch rendering
+
+The current 900-frame ground-crowd CPU fixture measured median 0.346ms / P95 0.650ms / max 1.110ms for 24 actors, up to 12 visible, including interpolation of cached bone targets. Measurements vary with machine load; this is not a browser or phone FPS claim. Existing staggered IK and NPC visibility budgets remain. Lift assignment scans current carrier centers at 2Hz, reusing the eight passenger actors. Touch devices start at pixel ratio <=1 and 2048px shadows; the adaptive raster floor remains 0.85. No mobile GPU benchmark was performed.
