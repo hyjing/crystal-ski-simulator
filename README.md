@@ -46,6 +46,6 @@ npm start
 
 Three.js / WebGL · Vite · 自定义滑雪物理 · USGS / Mapzen 高程 · OpenStreetMap 雪道。
 
-[技术说明](docs/TECHNICAL.md) · [资源与许可](docs/ASSETS.md) · [安全与隐私](SECURITY.md)
+[技术说明](docs/TECHNICAL.md) · [资源与许可](docs/ASSETS.md)
 
 独立开发中的原型，与各雪场无关联。地形与线路以真实数据为参考，场景和物理仍有近似，不用于现实导航。
