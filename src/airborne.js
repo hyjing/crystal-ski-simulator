@@ -5,8 +5,10 @@ export function landingQuality(heading,travelHeading,normalImpact){
  const angle=Math.abs(wrap(heading-travelHeading)),alignment=Math.min(angle,Math.PI-angle);
  return{clean:alignment<.55&&normalImpact<7.5,alignment,switchLanding:angle>Math.PI/2};
 }
+// Deliberate gameplay pop: retain real terrain, gravity and horizontal momentum.
+export const jumpImpulse=speed=>5.2+1.4*clamp((speed-3)/17,0,1);
 function launch(s,terrain,manual){
- const g=terrain.gradient(s.x,s.z);s.airborne=true;s.airY=height(terrain,s.x,s.z)+.025;s.airVy=g.x*s.vx+g.z*s.vz+(manual?2.5:0);
+ const g=terrain.gradient(s.x,s.z);s.airborne=true;s.airY=height(terrain,s.x,s.z)+.025;s.airVy=g.x*s.vx+g.z*s.vz+(manual?jumpImpulse(Math.hypot(s.vx,s.vz)):0);
  s.flightTime=0;s.trickYaw=0;s.spinRate=0;s.grabTime=0;s.grab=0;s.airPeak=0;s.launchHeight=s.airY;s.airEvent={type:'takeoff',manual};s.poling=0;
 }
 export function stepAirborne(s,input,terrain,dt,snow='packed'){
@@ -18,7 +20,7 @@ export function stepAirborne(s,input,terrain,dt,snow='packed'){
   const curvature=(height(terrain,s.x+fx*d,s.z+fz*d)-2*h+height(terrain,s.x-fx*d,s.z-fz*d))/(d*d);
   const probe=.14,vy=g.x*s.vx+g.z*s.vz,clearance=h+vy*probe-.5*PHYSICS.gravity*probe*probe-height(terrain,s.x+s.vx*probe,s.z+s.vz*probe);
   const natural=speed>5&&(PHYSICS.gravity+speed*speed*curvature)/Math.sqrt(1+g.x*g.x+g.z*g.z)<-.5&&clearance>.025;
-  if(!s.jumpCooldown&&((jump&&speed>3)||natural))launch(s,terrain,jump&&!natural);
+  if(!s.jumpCooldown&&((jump&&speed>3)||natural))launch(s,terrain,jump);
   else{stepSkier(s,input,terrain,dt,snow);s.airY=height(terrain,s.x,s.z);s.grab=Math.max(0,(s.grab||0)-dt*8);return s;}
  }
  const v=Math.hypot(s.vx,s.vz,s.airVy),cdA=PHYSICS.uprightCdA+(PHYSICS.tuckCdA-PHYSICS.uprightCdA)*(input.tuck?1:0),drag=Math.exp(-.5*PHYSICS.airDensity*cdA/PHYSICS.mass*v*dt);

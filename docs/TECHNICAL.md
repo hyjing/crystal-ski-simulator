@@ -189,3 +189,7 @@ Follow view waits about 1.8s after pointer release, then smoothly decays yaw/pit
 `SkiTraffic` has four lower-detail skinned NPCs moving in narrow lanes along the chosen itinerary. Their motion does not collide or claim multiplayer semantics. A fixed pool, staggered IK, frustum culling and shadow / particle suppression keep incremental work bounded. Resetting the run resets traffic; NPCs stop before the lower terminal instead of visibly teleporting to the front.
 
 `wardrobe.js` validates hex colors and an explicit ski-profile allowlist, clones palette buffers per actor, and stores colors / profile / NPC toggle locally under `crystal-gear-v1`. No appearance or score is uploaded.
+
+### Gameplay jump tuning
+
+J adds a deliberately assisted vertical pop of 5.2–6.6m/s, increasing smoothly with horizontal speed from 3 to 20m/s. The former 2.5m/s hop allowed only about half a second on flat terrain. Gravity stays 9.81m/s², horizontal momentum is unchanged apart from drag, and natural crest takeoffs receive no automatic bonus. A J press at a natural crest still applies the assisted pop. Flat/moderate slope fixtures give roughly 1–1.4s airtime and 1.3–2.3m terrain clearance; abrupt drop-offs or rising landings can differ. Terrain elevations, trail lengths and coordinates are unchanged.
