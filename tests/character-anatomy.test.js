@@ -6,3 +6,8 @@ for(const file of ['skier-complete.glb','skier-npc.glb'])test(`${file}: two sepa
  // Broad clothing without the previous deep, inflated upper torso.
  let depth=0;for(let i=0;i<p.count;i++)if(p.getY(i)>1.18&&p.getY(i)<1.35&&Math.abs(p.getX(i))<.20)depth=Math.max(depth,Math.abs(p.getZ(i)+.025));assert.ok(depth>.13&&depth<.175);
 });
+for(const file of ['skier-complete.glb','skier-npc.glb'])test(`${file}: folded knit beanie and short neck remain integrated with the head`,async()=>{
+ const b=fs.readFileSync(new URL(`../public/assets/${file}`,import.meta.url)),{scene}=await new GLTFLoader().parseAsync(b.buffer.slice(b.byteOffset,b.byteOffset+b.byteLength),''),cap=scene.getObjectByName('Integrated_beanie_and_goggles');
+ assert.ok(cap);assert.equal(scene.getObjectByName('Integrated_helmet_and_goggles'),undefined);assert.equal(cap.parent.name,'Head');const fabric=cap.children.filter(o=>o.isMesh&&o.userData.headwear);assert.equal(fabric.length,2);assert.ok(fabric.some(o=>o.name==='Folded_knit_cuff'));for(const m of fabric){assert.ok(m.material.roughness>=.9);assert.equal(m.material.metalness,0);}
+ const head=scene.getObjectByName('Head'),neck=scene.getObjectByName('neck_01');assert.ok(head.position.length()>.035&&head.position.length()<.055);assert.ok(neck.position.length()<.210);assert.ok(cap.children.every(o=>!o.isMesh||[...o.geometry.attributes.position.array].every(Number.isFinite)));
+});

@@ -99,13 +99,19 @@ const seams=new THREE.SkinnedMesh(seamGeometry,new THREE.MeshStandardMaterial({c
 // Keep the native human head and fingers. The whole covered body is removed from the render mesh.
 const exposed=[];for(let i=0;i<source.index.count;i+=3){const tri=[source.index.getX(i),source.index.getX(i+1),source.index.getX(i+2)];if(tri.every(j=>(p.getY(j)>1.55&&Math.abs(p.getX(j))<.15)||Math.abs(p.getX(j))>.685))exposed.push(...tri);}source.setIndex(exposed);
 const bodyColors=[];for(let i=0;i<p.count;i++)(Math.abs(p.getX(i))>.67||p.getY(i)<1.64?navy:new THREE.Color('#c49376')).toArray(bodyColors,i*3);source.setAttribute('color',new THREE.Float32BufferAttribute(bodyColors,3));body.material=new THREE.MeshStandardMaterial({vertexColors:true,roughness:.83});
-const hard=new THREE.MeshStandardMaterial({color:'#e5e8e9',roughness:.38,metalness:.12}),rubber=new THREE.MeshStandardMaterial({color:'#202b34',roughness:.85}),buckle=new THREE.MeshStandardMaterial({color:'#9dabb4',roughness:.32,metalness:.65});
+const rubber=new THREE.MeshStandardMaterial({color:'#202b34',roughness:.85}),buckle=new THREE.MeshStandardMaterial({color:'#9dabb4',roughness:.32,metalness:.65});
 function attach(name,center){const bone=scene.getObjectByName(name),group=new THREE.Group();group.position.copy(center).sub(bone.getWorldPosition(new THREE.Vector3())).applyQuaternion(bone.getWorldQuaternion(new THREE.Quaternion()).invert());group.quaternion.copy(bone.getWorldQuaternion(new THREE.Quaternion())).invert();bone.add(group);return group;}
 function mesh(parent,geometry,material,x=0,y=0,z=0){const m=new THREE.Mesh(geometry,material);m.position.set(x,y,z);parent.add(m);return m;}
-const head=attach('Head',new THREE.Vector3(0,1.725,0));head.name='Integrated helmet and goggles';
-mesh(head,new THREE.SphereGeometry(.137,npc?14:40,npc?10:28,0,Math.PI*2,0,Math.PI*.64),hard);
-mesh(head,new THREE.SphereGeometry(.141,npc?14:40,npc?10:24,Math.PI*.10,Math.PI*.80,Math.PI*.39,Math.PI*.22),rubber,0,-.01,.01).scale.x=.88;
-mesh(head,new THREE.SphereGeometry(.145,npc?14:40,npc?10:24,Math.PI*.13,Math.PI*.74,Math.PI*.41,Math.PI*.17),new THREE.MeshPhysicalMaterial({color:'#77a9c9',metalness:.45,roughness:.12,clearcoat:.9}),0,-.01,.013).scale.x=.88;
+const head=attach('Head',new THREE.Vector3(0,1.725,0));head.name='Integrated beanie and goggles';
+const knit=new THREE.MeshPhysicalMaterial({color:'#e5e8e9',roughness:1,metalness:0,sheen:.6,sheenRoughness:.95});
+const capShape=[[.124,-.005],[.130,.016],[.128,.050],[.117,.095],[.093,.128],[.060,.148],[.025,.156],[0,.158]].map(([r,y])=>new THREE.Vector2(r,y));
+const capGeometry=new THREE.LatheGeometry(capShape,npc?24:64),cp=capGeometry.attributes.position;
+// Tiny longitudinal ribs suggest knit without hard-shell panels or straps.
+for(let i=0;i<cp.count;i++){const x=cp.getX(i),z=cp.getZ(i),r=Math.hypot(x,z);if(r>.001){const rib=1+.006*Math.cos(Math.atan2(x,z)*36);cp.setXYZ(i,x*rib,cp.getY(i),z*rib);}}capGeometry.computeVertexNormals();
+const crown=mesh(head,capGeometry,knit);crown.name='Beanie crown';crown.userData.headwear=true;
+const cuff=mesh(head,new THREE.TorusGeometry(.123,.018,npc?6:12,npc?24:64),knit,0,.004,0);cuff.rotation.x=Math.PI/2;cuff.name='Folded knit cuff';cuff.userData.headwear=true;
+mesh(head,new THREE.SphereGeometry(.136,npc?14:40,npc?10:24,Math.PI*.10,Math.PI*.80,Math.PI*.39,Math.PI*.22),rubber,0,-.015,.01).scale.x=.90;
+mesh(head,new THREE.SphereGeometry(.139,npc?14:40,npc?10:24,Math.PI*.13,Math.PI*.74,Math.PI*.41,Math.PI*.17),new THREE.MeshPhysicalMaterial({color:'#77a9c9',metalness:.35,roughness:.16,clearcoat:.8}),0,-.015,.013).scale.x=.90;
 function sculptBoot(){
  const n=npc?18:40,m=new MarchingCubes(n,rubber,false,false,10000);m.isolation=0;
  for(let k=0;k<n;k++)for(let j=0;j<n;j++)for(let i=0;i<n;i++){
@@ -121,9 +127,11 @@ for(const sign of [-1,1]){
  const boot=attach(`foot_${sign>0?'l':'r'}`,new THREE.Vector3(sign*.114,.13,-.05));boot.name='Articulated ski boot';
  mesh(boot,bootShape,rubber);
  if(!npc)for(let j=0;j<3;j++)mesh(boot,new RoundedBoxGeometry(.13,.012,.021,2,.004),buckle,0,-.025+j*.047,.106-j*.019);
- const points=[-.065,-.035,0,.035,.065].map(z=>new THREE.Vector3(sign*.05,Math.sqrt(.137*.137-.05*.05-z*z)+.002,z));mesh(head,new THREE.TubeGeometry(new THREE.CatmullRomCurve3(points),12,.0027,6,false),rubber);
+
 }
 scene.getObjectByName('Eyes').material=new THREE.MeshStandardMaterial({color:'#deded8',roughness:.4});scene.getObjectByName('Eyebrows').material=rubber;
+// Shorten the exposed neck chain; inherited skin bind matrices move the face and cap together.
+scene.getObjectByName('neck_01').position.multiplyScalar(.96);scene.getObjectByName('Head').position.multiplyScalar(.55);scene.updateMatrixWorld(true);
 scene.name='Complete winter skier';scene.userData={source:'CC0 Quaternius head, hands and 65-bone skeleton; authored continuous ski suit and equipment',generator:'scripts/build-skier.mjs'};
 // Node's Blob is available; GLTFExporter only needs these two FileReader methods.
 globalThis.FileReader=class{readAsArrayBuffer(blob){blob.arrayBuffer().then(v=>{this.result=v;this.onloadend?.();});}readAsDataURL(blob){blob.arrayBuffer().then(v=>{this.result=`data:${blob.type};base64,${Buffer.from(v).toString('base64')}`;this.onloadend?.();});}};

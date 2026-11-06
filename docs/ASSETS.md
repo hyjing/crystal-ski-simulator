@@ -106,7 +106,7 @@ This section supersedes the earlier primitive-only character and dynamic near/mi
 
 ## Complete skier and higher-resolution scenery — November 5, 2026
 
-- Runtime character is now `public/assets/skier-complete.glb` (4,307,728 bytes; SHA-256 `21304384bee7d263f9c6da06f49560b1831b604ff58149774909b81ca5fb0972`). `scripts/build-skier.mjs` rebuilds it from the preserved Quaternius CC0 source, retaining its head, hands and 65-bone skeleton. The original license above remains applicable to source components.
+- Runtime character is now `public/assets/skier-complete.glb` (4,306,432 bytes; SHA-256 `b30cafb661e8096f50957fe8891585395cc8e103e0f321fb5d7aa785248314a7`). `scripts/build-skier.mjs` rebuilds it from the preserved Quaternius CC0 source, retaining its head, hands and 65-bone skeleton. The original license above remains applicable to source components.
 - The authored winter outfit is one closed, connected 36,562-vertex / 73,120-triangle surface, rather than inflated and clipped body triangles. Shoulder / sleeve unions, seat / trouser transitions and collar are built in bind pose, welded with smooth normals, and given normalized weights transferred from the native skeleton. Helmet, goggles and sculpted ski boots are included in the GLB. Covered body triangles and legacy box boots are hidden. No new clothing asset from an unverified marketplace is used. It remains an authored stylized character, not a scanned / commercially produced skier or cloth simulation.
 - `scripts/fetch-scenery-detail.py` exports four NAIP tiles per footprint and stitches them into 4096px images; coordinates, tile extents, source and retrieval date are retained in adjacent JSON. This increases actual sampled image detail rather than enlarging the old bitmap. Winter appearance remains authored from snow-free imagery.
 - `scripts/fetch-context-detail.py` retrieves USGS 3DEP on the same imagery footprint at about 60m export spacing (770 × 642 samples). Export spacing is not a claim about native survey resolution. The summit retains its existing ~36m source grid. Adaptive static geometry retains finer samples in the summit / river-valley areas and stitches their boundaries to coarse outer cells.
@@ -122,7 +122,7 @@ The current outfit replaces the previous straight-sided torso with smooth garmen
 
 The current cut widens shoulder / chest / hem, sleeves, thighs and lower legs, while reducing repeated fold amplitude. Preset and custom colors are applied to native vertex-color regions, helmet material and ski geometry; no branded clothing or texture is introduced. Three authored ski shapes use nominal sidecuts of 16 / 19 / 23m. These are gameplay parameters, not manufacturer calibration.
 
-`public/assets/skier-npc.glb` is a lower-resolution derivative generated with `node scripts/build-skier.mjs --npc` from the same documented CC0 source. 1,312,540 bytes; SHA-256 `f640cb784c5ef53f6696dec638c412470992a94b276c1994a366c4961660f859`. The outfit has 5,726 vertices / 11,448 triangles; the complete baked NPC model has 24,036 triangles including anatomy / equipment. The shared skeleton has independent poses per NPC. This uses the existing source license, with authored clothing / gear additions.
+`public/assets/skier-npc.glb` is a lower-resolution derivative generated with `node scripts/build-skier.mjs --npc` from the same documented CC0 source. 1,313,128 bytes; SHA-256 `6a85a54e2fe78e631de51ebe9ff8e64e34757eb54ca187aadb37e0a0349bf28a`. The outfit has 5,726 vertices / 11,448 triangles; the complete baked NPC model has 24,106 triangles including anatomy / equipment. The shared skeleton has independent poses per NPC. This uses the existing source license, with authored clothing / gear additions.
 
 ## Snoqualmie four-area geographic packs
 
@@ -135,3 +135,5 @@ Build geographic exports with `python3 scripts/fetch-snoqualmie.py` (Pillow and 
 ## Anatomical outfit revision
 
 The authored suit now has a higher, shallower pelvis volume and two separately defined trouser legs with a continuous open gap below the crotch. Torso depth and upper-arm volume are reduced while retaining loose hem / cuffs. Leg weights below the crotch cannot reference the opposite leg; central chest panels cannot reference arm / hand bones. These revisions are applied to both player and NPC assets. No downloaded commercial character, product photo, brand logo or Sketchfab mesh is bundled. Research links and scope are recorded in CHARACTER_REFERENCES.md.
+
+Headwear is now an authored knit beanie crown and folded cuff with cloth shading, plus the existing goggles. Helmet shell / straps were removed. The neck chain is shortened in both exported assets while retaining skin bind matrices; see CHARACTER_REFERENCES.md. No new external assets were introduced.

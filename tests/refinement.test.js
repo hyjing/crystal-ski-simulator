@@ -30,7 +30,7 @@ test('the checked-in humanoid has a real skeleton, deforms finitely and counter-
  const bytes=fs.readFileSync(new URL('../public/assets/skier-complete.glb',import.meta.url)),gltf=await new GLTFLoader().parseAsync(bytes.buffer.slice(bytes.byteOffset,bytes.byteOffset+bytes.byteLength),'');
  const actor=createAthleteRig(new THREE.Scene()),rig=attachHumanoid(actor,gltf.scene);assert.ok(Object.keys(rig.bones).length>50);assert.ok(rig.model.getObjectByName('SuperHero_Male').isSkinnedMesh);
  const suit=rig.model.getObjectByName('Unified_ski_suit');assert.ok(suit?.isSkinnedMesh);
- assert.ok(suit.geometry.index.count/3>40000);assert.ok(rig.model.getObjectByName('Integrated_helmet_and_goggles'));assert.ok(rig.model.getObjectByName('Articulated_ski_boot'));
+ assert.ok(suit.geometry.index.count/3>40000);assert.ok(rig.model.getObjectByName('Integrated_beanie_and_goggles'));assert.ok(rig.model.getObjectByName('Articulated_ski_boot'));
  actor.rotation.y=.8;const s={speed:12,heading:.8,downhillHeading:0,turn:1,edgeRoll:.8,edgeAngle:.8,tuck:.2,poling:0};updateAthletePose(actor,s,1/60,()=>0);actor.updateMatrixWorld(true);
  const torso=rig.bones.spine_03.getWorldQuaternion(new THREE.Quaternion()).multiply(rig.rest.get('spine_03').q.clone().invert()),hips=rig.bones.pelvis.getWorldQuaternion(new THREE.Quaternion()).multiply(rig.rest.get('pelvis').q.clone().invert());
  const heading=q=>{const f=new THREE.Vector3(0,0,1).applyQuaternion(q);return Math.atan2(f.x,f.z);};assert.ok(Math.abs(heading(torso))<Math.abs(heading(hips))*.5);assert.ok(upperBodyCounterAngle(.8,0)<-.6);

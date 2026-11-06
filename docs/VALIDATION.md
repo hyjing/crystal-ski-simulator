@@ -141,3 +141,7 @@ The HUD reports FPS, raw frame interval P95 / maximum, hitch count, raster scale
 ## Final anatomical revision
 
 87 local unit tests pass. Both regenerated GLBs are checked at three leg cross-sections for an actual center gap (no connecting triangles), for absence of opposite-leg influences below the crotch, for exclusion of arm influences on the central chest, and for a bounded chest depth below the hood. Existing closed/manifold topology, normalized weights, animated finite bounds and full-grab pose checks remain. Production bundling also passes. No further browser tests were performed after the user requested local-only verification; the new character appearance and crest-camera change have not been visually validated in-browser.
+
+## Beanie and shorter neck
+
+89 local tests pass. Both GLBs contain the integrated beanie / cuff and no helmet group; cap material is rough and nonmetallic, both cloth parts retain wardrobe recoloring, and the Head joint segment measures ~4.6cm after shortening. Finite animated / grab bounds and prior anatomical separation tests pass. Validation remains unit tests plus production bundling, with no additional browser tests.
