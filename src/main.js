@@ -158,7 +158,9 @@ async function init(){
   if(import.meta.env.DEV&&new URLSearchParams(location.search).has('record-demo')){
     const {installDemoCapture}=await import('./capture-demo.js');
     demoCapture=installDemoCapture({canvas:renderer.domElement,skier:()=>skier,route:()=>route,minimap:()=>$('minimap'),
-      intro:()=>{selectRoute('green-valley');goIntro();},start:startRun,view:value=>{view=value;},input:value=>{recordedInput=value;},
+      mountain:()=>mountain,weather:id=>weather.set(id),
+      stage:()=>{startRun();const candidates=[.35,.45,.55,.25,.65].map(f=>pointAlongRoute(route,route.length*f)),p=candidates.find(p=>{const g=terrain.gradient(p.x,p.z);return Math.hypot(g.x,g.z)>.12&&Math.hypot(g.x,g.z)<.6&&!structures.blocked(p.x,p.z,terrain.surface(p.x,p.z))&&!(treePositions.nearby?.(p.x,p.z)||[]).some(t=>Math.hypot(t.x-p.x,t.z-p.z)<3);})||candidates[0],next=pointAlongRoute(route,nearestOnRoute(p,route.points).progress+15);skier=createSkier(p,next);skier.vx=Math.sin(skier.heading)*10;skier.vz=Math.cos(skier.heading)*10;skier.speed=10;skier.trafficGrace=60;skier.skiSidecut=SKI_PROFILES[gear.board].sidecut;traffic?.reset(route,skier,routes);mode='inspection';updateAthlete(0);updateCamera(0,true);},
+      start:()=>{mode='running';},stop:()=>{mode='inspection';},view:value=>{view=value;},input:value=>{recordedInput=value;},
       aerial:()=>{mapLayer='aerial';$('map-layer').textContent='地形图';drawMap();}});
   }
   requestAnimationFrame(animate);

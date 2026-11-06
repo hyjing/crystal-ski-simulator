@@ -2,9 +2,9 @@
 
 基于真实地形和地图数据的浏览器 3D 滑雪游戏。沿雪道滑行、留下滑痕，也可以用无人机探索雪场。
 
-**[在线试玩](https://hyjing.github.io/crystal-ski-simulator/)** · [短视频 Demo（早期版本）](docs/media/crystal-demo.mp4)
+**[在线试玩](https://hyjing.github.io/crystal-ski-simulator/)** · [24 秒实机 Demo](docs/media/terrain-demo-current.mp4)
 
-[![游戏预览](docs/media/crystal-poster.png)](https://hyjing.github.io/crystal-ski-simulator/)
+[![游戏预览](docs/media/current-crystal.png)](https://hyjing.github.io/crystal-ski-simulator/)
 
 ## 功能
 

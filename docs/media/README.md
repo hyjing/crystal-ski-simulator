@@ -1,48 +1,26 @@
-# README media
+# Project media
 
-All gameplay imagery here was captured from this repository's live browser build, version 0.3.1. It is not a pre-rendered simulation or generated gameplay scene. The demo uses scripted analog steering inputs through the same `stepSkier` controller, with the live terrain renderer and powder deformation.
+Current README media was recorded from the live game on November 6, 2026, with the gameplay content from commit `690c6f3` (Whistler maps, current skier, NPCs and scenery). It is actual WebGL rendering, with scripted controller inputs and staged starting positions; it is not recorded human play or a generated / pre-rendered gameplay scene.
 
-| Asset | Purpose |
+| Asset | Content |
 | --- | --- |
-| `crystal-demo.mp4` | ~20 s, 1280 × 720, H.264, 30 FPS, silent |
-| `crystal-preview.gif` | 6 s excerpt, 640 × 360, 10 FPS, looping README preview |
-| `crystal-poster.png` | Title frame from the actual capture |
-| `crystal-powder.jpg` | Gameplay frame with powder and aerial minimap |
-| `crystal-resort.jpg` | Overview frame showing terrain / resort layout |
+| `terrain-demo-current.mp4` | ~24 seconds, 1280×720, H.264 / 30 FPS encoding, silent; Crystal skiing → Whistler skiing → Crystal sunset overview |
+| `current-crystal.png` | Current Green Valley skier / snow / scenery, extracted from the new capture |
+| `current-whistler.png` | Current Harmony Ridge, with nearby NPCs and OSM-referenced scenery |
+| `current-sunset.png` | Current Crystal sunset overview |
+| `../../public/social-card.png` | Copy of `current-crystal.png`, used for link previews |
+
+The edit uses two freshly recorded 24-second source clips: Crystal 0–10s, Whistler 6–15s, Crystal 19–24s. Stills are extracted without scene alterations. Encoding at 30 FPS does not establish a sustained game frame rate. The weather change and overview camera are scripted. Whistler's reference map is derived from OSM landcover; it is not satellite photography.
 
 ## Record again
 
-```sh
-npm run dev
-```
+Run `npm run dev`, open one of these development URLs at **1280×720**, wait for scene / NPC loading, then click **录制 24 秒实机 Demo**:
 
-Open `http://127.0.0.1:5173/?record-demo` in a browser at 1280 × 720, then click **录制 20 秒实机 Demo**. The development-only recorder captures the game's WebGL canvas into a clean 2D composite with captions and live telemetry, then downloads `crystal-terrain-demo.webm`. No desktop / microphone recording permission is used. The recorder is excluded from production builds.
+- `/?record-demo&route=green-valley`
+- `/?record-demo&mountain=whistler&route=harmony-ridge`
 
-The first 2.2 seconds show the terrain; the next section runs the ski controller; the final 3.5 seconds use the overview camera. Inputs are automated for repeatability, not recorded human play. Wall-clock capture runs at real time.
+The recorder downloads `terrain-crystal-current.webm` or `terrain-whistler-current.webm`. It captures the game canvas with minimal captions / telemetry, without the desktop or microphone. The intermediate WebM files are not committed. Recording controls are excluded from production builds.
 
-## Encode
+Use FFmpeg to encode H.264 with `-pix_fmt yuv420p -r 30 -movflags +faststart -map_metadata -1 -an`. The source clips run in real time; the current edit uses cuts without speeding up playback. Asset attribution remains in [ASSETS.md](../ASSETS.md).
 
-Requires FFmpeg:
-
-```sh
-ffmpeg -i crystal-terrain-demo.webm -c:v libx264 -preset medium -crf 22 \
-  -pix_fmt yuv420p -r 30 -movflags +faststart -an crystal-demo.mp4
-
-ffmpeg -ss 6 -t 6 -i crystal-demo.mp4 \
-  -filter_complex 'fps=10,scale=640:-1:flags=lanczos,split[a][b];[a]palettegen=max_colors=80:stats_mode=diff[p];[b][p]paletteuse=dither=bayer:bayer_scale=4:diff_mode=rectangle' \
-  -loop 0 crystal-preview.gif
-```
-
-The README uses GIF for a reliable inline animation and links the full MP4 separately. Media files stay in the repository so they do not depend on an external video host. The source WebM is an intermediate and is not committed.
-
-Elevation, map and generated-asset attribution remains in [ASSETS.md](../ASSETS.md). © OpenStreetMap contributors; USGS / USDA NAIP.
-
-`crystal-rainier.png` is an additional live browser screenshot of the later distant-scenery update. It is not part of the original v0.3.1 video; that video remains a record of the previous build.
-
-`rebuilt-character.png` and `refined-rainier.png` show the complete skier / 4K geographic scenery rebuild. They are staged live browser inspection views. Older video and screenshot files remain historical; they do not represent every current asset.
-
-`contoured-character-front.png` and `contoured-character-back.png` show the later garment-silhouette revision, captured through the real close follow camera in development inspection mode. These document the previous silhouette revision.
-
-`freeride-gear.png` shows the previous wider, smoother outfit and live equipment panel (cream / olive palette, park skis). `queens-traffic.png` shows Queens Run and nearby NPC skiers. Both are actual browser screenshots from development inspection mode, with the QA controls hidden; the route location is staged and animation is frozen for capture. They are newer than the original video.
-
-`snoqualmie-drone.png` shows the Summit West drone in free-flight mode after native keyboard ascent. This is the current game renderer; no official trail-map artwork is used.
+Older `crystal-demo.mp4`, `crystal-preview.gif`, `crystal-poster.png` and other historical screenshots remain in this folder as development records. They are no longer the README's featured video / preview. In particular, the old 20-second video predates the current character, NPC and Whistler updates.
