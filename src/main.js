@@ -60,6 +60,7 @@ async function init(){
   $('start').disabled=true;
   $('mountain').value=mountainId;$('mountain-coordinates').textContent=mountain.coordinates;$('mountain-description').textContent=`在 ${mountain.name} 的真实地形上，找到自己的线路。`;$('world').setAttribute('aria-label',`${mountain.name} 3D 滑雪场景`);document.title=`${mountain.name} / Terrain Sessions`;
   document.querySelector('.terrain-caption>span:last-child').firstChild.textContent=mountain.name.toUpperCase();
+  if(mountain.referenceMap){$('map-layer').textContent='参考图';document.querySelector('.map-attribution').textContent='© OSM · Mapzen / Canada OGL';document.querySelector('.map-attribution').href='https://github.com/tilezen/joerd/blob/master/docs/attribution.md';document.querySelector('.data-note>span:last-child').textContent='缆车上站到下站 / OSM 林区参考 / 局部粉雪形变';document.querySelector('.terrain-caption>span:last-child>span').firstChild.textContent='Mapzen Terrain Tiles · ';}
   const response=await fetch(asset('dem.json'));
   if(!response.ok) throw new Error('无法载入高程数据，请刷新重试。');
   terrain=createTerrain(await response.json());
@@ -81,7 +82,7 @@ async function init(){
   terrain=preparePisteTerrain(terrain,network);
   const stationGround=prepareStationTerrain(terrain,routes,infrastructure);terrain=stationGround.terrain;stationAreas=stationGround.areas;
   routes=getLiftRuns(terrain,runs);route=routes[0];
-  $('terrain-resolution').textContent=`真实 USGS 高程 · 约 ${Math.round(terrain.spacing)}m 导出采样`;
+  $('terrain-resolution').textContent=`真实 ${mountain.elevationLabel||'USGS'} 高程 · 约 ${Math.round(terrain.spacing)}m 导出采样`;
   scene=new THREE.Scene(); scene.background=new THREE.Color('#cbdce9'); scene.fog=new THREE.Fog('#cbdce9',12000,65000);
   camera=new THREE.PerspectiveCamera(58,innerWidth/innerHeight,1,65000);
   renderer=new THREE.WebGLRenderer({antialias:true, powerPreference:'high-performance'});
@@ -115,8 +116,9 @@ async function init(){
   speedRenderer=new SpeedRenderer(renderer,scene,camera);
   aerialImage=new Image();aerialImage.onload=()=>drawMap();aerialImage.src=asset('aerial.jpg');
   // Load real far terrain progressively; retain the coarse grid if detailed assets fail.
-  fetch(`${import.meta.env.BASE_URL}${mountain.area?'data/snoqualmie/context/dem.json':'data/context-dem.json'}`).then(r=>{if(!r.ok)throw new Error('context DEM');return r.json();}).then(async context=>{
+  fetch(`${import.meta.env.BASE_URL}${mountain.context||(mountain.area?'data/snoqualmie/context/dem.json':'data/context-dem.json')}`).then(r=>{if(!r.ok)throw new Error('context DEM');return r.json();}).then(async context=>{
     let coarse=addContextTerrain(scene,context,terrain);
+    if(mountain.pack==='whistler'){try{const map=await new THREE.TextureLoader().loadAsync(`${import.meta.env.BASE_URL}data/whistler/context/aerial.jpg`);addContextTerrain(scene,context,terrain,map);scene.remove(coarse);coarse.geometry.dispose();coarse.material.dispose();weather.prepareMaterials();}catch(error){console.warn('Whistler context reference unavailable',error);}return;}
     const regionRoot=`${import.meta.env.BASE_URL}data/scenery/${mountain.area?'snoqualmie':'crystal'}/`;
     const regionAssets=async()=>{try{const [grid,map]=await Promise.all([fetch(regionRoot+'dem.json').then(r=>{if(!r.ok)throw new Error('regional DEM');return r.json();}),new THREE.TextureLoader().loadAsync(regionRoot+'aerial.jpg?v=regional-1')]);if(!validRegionalGrid(grid,context)){map.dispose();throw new Error('regional registration');}map.anisotropy=Math.min(8,renderer.capabilities.getMaxAnisotropy());return{grid,map};}catch(error){console.warn('Regional scenery unavailable; retaining background',error);return null;}};
     if(mountain.area){try{const [map,region]=await Promise.all([new THREE.TextureLoader().loadAsync(`${import.meta.env.BASE_URL}data/snoqualmie/context/aerial.jpg`),regionAssets()]);addContextTerrain(scene,context,terrain,map,undefined,region?.grid);if(region)addRegionalTerrain(scene,region.grid,context,terrain,region.map);scene.remove(coarse);coarse.geometry.dispose();coarse.material.dispose();weather.prepareMaterials();}catch(error){console.warn('Context imagery unavailable',error);}return;}
@@ -135,7 +137,7 @@ async function init(){
   createSkiTraffic(scene,{...terrain,surface:(x,z)=>powder.surface(x,z)},{stationAreas,infrastructure,onStructuresChanged:()=>structures.rebuild()}).then(t=>{traffic=t;traffic.reset(route,skier,routes);weather.prepareMaterials();}).catch(error=>console.warn('Other skiers unavailable',error));
   createLiftPassengers(scene,resortUpdate).then(p=>{liftPassengers=p;p.select(route.liftId);weather.prepareMaterials();}).catch(error=>console.warn('Lift riders unavailable',error));
   renderRouteList();
-  selectRoute(route.id);weather.update(0,camera,athlete.position);weather.snowfall.mesh.visible=true;speedRenderer.prepare();weather.snowfall.mesh.visible=false;$('loading').classList.add('hidden'); $('start').disabled=false;
+  selectRoute(routes.find(r=>r.id===new URLSearchParams(location.search).get('route'))?.id||route.id);weather.update(0,camera,athlete.position);weather.snowfall.mesh.visible=true;speedRenderer.prepare();weather.snowfall.mesh.visible=false;$('loading').classList.add('hidden'); $('start').disabled=false;
   if(import.meta.env.DEV&&new URLSearchParams(location.search).has('visual-qa')){
     const panel=document.createElement('div');Object.assign(panel.style,{position:'fixed',left:'350px',top:'95px',zIndex:40,display:'flex',gap:'6px'});
     for(const [id,label,routeId,fraction] of [['slope','QA：坡面','green-valley',.38],['forest','QA：林间','mr-magoo',.48],['queens','QA：Queens','queens-run',.30],['hop','QA：跳跃','queens-run',.25]]){
@@ -290,15 +292,16 @@ function updatePhysics(dt){
     const score=skier.freestyleScore,distance=skier.distance,count=skier.collisionCount,p=pendingRecovery;
     skier=createSkier(p,{x:p.x+Math.sin(p.heading)*5,z:p.z+Math.cos(p.heading)*5});Object.assign(skier,{freestyleScore:score,distance,collisionCount:count,trafficGrace:3,skiSidecut:SKI_PROFILES[gear.board].sidecut});pendingRecovery=null;Object.assign(previousPosition,{x:skier.x,z:skier.z,y:terrain.surface(skier.x,skier.z)-1200});snowEffects.breakTrail();powder.breakTrail();keys.clear();toast('已在附近安全位置站起 · Shift 撑杖继续');
   }
-  if(!skier.crashRemaining&&!pendingRecovery){const contact=structures?.resolve(previousPosition,skier,terrain);if(contact&&contact.impact>4.5){pendingRecovery=safeRecovery(route,skier,terrain,(x,z)=>structures.blocked(x,z,terrain.surface(x,z))||(treePositions.nearby?.(x,z)||[]).some(t=>Math.hypot(t.x-x,t.z-z)<3));skier.airborne=false;skier.crashReason='structure';skier.crashRemaining=skier.crashDuration=1.6;skier.vx=skier.vz=skier.speed=0;keys.clear();snowEffects.breakTrail();powder.breakTrail();toast(`撞到${contact.collider.label||'设施'} · 稍后在附近重新站起`);}}
+  if(!skier.crashRemaining&&!pendingRecovery){const contact=structures?.resolve(previousPosition,skier,terrain);if(contact&&contact.impact>4.5){pendingRecovery=safeRecovery(route,skier,terrain,(x,z)=>structures.blocked(x,z,terrain.surface(x,z))||(treePositions.nearby?.(x,z)||[]).some(t=>Math.hypot(t.x-x,t.z-z)<3));skier.airborne=false;skier.crashReason='structure';skier.crashRemaining=skier.crashDuration=3.2;skier.vx=skier.vz=skier.speed=0;keys.clear();snowEffects.breakTrail();powder.breakTrail();toast(`撞到${contact.collider.label||'设施'} · 稍后在附近重新站起`);}}
   if(traffic&&traffic.collide(previousPosition,skier)!==null&&!pendingRecovery){
     pendingRecovery=safeRecovery(route,skier,terrain,(x,z)=>(treePositions.nearby?.(x,z)||[]).some(t=>Math.hypot(t.x-x,t.z-z)<3)||traffic.states.some(s=>s.point&&!s.indoor&&Math.hypot(s.point.x-x,s.point.z-z)<5)||structures?.blocked(x,z,terrain.surface(x,z)));
-    skier.freestyleScore=(skier.freestyleScore||0)-TRAFFIC_PENALTY;skier.collisionCount=(skier.collisionCount||0)+1;skier.airborne=false;skier.crashReason='traffic';skier.crashRemaining=1.25;skier.crashDuration=1.25;skier.vx=skier.vz=skier.speed=0;keys.clear();snowEffects.breakTrail();powder.breakTrail();toast(`碰撞雪友 −${TRAFFIC_PENALTY} 分 · 稍后在附近重新站起`);
+    skier.freestyleScore=(skier.freestyleScore||0)-TRAFFIC_PENALTY;skier.collisionCount=(skier.collisionCount||0)+1;skier.airborne=false;skier.crashReason='traffic';skier.crashRemaining=3.2;skier.crashDuration=3.2;skier.vx=skier.vz=skier.speed=0;keys.clear();snowEffects.breakTrail();powder.breakTrail();toast(`碰撞雪友 −${TRAFFIC_PENALTY} 分 · 稍后在附近重新站起`);
   }
   if(skier.airEvent?.type==='takeoff'||skier.airEvent?.type==='land'||skier.airEvent?.type==='crash'){snowEffects.breakTrail();powder.breakTrail();}
   if(skier.airEvent?.type==='land'&&skier.airEvent.points&&!pendingRecovery)toast(`平稳落地 +${skier.airEvent.points}${skier.airEvent.rotation?' · '+skier.airEvent.rotation+'°':''}${skier.airEvent.grab?' · 抓板':''}`);
   if(skier.airEvent?.type==='jump-blocked')toast('起跳需要至少 18 km/h · 先撑杖或顺坡加速');
-  if(skier.airEvent?.type==='crash')toast('落地失衡，稳住后继续；R 返回检查点');elapsed+=dt;peakSpeed=Math.max(peakSpeed,skier.speed);totalDistance=skier.distance;
+  if(skier.airEvent?.type==='land'&&skier.airEvent.quality==='recover')toast('落地稍偏 · 屈膝缓冲、搓雪恢复');
+  if(skier.airEvent?.type==='crash'){const reasons={impact:'触地冲击过大',crossed:'高速横板落地',combined:'横板与冲击叠加',rotation:'空中旋转尚未收住'};toast(`落地摔倒：${reasons[skier.airEvent.reason]||'失去支撑'} · 正在起身`);}elapsed+=dt;peakSpeed=Math.max(peakSpeed,skier.speed);totalDistance=skier.distance;
   const boundsX=(terrain.width-1)*terrain.spacing/2-20,boundsZ=(terrain.height-1)*terrain.spacing/2-20;
   if(Math.abs(skier.x)>boundsX||Math.abs(skier.z)>boundsZ){resetPosition();toast('已到地形边界，返回检查点');return;}
   const goal=route.points.at(-1);if(!skier.airborne&&!skier.crashRemaining&&Math.hypot(skier.x-goal.x,skier.z-goal.z)<18){finishRun();return;}
@@ -319,7 +322,7 @@ function updateAthlete(dt){
   athlete.position.set(skier.x,skier.airborne?skier.airY-1200-.07:yAt(skier.x,skier.z)-.07,skier.z);
   groundNormal.set(skier.airborne?0:-g.x,1,skier.airborne?0:-g.z).normalize();skiForward.set(fx,skier.airborne?0:g.x*fx+g.z*fz,fz).normalize();skiRight.crossVectors(groundNormal,skiForward).normalize();
   skiBasis.makeBasis(skiRight,groundNormal,skiForward);athlete.quaternion.setFromRotationMatrix(skiBasis);
-  const fall=fallAnimation(skier.crashRemaining,skier.crashDuration||1.15);skier.fallAmount=fall.amount;skier.fallBrace=fall.brace;if(fall.amount)athlete.rotateZ(fall.amount*1.2);
+  const fall=fallAnimation(skier.crashRemaining,skier.crashDuration||1.15);skier.fallAmount=fall.amount;skier.fallBrace=fall.brace;skier.fallCrouch=fall.crouch;skier.fallImpact=fall.impact;skier.fallPhase=fall.phase;if(fall.amount)athlete.rotateZ((skier.crashSide||1)*(fall.amount*1.35+fall.impact*.06));
   updateAthletePose(athlete,skier,mode==='running'?dt:0,yAt);
 }
 
@@ -509,11 +512,13 @@ $('scenery-return').addEventListener('click',toggleScenery);
 
 function openHelp(){pausedFrom=mode;if(mode==='running')mode='help';keys.clear();$('help-dialog').showModal();}
 function closeHelp(){ $('help-dialog').close();if(mode==='help')mode=pausedFrom;keys.clear();}
+$('share').addEventListener('click',async()=>{const url=new URL(import.meta.env.BASE_URL,location.origin);url.searchParams.set('mountain',mountainId);if(route)url.searchParams.set('route',route.id);try{await navigator.clipboard.writeText(url.href);toast('已复制雪场与线路链接 · 发给朋友即可试玩');}catch{$('share-link').value=url.href;$('share-dialog').showModal();$('share-link').select();}});
+$('share-close').addEventListener('click',()=>$('share-dialog').close());
 $('help').addEventListener('click',openHelp);document.querySelectorAll('.close-dialog,.close-help').forEach(b=>b.addEventListener('click',closeHelp));
 $('help-dialog').addEventListener('cancel',e=>{e.preventDefault();closeHelp();});
 $('overview').addEventListener('click',()=>{if(mode==='intro'){toast('开始滑行后，可以切换跟随 / 俯瞰镜头');return;}view=view==='follow'?'overview':'follow';$('overview').innerHTML=view==='overview'?'跟随 <kbd>O</kbd>':'俯瞰 <kbd>O</kbd>';});
 $('blur').addEventListener('click',()=>{speedRenderer.enabled=!speedRenderer.enabled;$('blur').textContent=speedRenderer.enabled?'速度模糊开':'速度模糊关';$('blur').setAttribute('aria-pressed',speedRenderer.enabled);});
-$('map-layer').addEventListener('click',()=>{mapLayer=mapLayer==='terrain'?'aerial':'terrain';$('map-layer').textContent=mapLayer==='terrain'?'航拍图':'地形图';drawMap();});
+$('map-layer').addEventListener('click',()=>{mapLayer=mapLayer==='terrain'?'aerial':'terrain';$('map-layer').textContent=mapLayer==='terrain'?(mountain.referenceMap?'参考图':'航拍图'):'地形图';drawMap();});
 $('weather').addEventListener('change',event=>{const id=event.target.value;weather.set(id);event.target.blur();$('weather-status').textContent=`${WEATHER_PRESETS[id].label} · 环境过渡中`;toast(`正在转为${WEATHER_PRESETS[id].label}，天空、光照与能见度同步变化`);});
 $('sound').addEventListener('click',()=>{soundOn=!soundOn;if(soundOn)enableAudio();$('sound').textContent=soundOn?'声音开':'声音关';$('sound').setAttribute('aria-pressed',soundOn);});
 document.querySelectorAll('[data-snow]').forEach(b=>b.addEventListener('click',()=>{snow=b.dataset.snow;document.querySelectorAll('[data-snow]').forEach(el=>el.classList.toggle('selected',el===b));}));
@@ -538,4 +543,4 @@ addEventListener('keydown',e=>{
 addEventListener('keyup',e=>keys.release(`keyboard:${e.code}`));addEventListener('blur',()=>{keys.clear();pauseRun();});
 document.addEventListener('visibilitychange',()=>{if(document.hidden){keys.clear();pauseRun();}});
 addEventListener('resize',()=>{if(!renderer)return;camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();renderer.setSize(innerWidth,innerHeight);speedRenderer?.resize(innerWidth,innerHeight);});
-init().catch(error=>{console.error(error);$('loading').innerHTML=`山体载入失败。${error.message}<br>需要支持 WebGL 的浏览器。<br><button onclick="location.reload()">重新载入</button>`;});
+init().catch(error=>{console.error(error);$('loading').innerHTML=`山体载入失败。${escapeHTML(error.message)}<br>需要支持 WebGL 的浏览器。<br><button id="reload-game">重新载入</button>`;$('reload-game').addEventListener('click',()=>location.reload());});

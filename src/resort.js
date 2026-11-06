@@ -87,7 +87,7 @@ export function addResort(scene,terrain,data){
         }
         cables.push(new THREE.BufferGeometry().setFromPoints(cable));
         const count=Math.floor(total/38);
-        for(let i=0;i<count;i++)chairs.push({liftId:String(feature.id),seatIndex:i,segments,total,offset:i/count*total,side,cabin:feature.properties.aerialway==='gondola'});
+        for(let i=0;i<count;i++)chairs.push({liftId:String(feature.id),seatIndex:i,segments,total,offset:i/count*total,side,ascending:side===(path.at(-1).y>=path[0].y?1:-1),cabin:feature.properties.aerialway==='gondola'});
       }
     }else if(feature.geometry.type==='Polygon'){
       if(isDetailedLodge(feature))continue;

@@ -1,4 +1,6 @@
 export const MOUNTAINS={
+ 'whistler':{name:'Whistler Mountain',coordinates:'50.059° N / 122.957° W',pack:'whistler',area:'whistler',elevationLabel:'Mapzen Terrain Tiles',context:'data/whistler/context/dem.json',referenceMap:true},
+ 'blackcomb':{name:'Blackcomb Mountain',coordinates:'50.091° N / 122.880° W',pack:'whistler',area:'blackcomb',elevationLabel:'Mapzen Terrain Tiles',context:'data/whistler/context/dem.json',referenceMap:true},
  crystal:{name:'Crystal Mountain',coordinates:'46.935° N / 121.474° W',prefix:'data/crystal-',context:'data/context-dem.json',contextAerial:'data/context-aerial.jpg',rainier:true},
  'snoqualmie-west':{name:'Snoqualmie · Summit West',coordinates:'47.422° N / 121.422° W',area:'west'},
  'snoqualmie-central':{name:'Snoqualmie · Summit Central',coordinates:'47.407° N / 121.419° W',area:'central'},
@@ -6,4 +8,4 @@ export const MOUNTAINS={
  'snoqualmie-alpental':{name:'Snoqualmie · Alpental',coordinates:'47.440° N / 121.435° W',area:'alpental'},
 };
 export const resolveMountain=id=>Object.hasOwn(MOUNTAINS,id)?id:'crystal';
-export function mountainAsset(id,name){const m=MOUNTAINS[resolveMountain(id)];if(!m.area)return `${m.prefix}${name}`;const aliases={'trails.json':'network.json','trail-network.json':'network.json','lift-runs.json':'runs.json'};return `data/snoqualmie/${m.area}/${aliases[name]||name}`;}
+export function mountainAsset(id,name){const m=MOUNTAINS[resolveMountain(id)];if(m.pack==='whistler'){const aliases={'trails.json':'network.json','trail-network.json':'network.json','lift-runs.json':'runs.json'};return `data/whistler/${(aliases[name]||name==='infrastructure.json')?m.area:'shared'}/${aliases[name]||name}`;}if(!m.area)return `${m.prefix}${name}`;const aliases={'trails.json':'network.json','trail-network.json':'network.json','lift-runs.json':'runs.json'};return `data/snoqualmie/${m.area}/${aliases[name]||name}`;}

@@ -38,4 +38,8 @@ export function advanceSkierRoutine(s,index,dt){
  if(profile.fall&&s.routineClock>=s.nextFall&&s.speed>3&&s.progress>50&&s.progress<s.route.length-80&&s.slope<.5){s.fall=3.8;s.fallDuration=3.8;s.nextFall=s.routineClock+65;s.speed=0;s.activity='fall';}
  if(s.activity==='fall'&&!s.fall)s.activity='ski';return profile;
 }
-export function fallAnimation(remaining,duration=1.5){if(!(remaining>0))return{amount:0,brace:0};const elapsed=Math.max(0,duration-remaining),fall=smooth(elapsed/.28),rise=smooth(remaining/.75),amount=fall*rise;return{amount,brace:amount*(.45+.55*(1-rise))};}
+export function fallAnimation(remaining,duration=3.2){
+ if(!(remaining>0))return{amount:0,brace:0,phase:'upright',crouch:0,impact:0};
+ const t=clamp(1-remaining/duration,0,1),amount=smooth(t/.25)*(1-smooth((t-.62)/.36)),brace=smooth((t-.5)/.18)*(1-smooth((t-.85)/.15)),crouch=smooth((t-.60)/.15)*(1-smooth((t-.84)/.16)),impact=Math.sin(clamp((t-.18)/.18,0,1)*Math.PI);
+ return{amount,brace,crouch,impact,phase:t<.18?'balance':t<.36?'impact':t<.54?'settle':t<.78?'brace':'stand'};
+}

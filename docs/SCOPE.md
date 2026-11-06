@@ -48,3 +48,7 @@ Next: marked slalom / time challenges, persistent local records, linked trick co
 - [x] Arrival-gated visitor sit / stand / walk / indoor routines, working cabin doors, benches and refreshments.
 - [x] Varied skier pace, roadside pauses, occasional falls and eased player / NPC fall recovery.
 - [x] Player collision against mapped buildings, station structures, towers and moving carriers; finer authored facility details.
+
+- [x] Whistler and Blackcomb: two selectable map areas with 16 long OSM lift itineraries, true open elevation grids and mapped forest outlines.
+- [x] Recoverable skid landings, explicit severe-landing reasons, retained touchdown heading and five-stage fall / stand animation.
+- [x] Passenger selection limited to uphill chairs, route-share links and production CSP / privacy hardening.

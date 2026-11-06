@@ -152,3 +152,8 @@ The expanded 24-person crowd reuses the existing NPC GLB; no additional external
 ## Working rest cabins and occupied lifts
 
 `src/rest-area.js` adds three authored procedural timber rest cabins with real door openings, hinged doors, snowy pitched roofs, window mullions, benches and entrance ramps. Cups and sandwiches are small authored meshes attached to visitors' hands. These are station-side activity props, not surveyed real lodge interiors. `src/resort-assets.js` adds cushion seams, a back grab rail and grip bolts to the instanced lift chairs. Station operator huts gain pitched eaves and joinery; tower bases gain padded guards and mapped facades gain window framing. No new third-party asset or license is introduced. Lift passengers reuse `skier-npc.glb` with independent skeletons.
+
+
+## Whistler / Blackcomb open map pack
+
+See [WHISTLER.md](WHISTLER.md) for tile sources, licenses, rebuilding and route exclusions. Mapzen / Tilezen Terrain Tiles are reprojected from Terrarium PNG pixel centers into UTM zone 10N; the local and context grids use 25m / 90m export spacing. Canada terrain data contains information licensed under the Open Government Licence – Canada; global SRTM / GMTED2010 data courtesy USGS. OpenStreetMap geometry is ODbL 1.0, © OpenStreetMap contributors. Forest reference images and tree candidates are derived from mapped polygons, not satellite imagery. Raw OSM editor metadata stays outside the repository. `public/social-card.png` is a byte-for-byte copy of the existing authored game screenshot `docs/media/crystal-poster.png`, with no new third-party media license.

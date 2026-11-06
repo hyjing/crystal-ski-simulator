@@ -248,3 +248,14 @@ Ground NPCs keep staggered IK but save bone targets and interpolate local quater
 NPC obstacle decisions now use the intended route heading, not a heading already perturbed by the last evasive move. Each encounter commits to a passing side until the corridor has stayed clear for 1.2s. Targets no longer sum conflicting neighbor signs. Lateral offsets have a speed-dependent slew limit, total per-step travel is bounded to 1.3 times forward speed, and rendered root orientation eases through DEM-normal changes. These changes address route / avoidance motion directly, in addition to existing bone interpolation.
 
 Manual jump minimum is 5m/s (18km/h). Automatic launch minimum is 12m/s (43.2km/h), plus a fore/aft grade difference over 0.16, negative support force, predicted separation above 0.025m / 0.20m / 0.50m at 0.10s / 0.22s / 0.38s, and 50ms continuous confirmation. Constant planar slopes cannot satisfy the curvature / separation gate. Rejected manual presses report the minimum speed and remain edge-triggered; holding does not defer the launch until speed rises. These thresholds are gameplay tuning, not a biomechanics calibration.
+
+
+## Landing recovery, complete fall sequence and uphill passengers
+
+Landing support normals now sample a 3.6m ski-footprint span instead of trusting one instantaneous gradient. `landingQuality` distinguishes clean, recoverable and crash outcomes. Moderate misalignment / impacts reduce momentum to 78% and apply ~0.9s crouched recovery with gradual realignment. Serious crossing at speed, impacts over 12.5m/s, combined angle/impact or uncontrolled yaw can still crash; reason and alignment are included in the event. Scoring remains limited to clean landings. Actual touchdown heading is preserved, including on a fall; it no longer snaps to the velocity heading before the failure becomes visible.
+
+The shared 3.2s player / contact fall sequence progresses through balance loss, impact, settle, brace and stand. Root side roll, crouched pelvis / knee targets, hand bracing and impact motion drive the existing skeleton; occasional NPC falls use their own longer duration. This is procedural animation, without detached skis, a multi-body ragdoll or a true sliding-contact solver.
+
+Each lift carrier stores whether its motion climbs from the lower endpoint toward the upper endpoint, derived from actual endpoint heights and cable side. Rider selection excludes descending chairs. This does not depend on the OSM way's ordering.
+
+Whistler / Blackcomb share a georeferenced local terrain and OSM landcover pack; separate curated route / infrastructure files are selected by mountain ID. Context scenery uses its own Canadian-area grid, never the US scenery or Rainier. Reference textures are explicitly non-photographic. More details are in WHISTLER.md.
