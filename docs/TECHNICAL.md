@@ -193,3 +193,13 @@ Follow view waits about 1.8s after pointer release, then smoothly decays yaw/pit
 ### Gameplay jump tuning
 
 J adds a deliberately assisted vertical pop of 5.2–6.6m/s, increasing smoothly with horizontal speed from 3 to 20m/s. The former 2.5m/s hop allowed only about half a second on flat terrain. Gravity stays 9.81m/s², horizontal momentum is unchanged apart from drag, and natural crest takeoffs receive no automatic bonus. A J press at a natural crest still applies the assisted pop. Flat/moderate slope fixtures give roughly 1–1.4s airtime and 1.3–2.3m terrain clearance; abrupt drop-offs or rising landings can differ. Terrain elevations, trail lengths and coordinates are unchanged.
+
+## NPC behavior, contact and drone camera
+
+Four actors independently select nearby mapped branches sharing the active upper lift, with different bounded carving lines and speed targets. Deterministic local rules predict nearby skiers / trees, ease lateral avoidance and brake. Movement decisions run in the fixed physics step; staggered bone poses remain about 15Hz. These are kinematic agents, not independently simulated skis, a learned model, an LLM service or a navigation-mesh planner.
+
+Swept player-to-NPC contact uses a combined 0.9m horizontal radius and vertical separation check; airborne players above 1.6m do not collide with a standing skier. A contact awards -100 points, rolls both characters into a simple fall pose, then restores the player near their current route progress with zero starting speed. Recovery candidates avoid nearby trunks / NPCs and prefer slopes under ~33°; a bounded route fallback remains for crowded / steep sections. Recovery grants 3s immunity; the struck NPC has its own cooldown. This is contact gameplay, not a full ragdoll.
+
+V opens a drone follow view; free mode freezes player and NPC simulation and moves only the camera. WASD / arrows translate, Q/E descend / ascend, Shift boosts speed. The camera stays within the active DEM tile and at least 5m above its surface. Exiting restores normal camera settings and the previous skiing mode / location.
+
+Normal follow samples the near grade and the grade 24–32m ahead. A convex downhill transition smoothly adds up to 5.5m camera height / 3m pullback and aims farther down the slope; uniformly steep slopes do not trigger this lift. Sixteen terrain samples keep the crest sightline clear. Close equipment viewing, air spins and large manual orbits disable anticipation.

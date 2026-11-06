@@ -13,7 +13,7 @@ export function upperBodyCounterAngle(heading,fallLine,motion={}){
 }
 export async function loadHumanoid(athlete,variant='player'){
  const file=variant==='npc'?'skier-npc.glb':'skier-complete.glb';
- if(!modelSources.has(file))modelSources.set(file,new GLTFLoader().loadAsync(`${import.meta.env.BASE_URL}assets/${file}?v=freeride-gear-3`));
+ if(!modelSources.has(file))modelSources.set(file,new GLTFLoader().loadAsync(`${import.meta.env.BASE_URL}assets/${file}?v=anatomical-fit-4`));
  return attachHumanoid(athlete,cloneSkeleton((await modelSources.get(file)).scene));
 }
 function jointSolution(a,target,pole,l1,l2){

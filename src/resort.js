@@ -39,7 +39,7 @@ export function addForest(scene,terrain,routes,landcover,texture,vegetation,stat
   }):Array.from({length:14000},()=>terrain.world(8+rng()*(terrain.width-16),8+rng()*(terrain.height-16)));
   for(const p of source){
     if(!vegetation&&rng()>forestLikelihood(terrain,landcover,p.x,p.z)*.85)continue;
-    if(terrain.sample(p.x,p.z)<1180)continue;
+    if(terrain.sample(p.x,p.z)<(terrain.treeMinElevation??1180))continue;
     if(stationAreas.some(a=>Math.hypot(((p.x-a.x)*a.fx+(p.z-a.z)*a.fz)/a.coreLength,((p.x-a.x)*a.fz-(p.z-a.z)*a.fx)/a.coreWidth)<1.04))continue;
     // Keep inferred tree trunks outside the authored piste corridor.
     let clear=false;

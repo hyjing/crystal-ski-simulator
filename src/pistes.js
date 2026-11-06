@@ -15,7 +15,7 @@ export function preparePisteTerrain(raw,network){
       const v0=Math.max(0,Math.floor((Math.min(a.z,b.z)-radius)/s+(raw.height-1)/2)),v1=Math.min(raw.height-1,Math.ceil((Math.max(a.z,b.z)+radius)/s+(raw.height-1)/2));
       for(let v=v0;v<=v1;v++)for(let u=u0;u<=u1;u++){
         const p=raw.world(u,v),t=THREE.MathUtils.clamp(((p.x-a.x)*dx+(p.z-a.z)*dz)/l2,0,1),x=a.x+t*dx,z=a.z+t*dz,distance=Math.hypot(p.x-x,p.z-z),ratio=distance/halfWidth,index=v*raw.width+u;
-        if(ratio>=best[index]||distance>radius)continue;best[index]=ratio;footH[index]=raw.sample(x,z);signed[index]=distance;widths[index]=halfWidth;groomed[index]=feature.properties['piste:difficulty']==='advanced'&&!road?0:1;
+        if(ratio>=best[index]||distance>radius)continue;best[index]=ratio;footH[index]=raw.sample(x,z);signed[index]=distance;widths[index]=halfWidth;groomed[index]=['advanced','expert'].includes(feature.properties['piste:difficulty'])&&!road?0:1;
       }
     }
   }

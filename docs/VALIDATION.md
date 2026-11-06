@@ -131,3 +131,13 @@ The HUD reports FPS, raw frame interval P95 / maximum, hitch count, raster scale
 
 - 74 tests pass after increasing the J pop. At 4/12/22m/s, flat and 15° downhill fixtures stay airborne for 1–1.5s, clear the surface by 1.3–2.5m, and land cleanly without adding horizontal speed. A 12m/s fixture completes a controlled 360 plus grab for 450 points (~1.21s airtime). Held J still cannot trigger a second takeoff.
 - Live browser inspection at the Queens QA location showed 1.9m clearance after a normal-speed J press. This is a staged location with actual flight simulation, frozen for capture. Natural crest flight, terrain geometry and trail distances retain their previous behavior.
+
+## Snoqualmie, NPC contact and drone
+
+- 85 tests pass, including real data fixtures for all four areas: every route is >=700m, fully inside its DEM, descends >100m, starts at its mapped upper terminal, and has a leveled spawn under 5°. Mapped unnamed connectors are retained for routing but skipped by the named-route renderer.
+- Tests cover branch selection, bounded individual lines, proximity braking / avoidance, swept high-speed contact, airborne separation, collision immunity / cooldown, nearby recovery filtering, free-drone translation / terrain bounds, and crest anticipation / clear terrain sightlines.
+- Browser smoke checks started and moved in West, Central, East and Alpental. A staged player/NPC proximity fixture triggered an actual contact, -100 points, visible fall and nearby recovery; no penalty event was injected. Drone free flight moved vertically / forward, and returning preserved ski progress. These are short inspections, not full playthroughs of every itinerary.
+
+## Final anatomical revision
+
+87 local unit tests pass. Both regenerated GLBs are checked at three leg cross-sections for an actual center gap (no connecting triangles), for absence of opposite-leg influences below the crotch, for exclusion of arm influences on the central chest, and for a bounded chest depth below the hood. Existing closed/manifold topology, normalized weights, animated finite bounds and full-grab pose checks remain. Production bundling also passes. No further browser tests were performed after the user requested local-only verification; the new character appearance and crest-camera change have not been visually validated in-browser.

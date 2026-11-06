@@ -19,13 +19,13 @@ function profile(y,sections){
  let i=0;while(i<sections.length-2&&y>sections[i+1][0])i++;
  const a=sections[i],b=sections[i+1],t=THREE.MathUtils.smoothstep(y,a[0],b[0]);return a.slice(1).map((v,j)=>THREE.MathUtils.lerp(v,b[j+1],t));
 }
-const jacketSections=[[.87,.279,.158],[.96,.291,.183],[1.08,.260,.166],[1.19,.253,.171],[1.32,.292,.189],[1.41,.290,.170],[1.50,.202,.115]];
-const legSections=[[.19,.115,.101],[.29,.120,.108],[.37,.111,.102],[.49,.126,.119],[.60,.125,.123],[.74,.142,.136],[.87,.145,.143]];
+const jacketSections=[[.87,.272,.145],[.96,.280,.158],[1.08,.250,.149],[1.19,.251,.150],[1.32,.279,.158],[1.41,.273,.148],[1.50,.190,.110]];
+const legSections=[[.19,.108,.098],[.29,.111,.103],[.37,.108,.100],[.49,.114,.112],[.60,.117,.115],[.74,.122,.126],[.87,.128,.133]];
 const band=(value,width)=>Math.exp(-((value/width)**2));
 function field(x,y,z){
  const ax=Math.abs(x),[rx,rz]=profile(y,jacketSections),centerZ=-.025+.009*band(y-1.32,.15);
  // Slightly flattened front/back panels read as draped clothing rather than a round tube.
- const n=2.45,side=(Math.pow(Math.pow(ax/rx,n)+Math.pow(Math.abs(z-centerZ)/rz,n),1/n)-1)*Math.min(rx,rz);
+ const n=2.65,side=(Math.pow(Math.pow(ax/rx,n)+Math.pow(Math.abs(z-centerZ)/rz,n),1/n)-1)*Math.min(rx,rz);
  const hem=.889+.010*Math.sin(x*13+z*9)+.005*Math.sin(x*29-z*17),shoulderTop=1.515-.095*Math.pow(Math.min(ax/.275,1.3),1.65);
  let jacket=smoothMax(side,smoothMax(hem-y,y-shoulderTop,.020),.018);
  const front=THREE.MathUtils.smoothstep(z,.03,.13),back=THREE.MathUtils.smoothstep(-z,.06,.16);
@@ -34,23 +34,24 @@ function field(x,y,z){
  jacket-=front*.4*(crease(1.01+.22*ax+.014*Math.sin(x*19),.018,.009)+crease(1.235-.30*ax+.014*Math.sin(x*15),.015,.006)+crease(1.355-.42*ax,.018,.007));
  jacket-=back*.45*(crease(1.055+.13*x+.010*Math.sin(x*23),.022,.007)+crease(1.32-.07*Math.cos(x*10),.018,.005));
  // Sleeves have a full upper arm, elbow ease and gathered cuffs, instead of a linear tapered capsule.
- const [r]=profile(ax,[[.205,.129],[.30,.124],[.41,.112],[.47,.121],[.54,.105],[.61,.092],[.67,.083]]);
+ const [r]=profile(ax,[[.205,.112],[.30,.111],[.41,.107],[.47,.110],[.54,.102],[.61,.090],[.67,.082]]);
  const armY=1.455-.010*Math.sin((ax-.205)*8),armZ=-.065-.007*Math.sin(ax*9),armAngle=Math.atan2(z-armZ,y-armY);
  let sleeve=Math.hypot(ax-THREE.MathUtils.clamp(ax,.205,.665),y-armY,(z-armZ)*1.08)-r;
  sleeve-=.0016*band(ax-.465,.09)*Math.sin(ax*85+armAngle*2.2)+.0012*band(ax-.615,.045)*Math.sin(ax*116-armAngle*2.8);
- jacket=smoothMin(jacket,sleeve,.060);
+ jacket=smoothMin(jacket,sleeve,.032);
  // Folded-down hood: low at the neck, draped over the upper back with an indented opening.
  const hoodOuter=ellipsoid(x,y-1.466,z+.135,.153,.085,.125),hoodInner=ellipsoid(x,y-1.523,z+.132,.108,.072,.091);
  jacket=smoothMin(jacket,Math.max(hoodOuter,-hoodInner),.025);
  const collar=Math.max((Math.hypot(x/.108,(z+.025)/.110)-1)*.108,1.46-y,y-1.565),collarHole=.078-Math.hypot(x,(z+.025)*.98);
  jacket=smoothMin(jacket,Math.max(collar,collarHole),.022);
- let pants=ellipsoid(x,y-.854,z+.045,.223,.177,.158);
+ // A high crotch and two distinct leg volumes: never bridge the knees / thighs.
+ let pants=ellipsoid(x,y-.912,z+.043,.225,.117,.150);
  for(const sign of [-1,1]){
-  const yy=THREE.MathUtils.clamp(y,.205,.87),[w,d]=profile(yy,legSections),cx=sign*(.119+.006*band(yy-.28,.15)),cz=-.037-.035*(1-THREE.MathUtils.smoothstep(yy,.22,.46));
+  const yy=THREE.MathUtils.clamp(y,.205,.87),[w,d]=profile(yy,legSections),cx=sign*(.140-.006*band(yy-.28,.15)),cz=-.037-.035*(1-THREE.MathUtils.smoothstep(yy,.22,.46));
   const angle=Math.atan2(z-cz,x-cx),section=(Math.pow(Math.pow(Math.abs(x-cx)/w,2.25)+Math.pow(Math.abs(z-cz)/d,2.25),1/2.25)-1)*Math.min(w,d);
   let leg=Math.max(section,.198+.004*Math.sin(angle*3+sign)-y,y-.91);
   const fold=.0025*band(y-.49,.13)*Math.sin(y*82+angle*2.1+sign*.7)+.0017*band(y-.28,.07)*Math.sin(y*113-angle*3.4+sign);
-  leg-=fold;pants=smoothMin(pants,leg,.033);
+  leg-=fold;pants=smoothMin(pants,leg,.012);
  }
  return smoothMin(jacket,pants,.020);
 }
@@ -67,9 +68,12 @@ const key=(x,y,z)=>`${x},${y},${z}`;
 for(let i=0;i<p.count;i++){const k=key(Math.floor(p.getX(i)/cell),Math.floor(p.getY(i)/cell),Math.floor(p.getZ(i)/cell));if(!bins.has(k))bins.set(k,[]);bins.get(k).push(i);}
 function nativeWeights(x,y,z){
  const cx=Math.floor(x/cell),cy=Math.floor(y/cell),cz=Math.floor(z/cell),nearest=[];
- for(let u=-3;u<=3;u++)for(let v=-3;v<=3;v++)for(let w=-3;w<=3;w++)for(const j of bins.get(key(cx+u,cy+v,cz+w))||[]){if(y<.77&&p.getX(j)*x<0)continue;const d=(p.getX(j)-x)**2+(p.getY(j)-y)**2+(p.getZ(j)-z)**2;nearest.push([d,j]);}
+ for(let u=-3;u<=3;u++)for(let v=-3;v<=3;v++)for(let w=-3;w<=3;w++)for(const j of bins.get(key(cx+u,cy+v,cz+w))||[]){if(y<.84&&p.getX(j)*x<0)continue;const d=(p.getX(j)-x)**2+(p.getY(j)-y)**2+(p.getZ(j)-z)**2;nearest.push([d,j]);}
  nearest.sort((a,b)=>a[0]-b[0]);if(!nearest.length)throw Error('Unweighted outfit vertex');
  const influence=new Map();for(const [d,j] of nearest.slice(0,4))for(let c=0;c<4;c++){const bone=source.attributes.skinIndex.array[j*4+c],weight=source.attributes.skinWeight.array[j*4+c]/Math.max(d,.00001);influence.set(bone,(influence.get(bone)||0)+weight);}
+ if(y<.80)for(const bone of influence.keys())if(body.skeleton.bones[bone].name.endsWith(x>0?'_r':'_l'))influence.delete(bone);
+ // Torso panels should not follow the elbows or be pulled outward by arm weights.
+ if(y>.90&&y<1.43&&Math.abs(x)<.22)for(const bone of influence.keys())if(/arm|hand|index|middle|ring|pinky|thumb/.test(body.skeleton.bones[bone].name))influence.delete(bone);
  const top=[...influence].sort((a,b)=>b[1]-a[1]).slice(0,4),sum=top.reduce((a,b)=>a+b[1],0);return{joints:Array.from({length:4},(_,c)=>top[c]?.[0]??0),weights:Array.from({length:4},(_,c)=>(top[c]?.[1]??0)/sum)};
 }
 const blue=new THREE.Color('#4088b4'),navy=new THREE.Color('#2a3945'),panel=new THREE.Color('#347698');

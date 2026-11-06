@@ -1,0 +1,9 @@
+# Character structure references
+
+- [Sweed — Skier low poly character](https://sketchfab.com/3d-models/skier-low-poly-character-13ae2a85b3af43ab8b1e984c8f8c87e2): a published casual game-skier reference, listed as CC Attribution, about 4.1k triangles. Used as a candidate reference only; the viewer endpoint returned 403 and no mesh or images were imported.
+- [Arc’teryx — Sabre Relaxed Pant](https://outlet.arcteryx.com/us/es/shop/mens/sabre-relaxed-pant-9157): official loose ski-pant reference with front / rear / side product views and articulated patterning. Used to guide clean separated trouser legs / functional loose volume, without copying logos, product photos or garment patterns.
+- [Quaternius — Universal Base Characters](https://quaternius.com/packs/universalbasecharacters): the official pack page identifies humanoid rigs and CC0 licensing. The game retains its previously bundled licensed skeleton / head / hands; no new outside model was downloaded. The bundled original license remains in the repository.
+
+The defects addressed were specific: low overlapping pelvis / thigh fields bridged the upper legs, inflated chest / sleeve volumes distorted the upper body, and transferred weights could pull clothing toward the other limb. The revised authored geometry keeps the broad freeride cut, lifts the crotch, leaves two leg contours in cross-section, and restricts incompatible limb weights. Unit tests inspect both player and NPC binaries.
+
+Visual appearance is subjective; these checks establish separated geometry and sound skinning, not photorealism. Per the requested workflow, the final character / crest-camera changes were validated locally with unit tests and a production build, without further browser inspection. Earlier README outfit screenshots document the prior cut.

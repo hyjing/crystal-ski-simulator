@@ -41,6 +41,7 @@ export const difficultyStyles={
   easy:{label:'绿道',color:'#91bd70',symbol:'●'},
   intermediate:{label:'蓝道',color:'#368bbb',symbol:'■'},
   advanced:{label:'黑道',color:'#263c48',symbol:'◆'},
+  expert:{label:'双黑道',color:'#192c37',symbol:'◆◆'},
 };
 
 // Only join actual shared OSM endpoints; never bridge disconnected segments.
@@ -69,14 +70,14 @@ export function joinTrailWays(features){
 export function filterRoutes(routes,difficulty='all',query=''){
   const normalize=s=>s.toLowerCase().replace(/[’']/g,'').trim();
   const term=normalize(query);
-  return routes.filter(r=>(difficulty==='all'||r.difficulty===difficulty)&&normalize(`${r.name} ${r.subtitle}`).includes(term));
+  return routes.filter(r=>(difficulty==='all'||r.difficulty===difficulty||(difficulty==='advanced'&&r.difficulty==='expert'))&&normalize(`${r.name} ${r.subtitle}`).includes(term));
 }
 
 export function getRoutes(terrain,trailData) {
   const groups=new Map();
   for(const f of trailData.features){
     if(f.geometry.type!=='LineString'||f.properties['area']==='yes')continue;
-    const name=f.properties.name;if(!groups.has(name))groups.set(name,[]);groups.get(name).push(f);
+    const name=f.properties.name;if(!name)continue;if(!groups.has(name))groups.set(name,[]);groups.get(name).push(f);
   }
   const centerE=terrain.originUTM[0]+(terrain.width-1)*terrain.spacing/2,centerN=terrain.originUTM[1]-(terrain.height-1)*terrain.spacing/2;
   const routes=[];
@@ -111,12 +112,12 @@ export function getLiftRuns(terrain,data){
   const ce=terrain.originUTM[0]+(terrain.width-1)*terrain.spacing/2,cn=terrain.originUTM[1]-(terrain.height-1)*terrain.spacing/2;
   return data.features.map(feature=>{
     const properties=feature.properties,preset=routeDefinitions.find(r=>r.id===feature.id)||{};
-    const difficulty=['quicksilver','tinkerbell','queens-run'].includes(feature.id)?'easy':['northway','otto-bahn'].includes(feature.id)?'advanced':'intermediate';
+    const difficulty=properties.difficulty||(['quicksilver','tinkerbell','queens-run'].includes(feature.id)?'easy':['northway','otto-bahn'].includes(feature.id)?'advanced':'intermediate');
     const style=difficultyStyles[difficulty],points=[];
     for(const ll of feature.geometry.coordinates){const p=lonLatToUTM(...ll),point={x:p.e-ce,z:cn-p.n};if(!points.length||Math.hypot(point.x-points.at(-1).x,point.z-points.at(-1).z)>.25)points.push(point);}
     const length=points.slice(1).reduce((sum,p,i)=>sum+Math.hypot(p.x-points[i].x,p.z-points[i].z),0);
     return {...preset,...properties,id:feature.id,name:properties.name,points,difficulty,...style,
-      subtitle:feature.id==='queens-run'?"Queen's Run Queens 女王道":feature.id==='mr-magoo'?'Magoo mangoo 马古':feature.id==='chappelles'?'Chappelle champell 沙佩尔':preset.subtitle||'',
+      subtitle:feature.id==='queens-run'?"Queen's Run Queens 女王道":feature.id==='mr-magoo'?'Magoo mangoo 马古':feature.id==='chappelles'?'Chappelle champell 沙佩尔':preset.subtitle||properties.via?.join(' → ')||'',
       label:`${style.label} · 上站 → 下站`,length,drop:terrain.sample(points[0].x,points[0].z)-terrain.sample(points.at(-1).x,points.at(-1).z),
       sourceUrl:`https://www.openstreetmap.org/way/${properties.primaryWayId||properties.osmWayIds[0]}`,osmWayId:properties.primaryWayId||properties.osmWayIds[0]};
   }).filter(r=>r.length>=400);

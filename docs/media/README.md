@@ -43,4 +43,6 @@ Elevation, map and generated-asset attribution remains in [ASSETS.md](../ASSETS.
 
 `contoured-character-front.png` and `contoured-character-back.png` show the later garment-silhouette revision, captured through the real close follow camera in development inspection mode. These document the previous silhouette revision.
 
-`freeride-gear.png` shows the current wider, smoother outfit and live equipment panel (cream / olive palette, park skis). `queens-traffic.png` shows Queens Run and nearby NPC skiers. Both are actual browser screenshots from development inspection mode, with the QA controls hidden; the route location is staged and animation is frozen for capture. They are newer than the original video.
+`freeride-gear.png` shows the previous wider, smoother outfit and live equipment panel (cream / olive palette, park skis). `queens-traffic.png` shows Queens Run and nearby NPC skiers. Both are actual browser screenshots from development inspection mode, with the QA controls hidden; the route location is staged and animation is frozen for capture. They are newer than the original video.
+
+`snoqualmie-drone.png` shows the Summit West drone in free-flight mode after native keyboard ascent. This is the current game renderer; no official trail-map artwork is used.

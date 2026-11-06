@@ -1,0 +1,8 @@
+import test from 'node:test';import assert from 'node:assert/strict';import fs from 'node:fs';import {GLTFLoader} from 'three/addons/loaders/GLTFLoader.js';
+for(const file of ['skier-complete.glb','skier-npc.glb'])test(`${file}: two separated trouser legs and independent anatomical skinning`,async()=>{
+ const b=fs.readFileSync(new URL(`../public/assets/${file}`,import.meta.url)),{scene}=await new GLTFLoader().parseAsync(b.buffer.slice(b.byteOffset,b.byteOffset+b.byteLength),''),suit=scene.getObjectByName('Unified_ski_suit'),g=suit.geometry,p=g.attributes.position;
+ for(const y of [.35,.55,.72]){let segments=0;for(let j=0;j<g.index.count;j+=3){const ids=[0,1,2].map(i=>g.index.getX(j+i)),xs=[];for(let k=0;k<3;k++){const a=ids[k],b=ids[(k+1)%3],ya=p.getY(a),yb=p.getY(b);if((ya<y&&yb>=y)||(yb<y&&ya>=y)){const t=(y-ya)/(yb-ya);xs.push(p.getX(a)+(p.getX(b)-p.getX(a))*t);}}if(xs.length===2){segments++;assert.ok(xs[0]*xs[1]>0,`pants bridged centerline at height ${y}`);assert.ok(Math.min(...xs.map(Math.abs))>.012,`insufficient leg gap at ${y}`);}}assert.ok(segments>12);}
+ for(let i=0;i<p.count;i++){const x=p.getX(i),y=p.getY(i);for(let k=0;k<4;k++){const weight=g.attributes.skinWeight.array[i*4+k],name=suit.skeleton.bones[g.attributes.skinIndex.array[i*4+k]].name;if(weight<1e-6)continue;if(y<.75)assert.ok(!name.endsWith(x>0?'_r':'_l'),'opposite leg may not drag this trouser leg');if(y>.95&&y<1.4&&Math.abs(x)<.20)assert.ok(!/arm|hand/.test(name),'chest panel may not be driven by arm bones');}}
+ // Broad clothing without the previous deep, inflated upper torso.
+ let depth=0;for(let i=0;i<p.count;i++)if(p.getY(i)>1.18&&p.getY(i)<1.35&&Math.abs(p.getX(i))<.20)depth=Math.max(depth,Math.abs(p.getZ(i)+.025));assert.ok(depth>.13&&depth<.175);
+});

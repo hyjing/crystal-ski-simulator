@@ -31,10 +31,14 @@ Complete resort recreation, multiplayer, live weather / snow conditions, avalanc
 ## Gameplay first pass
 
 - [x] Queens Run, the eleventh selectable lift itinerary.
-- [x] Four lightweight non-colliding NPC skiers; local visibility toggle.
+- [x] Four lightweight NPC skiers with rule-based route / speed / avoidance decisions and collision recovery; local visibility toggle.
 - [x] Oversized freeride silhouette, palette presets, individual colors and three ski profiles, saved locally.
 - [x] Faster progressive bank response and park / powder sidecut differences.
 - [x] Mouse-look recovery after release, with stable forward travel view during air spins.
 - [x] Convex-crest contact loss, ballistic flight, manual hop, air yaw / grab pose, clean / switch landing scores and simple fall recovery.
 
-Next: marked slalom / time challenges, persistent local records, linked trick combos, better grab hand-to-ski contact, terrain park features, and NPC yielding / collision. Flips and rails need additional body orientation / contact states and are not in the first pass. The full humanoid ragdoll, measured ski flex and granular snow solver remain outside this build.
+Next: marked slalom / time challenges, persistent local records, linked trick combos, better grab hand-to-ski contact, terrain park features. Flips and rails need additional body orientation / contact states and are not in the first pass. The full humanoid ragdoll, measured ski flex and granular snow solver remain outside this build.
+
+- [x] Four independently loaded Snoqualmie areas with 14 mapped long itineraries (700m minimum).
+- [x] Drone follow / bounded free flight, with paused skiing in free mode.
+- [x] Anticipatory crest camera lift, pullback and terrain sightline clearance.

@@ -16,9 +16,9 @@ export function prepareStationTerrain(raw,routes,infrastructure){
     areas.push({role:'upper',name:route.lift,liftId:route.liftId,x:c.x,z:c.z,y:raw.sample(c.x,c.z),fx:(exit.x-c.x)/length,fz:(exit.z-c.z)/length,coreLength:58,coreWidth:38,outerLength:112,outerWidth:82,pitch:Math.tan(1.5*Math.PI/180)});
   }
   for(const route of routes){
-    if(areas.some(a=>a.role==='lower'&&a.liftId===route.liftId))continue;
+    if(areas.some(a=>a.role==='lower'&&a.liftId===(route.returnLiftId||route.liftId)))continue;
     const c=route.points.at(-1),prev=pointAlongRoute(route,route.length-40),length=Math.hypot(c.x-prev.x,c.z-prev.z)||1;
-    areas.push({role:'lower',name:route.lift,liftId:route.liftId,x:c.x,z:c.z,y:raw.sample(c.x,c.z),fx:(c.x-prev.x)/length,fz:(c.z-prev.z)/length,coreLength:38,coreWidth:30,outerLength:80,outerWidth:65,pitch:Math.tan(1.0*Math.PI/180)});
+    areas.push({role:'lower',name:route.returnLift||route.lift,liftId:route.returnLiftId||route.liftId,x:c.x,z:c.z,y:raw.sample(c.x,c.z),fx:(c.x-prev.x)/length,fz:(c.z-prev.z)/length,coreLength:38,coreWidth:30,outerLength:80,outerWidth:65,pitch:Math.tan(1.0*Math.PI/180)});
   }
   function stamp(area){
     const radius=Math.max(area.outerLength,area.outerWidth),s=raw.spacing;

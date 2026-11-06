@@ -9,7 +9,7 @@ export function gridBounds(grid,local){
     north:centerN-grid.originUTM[1],south:centerN-grid.originUTM[1]+(grid.height-1)*grid.spacing};
 }
 
-function winterMaterial(texture){
+function winterMaterial(texture,snowline=1050){
   if(!texture)return new THREE.MeshStandardMaterial({color:'#c1cdd6',roughness:1});
   texture.colorSpace=THREE.SRGBColorSpace;texture.anisotropy=8;
   const material=new THREE.MeshStandardMaterial({map:texture,roughness:1});
@@ -24,7 +24,7 @@ function winterMaterial(texture){
         float vegetation=smoothstep(.005,.055,aerial.g-max(aerial.r,aerial.b)*.86);
         float rockExposure=smoothstep(.24,.65,vSteep);
         float photographedIce=smoothstep(.25,.70,luma)*(1.-vegetation*.8);
-        float winterCover=smoothstep(1050.,2050.,vElevation)*(1.-rockExposure*.88);
+        float winterCover=smoothstep(${snowline.toFixed(1)},${(snowline+(snowline===1050?1000:700)).toFixed(1)},vElevation)*(1.-rockExposure*.88);
         float cover=max(photographedIce*.88,winterCover*(.76-vegetation*.18));
         float detail=clamp(.62+.55*sqrt(luma),.62,1.08);
         vec3 winterSnow=vec3(.88,.94,1.)*detail;
@@ -35,7 +35,7 @@ function winterMaterial(texture){
         diffuseColor.rgb*=mix(photographed,winterSnow,clamp(cover,0.,.93));
       #endif`);
   };
-  material.customProgramCacheKey=()=> 'georeferenced-winter-aerial-v2';
+  material.customProgramCacheKey=()=> `georeferenced-winter-aerial-v3-${snowline}`;
   return material;
 }
 
@@ -58,7 +58,7 @@ export function distantGeometry(grid,local,exclude=[],detail){
 }
 
 function addGrid(scene,grid,local,texture,exclude=[],detail){
-  const mesh=new THREE.Mesh(distantGeometry(grid,local,exclude,detail),winterMaterial(texture));mesh.name='USGS distant terrain';scene.add(mesh);return mesh;
+  const mesh=new THREE.Mesh(distantGeometry(grid,local,exclude,detail),winterMaterial(texture,local.treeMinElevation===0?450:1050));mesh.name='USGS distant terrain';scene.add(mesh);return mesh;
 }
 
 export function addContextTerrain(scene,context,local,texture,rainier){

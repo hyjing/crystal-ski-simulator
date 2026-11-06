@@ -60,7 +60,7 @@ The humanoid adds a 724 KiB bundled GLB and native skinning / IK; no external ru
 
 ## Complete asset and 4K geographic scenery
 
-The complete skier is ~4.16 MiB on disk and includes a 74,562-triangle continuous outfit plus the native exposed anatomy / equipment. Geometry construction and skin-weight transfer run offline; no marching cubes or garment remeshing runs in the browser. Native skinning and existing IK animate it.
+The complete skier is ~4.11 MiB on disk and includes a 73,120-triangle continuous outfit plus the native exposed anatomy / equipment. Geometry construction and skin-weight transfer run offline; no marching cubes or garment remeshing runs in the browser. Native skinning and existing IK animate it.
 
 Summit and valley detail is spatially limited: 247,257 total far-terrain triangles, with no runtime refinement / replacement. Each 4K aerial texture requires roughly 75–80 MiB including mipmaps, so the two larger maps cost additional GPU memory. They load progressively after skiing is initialized. Image detail and silhouette improve at a real memory / transfer cost; no blanket 60 FPS claim is made.
 
@@ -70,8 +70,14 @@ The contoured garment revision adds roughly 30k outfit triangles and a small ski
 
 ## NPCs and airborne state
 
-Traffic is capped at four actors. The 1.26MiB NPC asset is fetched / parsed once and cloned with independent skeletons; shared meshes / maps remain shared except local garment palette buffers. Baked geometry is ~24.3k triangles per NPC, plus the small ski / pole rig. NPCs add no shadow casters, powder-field stamps or independent particle emitters. Terrain/path movement is kinematic; bone poses are staggered at roughly 15Hz and skipped outside the camera frustum / 360m range. NPCs can be disabled in Equipment. They do not run the player's contact/flight simulation or collision solver.
+Traffic is capped at four actors. The 1.25MiB NPC asset is fetched / parsed once and cloned with independent skeletons; shared meshes / maps remain shared except local garment palette buffers. Baked geometry is ~24.0k triangles per NPC, plus the small ski / pole rig. NPCs add no shadow casters, powder-field stamps or independent particle emitters. Terrain/path movement is kinematic; bone poses are staggered at roughly 15Hz and skipped outside the camera frustum / 360m range. NPCs can be disabled in Equipment. They do not run the player's contact/flight simulation or collision solver.
 
 `node scripts/benchmark-traffic.mjs` measured 900 warmed CPU-only frames on this development machine: median 0.126ms, P95 0.200ms, max 0.697ms for four actors. This excludes GPU rendering, asset startup and the rest of the game, so it is not an FPS guarantee. Short browser inspections varied by scene; the existing adaptive raster policy remains necessary.
 
 Player flight adds one ballistic state and bounded terrain queries to the existing 120Hz step. There is no articulated rigid-body engine or cloth solver. The wardrobe preview pauses player/traffic simulation and persists only a small local settings record.
+
+## Four-area loading and rule-based traffic
+
+Only one local mountain pack is requested at a time. Selecting another area reloads the scene, releasing the old terrain / forest rather than retaining four GPU worlds. The broad Snoqualmie context is shared as a cached static resource. Existing skier / sky / fir assets are reused. New local grids are 449–513 columns by 513–577 rows and use the existing static terrain LOD; Alpental is 513².
+
+The revised four-actor CPU benchmark (900 warmed frames) measured median 0.358ms / P95 0.882ms / max 13.167ms on this machine, including route movement rules and staggered poses, with no GPU rendering and no forest-neighbor callback in that fixture. Live fixed-step obstacle checks and the rest of the game add work; these figures do not promise a frame rate. NPCs remain optional.
