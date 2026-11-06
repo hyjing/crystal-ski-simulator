@@ -5,7 +5,7 @@ export function advanceTurnPlant(state,skier,dt){
   const speed=skier.speed||0,poling=skier.poling||0;
   const angle=state.previousHeading===undefined?0:Math.abs(Math.atan2(Math.sin(skier.heading-state.previousHeading),Math.cos(skier.heading-state.previousHeading)));
   state.contact=false;state.contactStarted=false;
-  if(speed<2||poling>.15){
+  if(speed<2||poling>.15||skier.airborne||skier.crashRemaining>0){
     state.active=false;state.committedSide=0;state.candidateSide=0;state.turnTime=0;state.arc=0;state.worldPoint=null;
   }else if(side){
     state.neutralTime=0;

@@ -18,7 +18,7 @@ export function stepSkier(s, input, terrain, dt, snow = 'packed') {
   s.turn+=(steering-s.turn)*(1-Math.exp(-dt*(steering===0?32:26)));if(Math.abs(s.turn)<.001)s.turn=0;
   s.edge=edge;s.tuck+=(clamp(input.tuck||0,0,1)-s.tuck)*(1-Math.exp(-dt*5));
   const rollSide=Math.abs(s.turn)>.02?Math.sign(s.turn):s.lastTurn;
-  const engagement=clamp((s.turnHold||0)/1.25,0,1),progressiveBank=.32+.68*engagement;
+  const engagement=clamp((s.turnHold||0)/.80,0,1),progressiveBank=.43+.67*engagement;
   const targetRoll=rollSide*Math.min(1.10,progressiveBank*Math.abs(s.turn)+edge*.82);
   s.edgeRoll=((s.edgeRoll||0)+(targetRoll-(s.edgeRoll||0))*(1-Math.exp(-dt*16)));
   s.edgeAngle=Math.abs(s.edgeRoll);
@@ -39,7 +39,7 @@ export function stepSkier(s, input, terrain, dt, snow = 'packed') {
   if(edge<.5){
     const vy=g.x*s.vx+g.z*s.vz,v=Math.hypot(s.vx,vy,s.vz),horizontal=Math.hypot(s.vx,s.vz);
     if(v>.2){
-      const radius=Math.max(8,19*Math.cos(s.edgeAngle));
+      const radius=Math.max(8,(s.skiSidecut||19)*Math.cos(s.edgeAngle));
       curveAcceleration=Math.min(normalAcceleration*Math.tan(s.edgeAngle),v*v/radius,grip*.88);
       const pivot=Math.max(0,1-horizontal/5)*1.15*Math.abs(s.turn);
       const rate=(curveAcceleration/v+pivot)*(1-s.tuck*.12),angle=-Math.sign(s.edgeRoll)*rate*dt;

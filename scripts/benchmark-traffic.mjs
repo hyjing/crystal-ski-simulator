@@ -1,0 +1,8 @@
+// CPU-only workload check; deliberately does not claim GPU FPS or input latency.
+import fs from 'node:fs';import * as THREE from 'three';import {GLTFLoader} from 'three/addons/loaders/GLTFLoader.js';import {clone} from 'three/addons/utils/SkeletonUtils.js';
+import {createTerrain,getLiftRuns,pointAlongRoute} from '../src/terrain.js';import {createAthleteRig} from '../src/athlete.js';import {attachHumanoid} from '../src/humanoid.js';import {SkiTraffic,TRAFFIC_LIMIT} from '../src/traffic.js';
+const root=new URL('../',import.meta.url),read=name=>JSON.parse(fs.readFileSync(new URL(`public/data/${name}.json`,root))),terrain=createTerrain(read('crystal-dem')),route=getLiftRuns(terrain,read('crystal-lift-runs')).find(r=>r.id==='queens-run');
+const bytes=fs.readFileSync(new URL('public/assets/skier-npc.glb',root)),{scene:source}=await new GLTFLoader().parseAsync(bytes.buffer.slice(bytes.byteOffset,bytes.byteOffset+bytes.byteLength),'');const scene=new THREE.Scene(),actors=[];
+for(let i=0;i<TRAFFIC_LIMIT;i++){const a=createAthleteRig(scene);attachHumanoid(a,clone(source));actors.push(a);}const traffic=new SkiTraffic(scene,terrain,actors),start=route.length*.30;traffic.reset(route,pointAlongRoute(route,start));const timings=[];
+for(let i=0;i<960;i++){const player=pointAlongRoute(route,start+i*.07),t=performance.now();traffic.update(1/60,player,true,true);if(i>=60)timings.push(performance.now()-t);}
+timings.sort((a,b)=>a-b);console.log(JSON.stringify({npcs:actors.length,frames:timings.length,medianMs:+timings[Math.floor(timings.length*.5)].toFixed(3),p95Ms:+timings[Math.floor(timings.length*.95)].toFixed(3),maxMs:+timings.at(-1).toFixed(3),scope:'CPU movement and staggered IK only; excludes GPU rendering'},null,2));

@@ -6,7 +6,7 @@ const flat={gradient:()=>({x:0,z:0})},dt=1/120;
 const moving=()=>Object.assign(createSkier({x:0,z:0},{x:0,z:1}),{vz:12,speed:12});
 test('a normal banked turn builds sideways world velocity with little ski-relative drift',()=>{
  const s=moving();for(let i=0;i<180;i++)stepSkier(s,{steer:1},flat,dt);
- assert.ok(s.x<-4&&s.vx<-5,'the actual trajectory must curve sideways');assert.ok(s.z>12&&s.vz>5);assert.ok(s.speed>10,'a supported turn must not throw away momentum');
+ assert.ok(s.x<-4&&s.vx<-5,'the actual trajectory must curve sideways');assert.ok(s.z>10&&Math.abs(s.heading)>1.1,'the more agile held turn must tighten its arc');assert.ok(s.speed>10,'a supported turn must not throw away momentum');
  assert.ok(s.slip<.15);assert.ok(Math.abs(Math.atan2(s.vx,s.vz)-s.heading)<.03);
 });
 test('changing sides flattens the edge and retains existing lateral momentum',()=>{

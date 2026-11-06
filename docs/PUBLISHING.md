@@ -23,7 +23,7 @@ Open `http://127.0.0.1:4173/crystal-ski-simulator/`. To build for the root path 
 
 ## Privacy and resource attribution
 
-The application has no account system, analytics SDK, microphone, location access or score upload. Weather is a visual preset. The optional development recorder captures the game canvas and is excluded from production. Google Fonts supplies the page fonts; normal hosting / font requests remain subject to those services' policies.
+The application has no account system, analytics SDK, microphone, location access or score upload. Wardrobe colors, ski profile and NPC visibility are saved locally under `crystal-gear-v1`; there is no score upload. Weather is a visual preset. The optional development recorder captures the game canvas and is excluded from production. Google Fonts supplies the page fonts; normal hosting / font requests remain subject to those services' policies.
 
 Public geographic references describe the resort and surrounding mountains, not a player's location history. Asset sources and permissions are documented in [ASSETS.md](ASSETS.md). The reference video supplied during development is not included in this repository; the included demo is captured from this game.
 

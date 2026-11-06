@@ -60,9 +60,18 @@ The humanoid adds a 724 KiB bundled GLB and native skinning / IK; no external ru
 
 ## Complete asset and 4K geographic scenery
 
-The complete skier is ~4.30 MiB on disk and includes a 78,270-triangle continuous outfit plus the native exposed anatomy / equipment. Geometry construction and skin-weight transfer run offline; no marching cubes or garment remeshing runs in the browser. Native skinning and existing IK animate it.
+The complete skier is ~4.16 MiB on disk and includes a 74,562-triangle continuous outfit plus the native exposed anatomy / equipment. Geometry construction and skin-weight transfer run offline; no marching cubes or garment remeshing runs in the browser. Native skinning and existing IK animate it.
 
 Summit and valley detail is spatially limited: 247,257 total far-terrain triangles, with no runtime refinement / replacement. Each 4K aerial texture requires roughly 75–80 MiB including mipmaps, so the two larger maps cost additional GPU memory. They load progressively after skiing is initialized. Image detail and silhouette improve at a real memory / transfer cost; no blanket 60 FPS claim is made.
 
 
 The contoured garment revision adds roughly 30k outfit triangles and a small skinned seam mesh to the previous character. The extra geometry supports the silhouette and folds; no per-frame garment generation is introduced. Stronger wheel zoom can increase character pixel coverage. Actual frame time remains device / view dependent; the existing adaptive raster policy remains active.
+
+
+## NPCs and airborne state
+
+Traffic is capped at four actors. The 1.26MiB NPC asset is fetched / parsed once and cloned with independent skeletons; shared meshes / maps remain shared except local garment palette buffers. Baked geometry is ~24.3k triangles per NPC, plus the small ski / pole rig. NPCs add no shadow casters, powder-field stamps or independent particle emitters. Terrain/path movement is kinematic; bone poses are staggered at roughly 15Hz and skipped outside the camera frustum / 360m range. NPCs can be disabled in Equipment. They do not run the player's contact/flight simulation or collision solver.
+
+`node scripts/benchmark-traffic.mjs` measured 900 warmed CPU-only frames on this development machine: median 0.126ms, P95 0.200ms, max 0.697ms for four actors. This excludes GPU rendering, asset startup and the rest of the game, so it is not an FPS guarantee. Short browser inspections varied by scene; the existing adaptive raster policy remains necessary.
+
+Player flight adds one ballistic state and bounded terrain queries to the existing 120Hz step. There is no articulated rigid-body engine or cloth solver. The wardrobe preview pauses player/traffic simulation and persists only a small local settings record.

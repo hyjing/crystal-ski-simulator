@@ -6,6 +6,7 @@ import {GLTFExporter} from 'three/addons/exporters/GLTFExporter.js';
 import {MarchingCubes} from 'three/addons/objects/MarchingCubes.js';
 import {mergeGeometries,mergeVertices} from 'three/addons/utils/BufferGeometryUtils.js';
 import {RoundedBoxGeometry} from 'three/addons/geometries/RoundedBoxGeometry.js';
+const npc=process.argv.includes('--npc');
 const root=new URL('../',import.meta.url),bytes=fs.readFileSync(new URL('public/assets/skier-human.glb',root));
 const {scene}=await new GLTFLoader().parseAsync(bytes.buffer.slice(bytes.byteOffset,bytes.byteOffset+bytes.byteLength),'');scene.updateMatrixWorld(true);
 const body=scene.getObjectByName('SuperHero_Male'),source=body.geometry,p=source.attributes.position;
@@ -18,8 +19,8 @@ function profile(y,sections){
  let i=0;while(i<sections.length-2&&y>sections[i+1][0])i++;
  const a=sections[i],b=sections[i+1],t=THREE.MathUtils.smoothstep(y,a[0],b[0]);return a.slice(1).map((v,j)=>THREE.MathUtils.lerp(v,b[j+1],t));
 }
-const jacketSections=[[.87,.245,.145],[.96,.259,.170],[1.08,.232,.152],[1.19,.227,.158],[1.32,.257,.174],[1.41,.263,.154],[1.50,.185,.101]];
-const legSections=[[.19,.100,.086],[.29,.106,.094],[.37,.094,.083],[.49,.110,.108],[.60,.107,.108],[.74,.122,.120],[.87,.129,.135]];
+const jacketSections=[[.87,.279,.158],[.96,.291,.183],[1.08,.260,.166],[1.19,.253,.171],[1.32,.292,.189],[1.41,.290,.170],[1.50,.202,.115]];
+const legSections=[[.19,.115,.101],[.29,.120,.108],[.37,.111,.102],[.49,.126,.119],[.60,.125,.123],[.74,.142,.136],[.87,.145,.143]];
 const band=(value,width)=>Math.exp(-((value/width)**2));
 function field(x,y,z){
  const ax=Math.abs(x),[rx,rz]=profile(y,jacketSections),centerZ=-.025+.009*band(y-1.32,.15);
@@ -30,13 +31,13 @@ function field(x,y,z){
  const front=THREE.MathUtils.smoothstep(z,.03,.13),back=THREE.MathUtils.smoothstep(-z,.06,.16);
  // Local compression folds, not evenly spaced rings. A ridge and its adjacent hollow form each fold.
  const crease=(line,width,amount)=>amount*(band(y-line,width)-.52*band(y-line-width*1.1,width*.75));
- jacket-=front*(crease(1.01+.22*ax+.014*Math.sin(x*19),.018,.009)+crease(1.235-.30*ax+.014*Math.sin(x*15),.015,.006)+crease(1.355-.42*ax,.018,.007));
- jacket-=back*(crease(1.055+.13*x+.010*Math.sin(x*23),.022,.007)+crease(1.32-.07*Math.cos(x*10),.018,.005));
+ jacket-=front*.4*(crease(1.01+.22*ax+.014*Math.sin(x*19),.018,.009)+crease(1.235-.30*ax+.014*Math.sin(x*15),.015,.006)+crease(1.355-.42*ax,.018,.007));
+ jacket-=back*.45*(crease(1.055+.13*x+.010*Math.sin(x*23),.022,.007)+crease(1.32-.07*Math.cos(x*10),.018,.005));
  // Sleeves have a full upper arm, elbow ease and gathered cuffs, instead of a linear tapered capsule.
- const [r]=profile(ax,[[.205,.116],[.30,.111],[.41,.097],[.47,.107],[.54,.093],[.61,.083],[.67,.076]]);
+ const [r]=profile(ax,[[.205,.129],[.30,.124],[.41,.112],[.47,.121],[.54,.105],[.61,.092],[.67,.083]]);
  const armY=1.455-.010*Math.sin((ax-.205)*8),armZ=-.065-.007*Math.sin(ax*9),armAngle=Math.atan2(z-armZ,y-armY);
  let sleeve=Math.hypot(ax-THREE.MathUtils.clamp(ax,.205,.665),y-armY,(z-armZ)*1.08)-r;
- sleeve-=.005*band(ax-.465,.09)*Math.sin(ax*85+armAngle*2.2)+.004*band(ax-.615,.045)*Math.sin(ax*116-armAngle*2.8);
+ sleeve-=.0016*band(ax-.465,.09)*Math.sin(ax*85+armAngle*2.2)+.0012*band(ax-.615,.045)*Math.sin(ax*116-armAngle*2.8);
  jacket=smoothMin(jacket,sleeve,.060);
  // Folded-down hood: low at the neck, draped over the upper back with an indented opening.
  const hoodOuter=ellipsoid(x,y-1.466,z+.135,.153,.085,.125),hoodInner=ellipsoid(x,y-1.523,z+.132,.108,.072,.091);
@@ -48,12 +49,12 @@ function field(x,y,z){
   const yy=THREE.MathUtils.clamp(y,.205,.87),[w,d]=profile(yy,legSections),cx=sign*(.119+.006*band(yy-.28,.15)),cz=-.037-.035*(1-THREE.MathUtils.smoothstep(yy,.22,.46));
   const angle=Math.atan2(z-cz,x-cx),section=(Math.pow(Math.pow(Math.abs(x-cx)/w,2.25)+Math.pow(Math.abs(z-cz)/d,2.25),1/2.25)-1)*Math.min(w,d);
   let leg=Math.max(section,.198+.004*Math.sin(angle*3+sign)-y,y-.91);
-  const fold=.007*band(y-.49,.13)*Math.sin(y*82+angle*2.1+sign*.7)+.005*band(y-.28,.07)*Math.sin(y*113-angle*3.4+sign);
+  const fold=.0025*band(y-.49,.13)*Math.sin(y*82+angle*2.1+sign*.7)+.0017*band(y-.28,.07)*Math.sin(y*113-angle*3.4+sign);
   leg-=fold;pants=smoothMin(pants,leg,.033);
  }
  return smoothMin(jacket,pants,.020);
 }
-const resolution=120,march=new MarchingCubes(resolution,new THREE.MeshStandardMaterial(),false,false,120000);march.isolation=0;
+const resolution=npc?46:116,march=new MarchingCubes(resolution,new THREE.MeshStandardMaterial(),false,false,120000);march.isolation=0;
 const min=new THREE.Vector3(-.84,.10,-.29),span=new THREE.Vector3(1.68,1.56,.58);
 for(let k=0;k<resolution;k++)for(let j=0;j<resolution;j++)for(let i=0;i<resolution;i++)march.field[i+j*resolution+k*resolution*resolution]=-field(min.x+i/resolution*span.x,min.y+j/resolution*span.y,min.z+k/resolution*span.z);
 march.update();
@@ -79,6 +80,7 @@ for(let i=0;i<q.count;i++){
 }
 g.setAttribute('skinIndex',new THREE.Uint16BufferAttribute(joints,4));g.setAttribute('skinWeight',new THREE.Float32BufferAttribute(weights,4));g.setAttribute('uv',new THREE.Float32BufferAttribute(uvs,2));g.setAttribute('color',new THREE.Float32BufferAttribute(colors,3));
 const suit=new THREE.SkinnedMesh(g,new THREE.MeshPhysicalMaterial({vertexColors:true,roughness:.88,sheen:.22,sheenRoughness:.85}));suit.name='Unified ski suit';suit.bind(body.skeleton,body.bindMatrix);body.parent.add(suit);
+if(!npc){
 // Clothing construction details follow the sculpted surface and the same native skin weights.
 function onCloth(x,y,side=1){let lo=0,hi=.285;for(let i=0;i<20;i++){const z=(lo+hi)*.5;if(field(x,y,z*side)<0)lo=z;else hi=z;}return new THREE.Vector3(x,y,(hi+.0018)*side);}
 const paths=[];
@@ -89,6 +91,7 @@ const seamGeometry=mergeGeometries(paths.map((points,i)=>new THREE.TubeGeometry(
 const seamJoints=[],seamWeights=[],sp=seamGeometry.attributes.position;for(let i=0;i<sp.count;i++){const skin=nativeWeights(sp.getX(i),sp.getY(i),sp.getZ(i));seamJoints.push(...skin.joints);seamWeights.push(...skin.weights);}
 seamGeometry.setAttribute('skinIndex',new THREE.Uint16BufferAttribute(seamJoints,4));seamGeometry.setAttribute('skinWeight',new THREE.Float32BufferAttribute(seamWeights,4));
 const seams=new THREE.SkinnedMesh(seamGeometry,new THREE.MeshStandardMaterial({color:'#29495d',roughness:.94}));seams.name='Jacket seams and pockets';seams.bind(body.skeleton,body.bindMatrix);body.parent.add(seams);
+}
 // Keep the native human head and fingers. The whole covered body is removed from the render mesh.
 const exposed=[];for(let i=0;i<source.index.count;i+=3){const tri=[source.index.getX(i),source.index.getX(i+1),source.index.getX(i+2)];if(tri.every(j=>(p.getY(j)>1.55&&Math.abs(p.getX(j))<.15)||Math.abs(p.getX(j))>.685))exposed.push(...tri);}source.setIndex(exposed);
 const bodyColors=[];for(let i=0;i<p.count;i++)(Math.abs(p.getX(i))>.67||p.getY(i)<1.64?navy:new THREE.Color('#c49376')).toArray(bodyColors,i*3);source.setAttribute('color',new THREE.Float32BufferAttribute(bodyColors,3));body.material=new THREE.MeshStandardMaterial({vertexColors:true,roughness:.83});
@@ -96,11 +99,11 @@ const hard=new THREE.MeshStandardMaterial({color:'#e5e8e9',roughness:.38,metalne
 function attach(name,center){const bone=scene.getObjectByName(name),group=new THREE.Group();group.position.copy(center).sub(bone.getWorldPosition(new THREE.Vector3())).applyQuaternion(bone.getWorldQuaternion(new THREE.Quaternion()).invert());group.quaternion.copy(bone.getWorldQuaternion(new THREE.Quaternion())).invert();bone.add(group);return group;}
 function mesh(parent,geometry,material,x=0,y=0,z=0){const m=new THREE.Mesh(geometry,material);m.position.set(x,y,z);parent.add(m);return m;}
 const head=attach('Head',new THREE.Vector3(0,1.725,0));head.name='Integrated helmet and goggles';
-mesh(head,new THREE.SphereGeometry(.137,40,28,0,Math.PI*2,0,Math.PI*.64),hard);
-mesh(head,new THREE.SphereGeometry(.141,40,24,Math.PI*.10,Math.PI*.80,Math.PI*.39,Math.PI*.22),rubber,0,-.01,.01).scale.x=.88;
-mesh(head,new THREE.SphereGeometry(.145,40,24,Math.PI*.13,Math.PI*.74,Math.PI*.41,Math.PI*.17),new THREE.MeshPhysicalMaterial({color:'#77a9c9',metalness:.45,roughness:.12,clearcoat:.9}),0,-.01,.013).scale.x=.88;
+mesh(head,new THREE.SphereGeometry(.137,npc?14:40,npc?10:28,0,Math.PI*2,0,Math.PI*.64),hard);
+mesh(head,new THREE.SphereGeometry(.141,npc?14:40,npc?10:24,Math.PI*.10,Math.PI*.80,Math.PI*.39,Math.PI*.22),rubber,0,-.01,.01).scale.x=.88;
+mesh(head,new THREE.SphereGeometry(.145,npc?14:40,npc?10:24,Math.PI*.13,Math.PI*.74,Math.PI*.41,Math.PI*.17),new THREE.MeshPhysicalMaterial({color:'#77a9c9',metalness:.45,roughness:.12,clearcoat:.9}),0,-.01,.013).scale.x=.88;
 function sculptBoot(){
- const n=40,m=new MarchingCubes(n,rubber,false,false,10000);m.isolation=0;
+ const n=npc?18:40,m=new MarchingCubes(n,rubber,false,false,10000);m.isolation=0;
  for(let k=0;k<n;k++)for(let j=0;j<n;j++)for(let i=0;i<n;i++){
   const x=-.105+i/n*.21,y=-.13+j/n*.36,z=-.15+k/n*.38;
   const foot=ellipsoid(x,y+.037,z-.045,.078,.076,.149),cuff=ellipsoid(x,y-.048,z+.036,.074,.125,.085);
@@ -113,12 +116,12 @@ const bootShape=sculptBoot();
 for(const sign of [-1,1]){
  const boot=attach(`foot_${sign>0?'l':'r'}`,new THREE.Vector3(sign*.114,.13,-.05));boot.name='Articulated ski boot';
  mesh(boot,bootShape,rubber);
- for(let j=0;j<3;j++)mesh(boot,new RoundedBoxGeometry(.13,.012,.021,2,.004),buckle,0,-.025+j*.047,.106-j*.019);
+ if(!npc)for(let j=0;j<3;j++)mesh(boot,new RoundedBoxGeometry(.13,.012,.021,2,.004),buckle,0,-.025+j*.047,.106-j*.019);
  const points=[-.065,-.035,0,.035,.065].map(z=>new THREE.Vector3(sign*.05,Math.sqrt(.137*.137-.05*.05-z*z)+.002,z));mesh(head,new THREE.TubeGeometry(new THREE.CatmullRomCurve3(points),12,.0027,6,false),rubber);
 }
 scene.getObjectByName('Eyes').material=new THREE.MeshStandardMaterial({color:'#deded8',roughness:.4});scene.getObjectByName('Eyebrows').material=rubber;
 scene.name='Complete winter skier';scene.userData={source:'CC0 Quaternius head, hands and 65-bone skeleton; authored continuous ski suit and equipment',generator:'scripts/build-skier.mjs'};
 // Node's Blob is available; GLTFExporter only needs these two FileReader methods.
 globalThis.FileReader=class{readAsArrayBuffer(blob){blob.arrayBuffer().then(v=>{this.result=v;this.onloadend?.();});}readAsDataURL(blob){blob.arrayBuffer().then(v=>{this.result=`data:${blob.type};base64,${Buffer.from(v).toString('base64')}`;this.onloadend?.();});}};
-const output=await new GLTFExporter().parseAsync(scene,{binary:true,onlyVisible:true});fs.writeFileSync(new URL('public/assets/skier-complete.glb',root),Buffer.from(output));
+const output=await new GLTFExporter().parseAsync(scene,{binary:true,onlyVisible:true});fs.writeFileSync(new URL(npc?'public/assets/skier-npc.glb':'public/assets/skier-complete.glb',root),Buffer.from(output));
 console.log(JSON.stringify({vertices:q.count,triangles:g.index.count/3,bytes:output.byteLength}));

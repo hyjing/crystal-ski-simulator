@@ -108,8 +108,8 @@ export class SnowEffects {
     this.cursor=(this.cursor+1)%this.capacity;this.count=Math.min(this.count+1,this.capacity);this.geometry.setDrawRange(0,this.count*this.verticesPerSegment);
   }
   update(dt,skier,running,snow,poleContact){
-    if(running&&poleContact){for(let k=0;k<5;k++){const p=this.particles[this.particleCursor++%this.particleCount];Object.assign(p,{x:poleContact.x,y:poleContact.y+.02,z:poleContact.z,vx:(Math.random()-.5)*.5,vz:(Math.random()-.5)*.5,vy:.3+Math.random()*.3,life:.24,maxLife:.3});}}
-    if(running&&skier.speed>.8){
+    if(running&&!skier.airborne&&!skier.crashRemaining&&poleContact){for(let k=0;k<5;k++){const p=this.particles[this.particleCursor++%this.particleCount];Object.assign(p,{x:poleContact.x,y:poleContact.y+.02,z:poleContact.z,vx:(Math.random()-.5)*.5,vz:(Math.random()-.5)*.5,vy:.3+Math.random()*.3,life:.24,maxLife:.3});}}
+    if(running&&!skier.airborne&&!skier.crashRemaining&&skier.speed>.8){
       const current={x:skier.x,z:skier.z,heading:skier.heading,slip:skier.slip};
       if(!this.previous)this.previous=current;
       const length=Math.hypot(current.x-this.previous.x,current.z-this.previous.z);

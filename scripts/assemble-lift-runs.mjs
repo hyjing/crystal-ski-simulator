@@ -24,6 +24,7 @@ function path(start,end,excluded){
 const definitions=[
  {id:'green-valley',name:'Green Valley',lift:'Green Valley',way:'127128250'},
  {id:'lucky-shot',name:'Lucky Shot',lift:'Rainier Express',way:'127128246',via:['127128255']},
+ {id:'queens-run',name:'Queens Run',lift:'Forest Queen Express',way:'127126798'},
  {id:'mr-magoo',name:'Mr Magoo',lift:'Forest Queen Express',way:'127126794'},
  {id:'chappelles',name:"Chappelle's",lift:'Forest Queen Express',way:'127126801'},
  {id:'downhill',name:'Downhill',lift:'Forest Queen Express',way:'127126804'},

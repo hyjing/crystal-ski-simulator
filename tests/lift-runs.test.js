@@ -13,7 +13,7 @@ const terrain=createTerrain({...meta,heights:new Float32Array(bytes.buffer,bytes
 const runs=getLiftRuns(terrain,read('crystal-lift-runs')),infrastructure=read('crystal-infrastructure');
 
 test('selectable runs exclude short sections and start / finish at the actual lift endpoints',()=>{
- assert.equal(runs.length,10);
+ assert.equal(runs.length,11);
  for(const r of runs){
   assert.ok(r.length>=400);assert.ok(r.drop>150);
   const f=infrastructure.features.find(f=>String(f.id)===r.liftId);
@@ -23,6 +23,7 @@ test('selectable runs exclude short sections and start / finish at the actual li
   assert.ok(r.junctionLinks.every(l=>l.length<=50));
   assert.ok(r.startLinkMeters<=300&&r.finishLinkMeters<=180);
  }
+ const queens=filterRoutes(runs,'easy','queens')[0];assert.equal(queens.lift,'Forest Queen Express');assert.equal(queens.osmWayId,'127126798');assert.ok(queens.length>1900&&queens.length<2000);
  assert.equal(filterRoutes(runs,'all','mangoo')[0].id,'mr-magoo');
  assert.equal(filterRoutes(runs,'all','champell')[0].id,'chappelles');
 });

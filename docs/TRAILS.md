@@ -1,13 +1,14 @@
 # Lift-to-lift runs
 
-The menu now contains 10 lift-to-lift itineraries, rather than 78 independently selectable map fragments. Runs shorter than 400 m are excluded. Short named segments remain in the routing network when they connect a complete run.
+The menu now contains 11 lift-to-lift itineraries, rather than 78 independently selectable map fragments. Runs shorter than 400 m are excluded. Short named segments remain in the routing network when they connect a complete run.
 
-The four requested corrections are explicit: Green Valley starts at the Green Valley upper terminal and ends at its lower terminal; Lucky Shot uses Rainier Express; Mr Magoo and Chappelle’s use Forest Queen Express. The skier starts at rest on an authored gentle unloading apron, 35–150 m along the approach, avoiding building proxies and camera obstruction. All ten current spawn slopes test below 3°. The map's S/F pins still mark the actual mapped lift endpoints. Finishing requires reaching the visible 18 m lower-terminal arrival zone; intermediate checkpoint progression is not required to enter it. The finish button restarts at the upper exit, without an animated lift ride.
+The four requested corrections are explicit: Green Valley starts at the Green Valley upper terminal and ends at its lower terminal; Lucky Shot uses Rainier Express; Mr Magoo and Chappelle’s use Forest Queen Express. The skier starts at rest on an authored gentle unloading apron, 35–150 m along the approach, avoiding building proxies and camera obstruction. All eleven current spawn slopes test below 3°. The map's S/F pins still mark the actual mapped lift endpoints. Finishing requires reaching the visible 18 m lower-terminal arrival zone; intermediate checkpoint progression is not required to enter it. The finish button restarts at the upper exit, without an animated lift ride.
 
 | Run | Lift | Approximate itinerary length | Via |
 | --- | --- | ---: | --- |
 | Green Valley | Green Valley | 1.22 km | Grubstake → Green Valley |
 | Lucky Shot | Rainier Express | 1.98 km | Front Traverse → Back Traverse to Lucky Shot → Lucky Shot → Gandy's Run |
+| Queens Run | Forest Queen Express | 1.93 km | Queens (OSM 127126798) |
 | Mr Magoo | Forest Queen Express | 1.64 km | Downhill → Mr Magoo → Ms. Magoo → Lower Magoo → Broadway |
 | Chappelle's | Forest Queen Express | 1.77 km | Downhill → Chappelle's → Lower Magoo → Broadway |
 | Downhill | Forest Queen Express | 1.58 km | Downhill → Afterburn → Broadway |
@@ -116,3 +117,5 @@ Tests verify the lift endpoint coordinates, minimum run length, clear gentle sta
 | West Face | 黑道 | 0.17 km | 83 m | [129729318](https://www.openstreetmap.org/way/129729318) |
 | Whit's End | 黑道 | 0.25 km | 97 m | [1170413268](https://www.openstreetmap.org/way/1170413268) |
 | Willie's Run | 黑道 | 0.22 km | 95 m | [1170380982](https://www.openstreetmap.org/way/1170380982) |
+
+Queens Run is a green itinerary on the Forest Queen Express side, using the retained easy OSM way [127126798](https://www.openstreetmap.org/way/127126798). The resort's [winter map](https://www.crystalmountainresort.com/the-mountain/trail-maps) supplies the naming / resort context; the exact centerline and short terminal approaches here remain map-based approximations. Its ~1.93km total and ~354m vertical include the two terminal links. It is not the Discovery nursery slope.

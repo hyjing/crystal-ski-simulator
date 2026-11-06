@@ -176,3 +176,16 @@ Distant terrain uses static local refinement around Rainier's summit and the int
 The garment builder uses smooth section profiles and localized compression folds instead of a constant elliptical torso. An explicit shoulder slope, hood opening, elbow / knee volume and seam details are baked into the complete GLB. Skin weights remain normalized on the original native skeleton. A versioned asset URL prevents reuse of the previous cached model after this update.
 
 Wheel zoom now supports a closer view aimed at the character rather than far downhill. Follow-camera interpolation uses angle / radius around the skier, with terrain clearance, so a large close orbit does not linearly pass through the character. C resets the view as before. Default ski controls / contact physics are unchanged.
+
+
+## Queens, traffic, equipment and airborne play
+
+Queens Run uses retained easy OSM way 127126798 and the Forest Queen Express terminals. The current menu has eleven >=400m lift itineraries. Progressive bank reaches its full target in roughly 0.8s (initial engagement 0.43rad, bounded target 1.10rad), with the previous tangent-plane energy model. At a flat initial 12m/s the held-turn fixture reports ~32.7° bank at 0.25s, ~57.8° at 0.75s and ~63° / ~83° heading change at 1.5s. These are prototype outputs, not measured skiing calibration. Equipment supplies nominal sidecut 16/19/23m and authored visual length / width / tail variants.
+
+`stepAirborne` leaves ground-only contact behavior to `stepSkier`. It detects convex-crest loss of required normal support with a short clearance probe, or accepts a speed-gated rising-edge J hop. Air velocity has gravity and drag; air yaw changes the visual skier orientation without steering world momentum. Q/E drive bounded yaw rate, F blends a grab pose. Landing compares ski heading with travel modulo 180° and normal impact speed, then awards clean jump / half-turn / grab points, supports switch landings, or enters a short recoverable fall. Pole plants, spray and snow stamps stop in the air; trail segments break at takeoff / touchdown. This is a prototype analytic contact approximation, without independent ski flex, pitch/roll tricks or full ragdoll.
+
+Follow view waits about 1.8s after pointer release, then smoothly decays yaw/pitch along the shortest rotation back towards travel. Equipment previews have front / back controls and pause the run; wheel distance persists. Air spins and switch travel do not force the camera to orbit with the model's yaw.
+
+`SkiTraffic` has four lower-detail skinned NPCs moving in narrow lanes along the chosen itinerary. Their motion does not collide or claim multiplayer semantics. A fixed pool, staggered IK, frustum culling and shadow / particle suppression keep incremental work bounded. Resetting the run resets traffic; NPCs stop before the lower terminal instead of visibly teleporting to the front.
+
+`wardrobe.js` validates hex colors and an explicit ski-profile allowlist, clones palette buffers per actor, and stores colors / profile / NPC toggle locally under `crystal-gear-v1`. No appearance or score is uploaded.

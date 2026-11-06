@@ -111,12 +111,12 @@ export function getLiftRuns(terrain,data){
   const ce=terrain.originUTM[0]+(terrain.width-1)*terrain.spacing/2,cn=terrain.originUTM[1]-(terrain.height-1)*terrain.spacing/2;
   return data.features.map(feature=>{
     const properties=feature.properties,preset=routeDefinitions.find(r=>r.id===feature.id)||{};
-    const difficulty=['quicksilver','tinkerbell'].includes(feature.id)?'easy':['northway','otto-bahn'].includes(feature.id)?'advanced':'intermediate';
+    const difficulty=['quicksilver','tinkerbell','queens-run'].includes(feature.id)?'easy':['northway','otto-bahn'].includes(feature.id)?'advanced':'intermediate';
     const style=difficultyStyles[difficulty],points=[];
     for(const ll of feature.geometry.coordinates){const p=lonLatToUTM(...ll),point={x:p.e-ce,z:cn-p.n};if(!points.length||Math.hypot(point.x-points.at(-1).x,point.z-points.at(-1).z)>.25)points.push(point);}
     const length=points.slice(1).reduce((sum,p,i)=>sum+Math.hypot(p.x-points[i].x,p.z-points[i].z),0);
     return {...preset,...properties,id:feature.id,name:properties.name,points,difficulty,...style,
-      subtitle:feature.id==='mr-magoo'?'Magoo mangoo 马古':feature.id==='chappelles'?'Chappelle champell 沙佩尔':preset.subtitle||'',
+      subtitle:feature.id==='queens-run'?"Queen's Run Queens 女王道":feature.id==='mr-magoo'?'Magoo mangoo 马古':feature.id==='chappelles'?'Chappelle champell 沙佩尔':preset.subtitle||'',
       label:`${style.label} · 上站 → 下站`,length,drop:terrain.sample(points[0].x,points[0].z)-terrain.sample(points.at(-1).x,points.at(-1).z),
       sourceUrl:`https://www.openstreetmap.org/way/${properties.primaryWayId||properties.osmWayIds[0]}`,osmWayId:properties.primaryWayId||properties.osmWayIds[0]};
   }).filter(r=>r.length>=400);

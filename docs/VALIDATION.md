@@ -119,3 +119,10 @@ The HUD reports FPS, raw frame interval P95 / maximum, hitch count, raster scale
 - 62 tests pass. The new silhouette fixture verifies that both chest and loose hem widen by more than 2cm from the waist in the baked mesh, and that garment details share the native skeleton. Existing closed-surface connectivity, normalized weights, finite posed bounds and ski-boot bank checks remain green.
 - Actual browser inspection covered the front, back, wheel close-up, a large orbit and a short turn paused for review, with no new warnings / errors observed after loading. The initial close-orbit linear interpolation exposed the near clipping plane; angle / radius interpolation fixes that camera path. No long full-route performance certification is implied.
 - Current close front / back screenshots supersede `rebuilt-character.png` for the README character example. The game remains stylized and has not reached reference-video parity.
+
+
+## First freeride gameplay pass — November 5, 2026
+
+- 72 tests pass: Queens is an easy ~1.93km Forest Queen Express itinerary with the mapped terminal endpoints and a gentle spawn; legacy route, ground energy, grip and linked-pole tests remain. The tighter-turn fixture now checks its stronger arc instead of requiring a nearly straight forward component after a held turn.
+- New tests cover unchanged ground-only stepping through the flight wrapper, natural convex-crest takeoff, ballistic return, no horizontal steering from air tricks, held-key hop suppression, switch / sideways / high-impact landings, mouse look delay / recovery, strict wardrobe validation and local persistence, profile turn-radius differences, and finite independent NPC rigs / pause / disable behavior.
+- Browser checks include selecting Queens, nearby moving NPCs, palette and ski-profile preview, a slow inspection of an airborne grab, and a normal-speed manually controlled J + E hop landing for 200 points / 180° / Switch. Camera recentering was observed after mouse orbit. Debug poses are staged checks, not a complete route playthrough or validated competitive freestyle simulation.

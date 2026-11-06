@@ -1,5 +1,7 @@
 import * as THREE from 'three';
 import {GLTFLoader} from 'three/addons/loaders/GLTFLoader.js';
+import {clone as cloneSkeleton} from 'three/addons/utils/SkeletonUtils.js';
+const modelSources=new Map();
 const Y=new THREE.Vector3(0,1,0);
 export function upperBodyCounterAngle(heading,fallLine,motion={}){
   const travel=Number.isFinite(motion.vx)&&Number.isFinite(motion.vz)?Math.atan2(motion.vx,motion.vz):heading;
@@ -9,7 +11,11 @@ export function upperBodyCounterAngle(heading,fallLine,motion={}){
   const downhill=THREE.MathUtils.smoothstep(Math.cos(travel-fallLine),.25,.70);
   return THREE.MathUtils.clamp(Math.atan2(Math.sin(fallLine-heading),Math.cos(fallLine-heading))*.88,-.95,.95)*downhill*moving;
 }
-export async function loadHumanoid(athlete){const gltf=await new GLTFLoader().loadAsync(`${import.meta.env.BASE_URL}assets/skier-complete.glb?v=contoured-outfit-2`);return attachHumanoid(athlete,gltf.scene);}
+export async function loadHumanoid(athlete,variant='player'){
+ const file=variant==='npc'?'skier-npc.glb':'skier-complete.glb';
+ if(!modelSources.has(file))modelSources.set(file,new GLTFLoader().loadAsync(`${import.meta.env.BASE_URL}assets/${file}?v=freeride-gear-3`));
+ return attachHumanoid(athlete,cloneSkeleton((await modelSources.get(file)).scene));
+}
 function jointSolution(a,target,pole,l1,l2){
   const delta=target.clone().sub(a),d=THREE.MathUtils.clamp(delta.length(),Math.abs(l1-l2)+.001,l1+l2-.002),axis=delta.normalize();
   const along=(l1*l1-l2*l2+d*d)/(2*d),height=Math.sqrt(Math.max(0,l1*l1-along*along));
@@ -42,7 +48,7 @@ export function updateHumanoid(athlete,pose){
   const hip=body.localToWorld(new THREE.Vector3(pose.hipX,pose.hipY+.07,0));bones.pelvis.position.copy(bones.pelvis.parent.worldToLocal(hip));
   const attitude=(yaw,lean,bend)=>rootQ.clone().multiply(new THREE.Quaternion().setFromEuler(new THREE.Euler(bend,yaw,lean,'YXZ')));
   worldQuaternion(bones.pelvis,attitude(pose.counter*.18,pose.lean*.10,.03).multiply(rest.get('pelvis').q));
-  for(const [name,fraction] of [['spine_01',.40],['spine_02',.72],['spine_03',1]])worldQuaternion(bones[name],attitude(pose.counter*fraction,pose.lean*.15,.08+pose.tuck*.40).multiply(rest.get(name).q));
+  for(const [name,fraction] of [['spine_01',.40],['spine_02',.72],['spine_03',1]])worldQuaternion(bones[name],attitude(pose.counter*fraction,pose.lean*.15,.08+pose.tuck*.40+(pose.grab||0)*.35).multiply(rest.get(name).q));
   worldQuaternion(bones.neck_01,attitude(pose.counter,pose.lean*.08,pose.tuck*.12).multiply(rest.get('neck_01').q));
   worldQuaternion(bones.Head,attitude(pose.counter,0,pose.tuck*.08).multiply(rest.get('Head').q));
   for(const leg of legs){const suffix=leg.sign>0?'l':'r',l=rig.lengths[suffix],hip=bones[`thigh_${suffix}`].getWorldPosition(new THREE.Vector3()),ankle=body.localToWorld(leg.target.ankle.clone().add(new THREE.Vector3(0,-.05,0))),pole=hip.clone().addScaledVector(forward,.7).addScaledVector(right,leg.sign*.12);

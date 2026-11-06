@@ -36,6 +36,7 @@ test('the checked-in humanoid has a real skeleton, deforms finitely and counter-
  const heading=q=>{const f=new THREE.Vector3(0,0,1).applyQuaternion(q);return Math.atan2(f.x,f.z);};assert.ok(Math.abs(heading(torso))<Math.abs(heading(hips))*.5);assert.ok(upperBodyCounterAngle(.8,0)<-.6);
  const expectedFoot=actor.getWorldQuaternion(new THREE.Quaternion()).multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0,0,1),s.edgeRoll*.70)).multiply(rig.rest.get('foot_l').q);assert.ok(rig.bones.foot_l.getWorldQuaternion(new THREE.Quaternion()).angleTo(expectedFoot)<1e-6,'boot follows the ski bank');
  rig.model.traverse(o=>{if(o.isSkinnedMesh){o.skeleton.update();o.computeBoundingBox();for(const v of [...o.boundingBox.min,...o.boundingBox.max])assert.ok(Number.isFinite(v));assert.ok(o.boundingBox.max.y<2.1&&o.boundingBox.min.y>-.15);}});
+ updateAthletePose(actor,{...s,airborne:true,grab:1,tuck:.85},1/60,()=>0);rig.model.traverse(o=>{if(o.isSkinnedMesh){o.skeleton.update();o.computeBoundingBox();for(const v of [...o.boundingBox.min,...o.boundingBox.max])assert.ok(Number.isFinite(v),'full grab deformation remains finite');}});
 });
 test('detailed chair, gondola and tower assets have finite merged geometry',()=>{
  for(const g of [...detailedChair(),...detailedCabin(),towerAccessories()]){assert.ok(g&&g.attributes.position.count>0);for(const value of g.attributes.position.array)assert.ok(Number.isFinite(value));}

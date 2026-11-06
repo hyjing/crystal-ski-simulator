@@ -41,4 +41,6 @@ Elevation, map and generated-asset attribution remains in [ASSETS.md](../ASSETS.
 
 `rebuilt-character.png` and `refined-rainier.png` show the complete skier / 4K geographic scenery rebuild. They are staged live browser inspection views. Older video and screenshot files remain historical; they do not represent every current asset.
 
-`contoured-character-front.png` and `contoured-character-back.png` show the later garment-silhouette revision, captured through the real close follow camera in development inspection mode. These supersede the straight-sided outfit image for the current character example.
+`contoured-character-front.png` and `contoured-character-back.png` show the later garment-silhouette revision, captured through the real close follow camera in development inspection mode. These document the previous silhouette revision.
+
+`freeride-gear.png` shows the current wider, smoother outfit and live equipment panel (cream / olive palette, park skis). `queens-traffic.png` shows Queens Run and nearby NPC skiers. Both are actual browser screenshots from development inspection mode, with the QA controls hidden; the route location is staged and animation is frozen for capture. They are newer than the original video.
