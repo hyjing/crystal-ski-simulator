@@ -3,7 +3,7 @@ import {createAthleteRig,updateAthletePose} from './athlete.js';
 import {loadHumanoid} from './humanoid.js';
 import {applyGear,GEAR_PRESETS} from './wardrobe.js';
 import {nearestOnRoute,clamp} from './physics.js';
-import {trafficPoint,sweptContact} from './traffic-brain.js';
+import {trafficPoint,sweptContact,planAvoidance} from './traffic-brain.js';
 import {crowdRoutes,lodgeAnchors,insideFootprint,poseInterval,SKIER_COUNT,CROWD_LIMIT,VISIBLE_CROWD_LIMIT} from './crowd-activities.js';
 import {makeVisitorSite,siteLocal,sitePoint,beginVisitor,advanceVisitor,visitorSurface,advanceSkierRoutine,fallAnimation} from './npc-routines.js';
 import {createRestArea,setVisitorProp,updateVisitorProp} from './rest-area.js';
@@ -18,7 +18,7 @@ export class SkiTraffic{
   const closest=p=>[...anchors].sort((a,b)=>Math.hypot(a.x-p.x,a.z-p.z)-Math.hypot(b.x-p.x,b.z-p.z))[0];
   const upper=closest(top),lower=closest(bottom),ordered=[upper,lower,...anchors.filter(a=>a!==upper&&a!==lower)].filter(Boolean),unique=[];for(const a of ordered)if(unique.every(b=>Math.hypot(a.x-b.x,a.z-b.z)>18))unique.push(a);
   for(const area of this.restAreas)area.dispose();this.sites=Array.from({length:3},(_,i)=>makeVisitorSite(unique[i]||{x:(i===1?bottom:top).x+(i===2?-28:28),z:(i===1?bottom:top).z+8},this.terrain,i));this.restAreas=this.sites.map(site=>createRestArea(this.scene,this.terrain,site));this.onStructuresChanged?.();
-  this.states.forEach((s,i)=>{const actor=this.actors[i];actor.userData.plant={};actor.userData.lean=0;actor.userData.counterYaw=undefined;for(const arm of actor.userData.arms||[])arm.npcHand=null;s.speed=0;s.time=i*1.7;s.poseAge=1;s.avoid=0;s.fall=0;s.cooldown=0;s.decisionAge=1;s.roll=0;s.tuck=0;s.walkPhase=0;s.phase=0;s.walkAmount=0;s.activity='ski';s.routineClock=i<6?0:(i*3)%40;s.nextPause=undefined;s.nextFall=undefined;
+  this.states.forEach((s,i)=>{const actor=this.actors[i];actor.userData.plant={};actor.userData.lean=0;actor.userData.counterYaw=undefined;for(const arm of actor.userData.arms||[])arm.npcHand=null;s.speed=0;s.time=i*1.7;s.poseAge=1;s.avoid=0;s.avoidSide=0;s.avoidClear=0;s.fall=0;s.cooldown=0;s.decisionAge=1;s.roll=0;s.tuck=0;s.walkPhase=0;s.phase=0;s.walkAmount=0;s.activity='ski';s.routineClock=i<6?0:(i*3)%40;s.nextPause=undefined;s.nextFall=undefined;
    if(s.kind==='ski'){s.route=plans[i];const start=nearestOnRoute(player,s.route.points).progress;s.progress=i<6?Math.min(s.route.length-25,start+25+i*32):s.route.length*(.15+.70*((i*.381966)%1));s.point=trafficPoint(s.route,s.progress,s.time,i);}
    else{const j=i-SKIER_COUNT;beginVisitor(s,this.sites[Math.floor(j/2)],j);s.seatGround=this.terrain.surface(s.point.x,s.point.z);setVisitorProp(actor,s.prop);}
    s.heading=s.point.heading;s.previousHeading=s.heading;
@@ -31,14 +31,14 @@ export class SkiTraffic{
    if(s.kind==='lodge'){this.stepVisitor(s,i,dt,player,obstacles);continue;}
    const old=s.point,distance=Math.hypot(old.x-player.x,old.z-player.z),profile=advanceSkierRoutine(s,i,dt);if(s.fall>0)continue;s.decisionAge+=dt;
    if(s.decisionAge>=(distance<250?.10:.5)){
-    s.decisionAge=0;const g=this.terrain.gradient(old.x,old.z);s.slope=Math.max(0,-g.x*Math.sin(old.heading)-g.z*Math.cos(old.heading));let brake=1,avoid=0;
-    if(distance<350){const neighbors=[player,...this.states.filter(n=>n!==s&&n.point&&!n.indoor).map(n=>n.point),...obstacles(old.x,old.z)];
-     for(const n of neighbors){const dx=n.x-old.x,dz=n.z-old.z,along=dx*Math.sin(old.heading)+dz*Math.cos(old.heading),across=dx*Math.cos(old.heading)-dz*Math.sin(old.heading);if(along>-2&&along<20&&Math.abs(across)<5){brake=Math.min(brake,clamp((along-2)/18,.08,1));avoid+=(across>0?-1:across<0?1:(i%2?1:-1))*3.5;}}}
-    s.brake=brake;s.avoidTarget=clamp(avoid,-5,5);s.target=clamp((3.2+s.slope*16)*profile.speed,2.2,18)*brake;
+    const decisionDt=s.decisionAge;s.decisionAge=0;const path=trafficPoint(s.route,s.progress,s.time,i),g=this.terrain.gradient(old.x,old.z);s.slope=Math.max(0,-g.x*Math.sin(path.heading)-g.z*Math.cos(path.heading));
+    const neighbors=distance<350?[player,...this.states.filter(n=>n!==s&&n.point&&!n.indoor).map(n=>n.point),...obstacles(old.x,old.z)]:[];
+    const plan=planAvoidance(s,neighbors,path.heading,i,decisionDt);s.brake=plan.brake;s.avoidTarget=plan.avoid;s.target=clamp((3.2+s.slope*16)*profile.speed,2.2,18)*plan.brake;
    }
    if(s.activity==='pull-over'||s.activity==='pause'){s.avoidTarget=s.parkingSide*12;s.target=s.activity==='pause'?0:1.8;}
-   s.avoid+=(s.avoidTarget-s.avoid)*(1-Math.exp(-dt*2));const remaining=s.route.length-22-s.progress,target=remaining<10?0:s.target;
+   const lateralLimit=(.25+s.speed*.30)*dt;s.avoid+=clamp((s.avoidTarget-s.avoid)*(1-Math.exp(-dt*1.5)),-lateralLimit,lateralLimit);const remaining=s.route.length-22-s.progress,target=remaining<10?0:s.target;
    s.speed+=(target-s.speed)*(1-Math.exp(-dt*(s.brake<.7?4:1.2)));s.progress=Math.min(s.route.length-22,s.progress+s.speed*dt);s.point=trafficPoint(s.route,s.progress,s.time,i,s.avoid);
+   const stepLength=Math.hypot(s.point.x-old.x,s.point.z-old.z),maxStep=s.speed*dt*1.3;if(stepLength>maxStep&&stepLength>0){s.point.x=old.x+(s.point.x-old.x)*maxStep/stepLength;s.point.z=old.z+(s.point.z-old.z)*maxStep/stepLength;}
    const dx=s.point.x-old.x,dz=s.point.z-old.z;if(Math.hypot(dx,dz)>.00001)s.point.heading=Math.atan2(dx,dz);
    if(s.activity==='pause'&&s.speed<.15){s.point={...old};}else if(Math.hypot(dx,dz)<.001)s.point.heading=s.heading;
    const yaw=Math.atan2(Math.sin(s.point.heading-s.heading),Math.cos(s.point.heading-s.heading));s.heading+=clamp(yaw*(1-Math.exp(-dt*6)),-dt*1.8,dt*1.8);const rate=Math.atan2(Math.sin(s.heading-s.previousHeading),Math.cos(s.heading-s.previousHeading))/Math.max(dt,.001);s.previousHeading=s.heading;
@@ -70,7 +70,7 @@ export class SkiTraffic{
   for(const {i,distance,wasVisible} of visible.slice(0,VISIBLE_CROWD_LIMIT)){
    const actor=this.actors[i],s=this.states[i],p=s.point,walking=s.kind==='lodge';actor.visible=true;const snow=(x,z)=>walking?visitorSurface(s.site,x,z,(u,v)=>this.terrain.surface(u,v)):this.terrain.surface(x,z),base=snow(p.x,p.z),ground=walking?base+((s.seatGround??base)-base)*(s.sit||0):base;actor.position.set(p.x,ground-1200-.07,p.z);
    const gradient=walking?{x:0,z:0}:this.terrain.gradient(p.x,p.z),heading=s.heading;
-   up.set(-gradient.x,1,-gradient.z).normalize();forward.set(Math.sin(heading),gradient.x*Math.sin(heading)+gradient.z*Math.cos(heading),Math.cos(heading)).normalize();right.crossVectors(up,forward).normalize();basis.makeBasis(right,up,forward);actor.quaternion.setFromRotationMatrix(basis);const fall=fallAnimation(s.fall,s.fallDuration||1.5);if(s.fall>0)actor.rotateZ(fall.amount*1.25);
+   up.set(-gradient.x,1,-gradient.z).normalize();forward.set(Math.sin(heading),gradient.x*Math.sin(heading)+gradient.z*Math.cos(heading),Math.cos(heading)).normalize();right.crossVectors(up,forward).normalize();basis.makeBasis(right,up,forward);const rootTarget=new THREE.Quaternion().setFromRotationMatrix(basis);const fall=fallAnimation(s.fall,s.fallDuration||1.5);if(s.fall>0)rootTarget.multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0,0,1),fall.amount*1.25));if(!wasVisible||!frameDt)actor.quaternion.copy(rootTarget);else actor.quaternion.slerp(rootTarget,1-Math.exp(-frameDt*10));
    const interval=poseInterval(distance),tick=Math.floor((this.elapsed+i*.013)/interval);if(!wasVisible||s.poseAge>=interval||tick!==s.poseTick){s.poseTick=tick;if(s.poseAge>.5)actor.userData.plant={};targetNpcPose(actor,()=>updateAthletePose(actor,{speed:s.speed,heading,downhillHeading:Math.atan2(-gradient.x,-gradient.z),vx:Math.sin(heading)*s.speed,vz:Math.cos(heading)*s.speed,turn:s.roll,steerInput:clamp(s.roll*3,-1,1),edgeRoll:s.roll,edgeAngle:Math.abs(s.roll),tuck:s.tuck,poling:s.poling||0,polePhase:s.phase,walkAmount:s.walkAmount,walkPhase:s.walkPhase,idleShift:walking?Math.sin(s.time*.5+i)*.35:0,headLook:walking?Math.sin(s.time*.32+i)*.3:0,idleGesture:'',pedestrian:walking,sitAmount:walking?s.sit:0,riseLean:s.riseLean||0,holding:walking?s.prop:null,consumeAmount:s.consume||0,fallAmount:fall.amount,fallBrace:fall.brace,activityTime:s.time,softHands:true,crashRemaining:s.fall},Math.min(s.poseAge,.2),(x,z)=>snow(x,z)-1200));s.poseAge=0;}blendNpcPose(actor,frameDt,!wasVisible);
    if(actor.userData.skiRig){actor.userData.skiRig.visible=!walking;for(const arm of actor.userData.arms){arm.pole.visible=!walking;arm.basket.visible=false;}}if(!walking||s.sit<.95)fitSnowContact(actor,snow,walking);if(walking)updateVisitorProp(actor,s.fall<=0,s.consume||0);
   }

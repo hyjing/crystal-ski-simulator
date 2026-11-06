@@ -241,3 +241,10 @@ Touch devices cap initial pixel ratio at 1.0 and use a 2048px shadow map (deskto
 Lift riders now refresh their assignment among nearby in-frustum open chairs every 0.5s, with a retention bias and a preference for the active lift. A deterministic one-in-three chair candidate set keeps some chairs empty. Their eight-actor / four-visible budget remains unchanged. This fixes the previous allocation to only four widely separated chairs, which could leave all nearby chairs empty.
 
 Ground NPCs keep staggered IK but save bone targets and interpolate local quaternion / position every render frame. Newly visible actors receive a fresh pose immediately; frustum / distance margins and selection bias reduce visibility churn. Heading changes are capped at 1.8rad/s; parked agents hold their actual point and heading rather than rotating from tiny displacement noise. This is a targeted continuity fix, not proof that all visual artifacts are eliminated.
+
+
+## Committed avoidance and selective crest launch
+
+NPC obstacle decisions now use the intended route heading, not a heading already perturbed by the last evasive move. Each encounter commits to a passing side until the corridor has stayed clear for 1.2s. Targets no longer sum conflicting neighbor signs. Lateral offsets have a speed-dependent slew limit, total per-step travel is bounded to 1.3 times forward speed, and rendered root orientation eases through DEM-normal changes. These changes address route / avoidance motion directly, in addition to existing bone interpolation.
+
+Manual jump minimum is 5m/s (18km/h). Automatic launch minimum is 12m/s (43.2km/h), plus a fore/aft grade difference over 0.16, negative support force, predicted separation above 0.025m / 0.20m / 0.50m at 0.10s / 0.22s / 0.38s, and 50ms continuous confirmation. Constant planar slopes cannot satisfy the curvature / separation gate. Rejected manual presses report the minimum speed and remain edge-triggered; holding does not defer the launch until speed rises. These thresholds are gameplay tuning, not a biomechanics calibration.

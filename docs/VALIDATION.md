@@ -173,3 +173,8 @@ Facility tests sweep a fast skier through a thin wall, check rotated boxes rathe
 126 local unit tests pass; the Pages-path production build succeeds. New regression tests verify multi-finger / keyboard ownership, pointer-cancel release and paused-input guards; rendered bone interpolation; nearby visible chair occupancy when the active lift is elsewhere; bounded NPC heading rate and parked positions; and stable 12-actor selection during small camera jitter.
 
 The macOS local launcher was exercised through first dependency installation, repeat startup without reinstalling, a successful localhost HTTP response and SIGTERM shutdown, with browser auto-open disabled. Windows launcher execution, actual browser auto-opening and mobile rendering / touch gestures were not tested. Responsive CSS and hardware rendering changes were built locally; no browser testing was performed, as requested.
+
+
+## Avoidance oscillation and launch thresholds
+
+133 local tests pass. Additional fixtures move an obstacle across the NPC center line repeatedly and verify the passing side stays committed, test release after a clear interval, bound per-step travel during close encounters and sharp route vertices, and verify rendered root orientation remains smooth across alternating DEM normals. Launch regressions reject manual presses below 18km/h, reject delayed launch from a held key, reject natural launch below 12m/s on a genuine convex feature, and keep constant planar descents grounded at 12–35m/s. Existing fast convex takeoff / sustained flight / landing and small-bump rejection cases still pass. The prior half-second avoidance test now checks gradual lateral movement and a committed side instead of requiring an abrupt >1m offset. No browser test was performed.

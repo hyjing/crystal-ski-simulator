@@ -105,3 +105,6 @@ The updated 900-frame ground-crowd CPU fixture measured median 0.904ms / P95 2.4
 ## Interpolated crowd poses and touch rendering
 
 The current 900-frame ground-crowd CPU fixture measured median 0.346ms / P95 0.650ms / max 1.110ms for 24 actors, up to 12 visible, including interpolation of cached bone targets. Measurements vary with machine load; this is not a browser or phone FPS claim. Existing staggered IK and NPC visibility budgets remain. Lift assignment scans current carrier centers at 2Hz, reusing the eight passenger actors. Touch devices start at pixel ratio <=1 and 2048px shadows; the adaptive raster floor remains 0.85. No mobile GPU benchmark was performed.
+
+
+The committed-avoidance update measured 0.566ms median / 0.972ms P95 / 1.888ms max in the same 900-frame CPU ground-traffic fixture (24 actors, up to 12 visible). It includes bounded path correction and root / bone smoothing, but still excludes GPU rendering, live forest callbacks, lift riders and player facility collision. No browser performance test was run.

@@ -6,6 +6,7 @@ export function landingQuality(heading,travelHeading,normalImpact){
  return{clean:alignment<.55&&normalImpact<7.5,alignment,switchLanding:angle>Math.PI/2};
 }
 // Deliberate gameplay pop: retain real terrain, gravity and horizontal momentum.
+export const TAKEOFF={manualMinSpeed:5,naturalMinSpeed:12,confirmationTime:.05};
 export const jumpImpulse=speed=>5.2+1.4*clamp((speed-3)/17,0,1);
 function launch(s,terrain,manual){
  const g=terrain.gradient(s.x,s.z);s.airborne=true;s.airY=height(terrain,s.x,s.z)+(manual?.025:.006);s.airVy=g.x*s.vx+g.z*s.vz+(manual?jumpImpulse(Math.hypot(s.vx,s.vz)):0);
@@ -20,11 +21,12 @@ export function stepAirborne(s,input,terrain,dt,snow='packed'){
   // A ski-length / DEM-cell span rejects tiny triangle creases that the legs absorb.
   const curvature=(height(terrain,s.x+fx*d,s.z+fz*d)-2*h+height(terrain,s.x-fx*d,s.z-fz*d))/(d*d),vy=g.x*s.vx+g.z*s.vz;
   const gap=t=>h+vy*t-.5*PHYSICS.gravity*t*t-height(terrain,s.x+s.vx*t,s.z+s.vz*t);
-  const unsupported=speed>5&&(PHYSICS.gravity+speed*speed*curvature)/Math.sqrt(1+g.x*g.x+g.z*g.z)<-.5&&gap(.04)>.005&&gap(.12)>.06&&gap(.30)>.18;
+  const frontGrade=(height(terrain,s.x+fx*d,s.z+fz*d)-h)/d,rearGrade=(h-height(terrain,s.x-fx*d,s.z-fz*d))/d;
+  const unsupported=speed>=TAKEOFF.naturalMinSpeed&&rearGrade-frontGrade>.16&&(PHYSICS.gravity+speed*speed*curvature)/Math.sqrt(1+g.x*g.x+g.z*g.z)<-.5&&gap(.10)>.025&&gap(.22)>.20&&gap(.38)>.50;
   s.naturalCandidate=unsupported&&!s.jumpCooldown?(s.naturalCandidate||0)+dt:0;
-  const natural=s.naturalCandidate>=.025;
-  if(!s.jumpCooldown&&((jump&&speed>3)||natural))launch(s,terrain,jump);
-  else{stepSkier(s,input,terrain,dt,snow);s.airY=height(terrain,s.x,s.z);s.grab=Math.max(0,(s.grab||0)-dt*8);return s;}
+  const natural=s.naturalCandidate>=TAKEOFF.confirmationTime;
+  if(!s.jumpCooldown&&((jump&&speed>=TAKEOFF.manualMinSpeed)||natural))launch(s,terrain,jump);
+  else{if(jump&&speed<TAKEOFF.manualMinSpeed)s.airEvent={type:'jump-blocked',minSpeed:TAKEOFF.manualMinSpeed};stepSkier(s,input,terrain,dt,snow);s.airY=height(terrain,s.x,s.z);s.grab=Math.max(0,(s.grab||0)-dt*8);return s;}
  }
  const v=Math.hypot(s.vx,s.vz,s.airVy),cdA=PHYSICS.uprightCdA+(PHYSICS.tuckCdA-PHYSICS.uprightCdA)*(input.tuck?1:0),drag=Math.exp(-.5*PHYSICS.airDensity*cdA/PHYSICS.mass*v*dt);
  s.vx*=drag;s.vz*=drag;s.airVy*=drag;s.x+=s.vx*dt;s.z+=s.vz*dt;s.distance+=Math.hypot(s.vx,s.vz)*dt;

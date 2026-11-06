@@ -12,6 +12,15 @@ export function trafficPoint(route,progress,time,index,avoid=0){
  const offset=clamp(Math.sin(wave)*amplitude+avoid,-width,width),derivative=Math.cos(wave)*amplitude/wavelength;
  return{x:p.x+dz/len*offset,z:p.z-dx/len*offset,heading:Math.atan2(dx+dz*derivative,dz-dx*derivative),progress:clamp(progress,0,route.length)};
 }
+// Commit to one passing side for an encounter; transient center-line crossings
+// must not reverse the target lane on each decision tick.
+export function planAvoidance(state,neighbors,heading,index,dt){
+ let brake=1,nearest=null,nearestAlong=Infinity;
+ for(const n of neighbors){const dx=n.x-state.point.x,dz=n.z-state.point.z,along=dx*Math.sin(heading)+dz*Math.cos(heading),across=dx*Math.cos(heading)-dz*Math.sin(heading);if(along>-2&&along<20&&Math.abs(across)<5){brake=Math.min(brake,clamp((along-2)/18,.08,1));if(along<nearestAlong){nearestAlong=along;nearest={across};}}}
+ if(nearest){state.avoidClear=0;if(!state.avoidSide)state.avoidSide=Math.abs(nearest.across)>.3?-Math.sign(nearest.across):(index%2?1:-1);}
+ else{state.avoidClear=(state.avoidClear||0)+dt;if(state.avoidClear>1.2)state.avoidSide=0;}
+ return{brake,avoid:(state.avoidSide||0)*3.5};
+}
 export function sweptContact(from,to,body,radius=.9){
  const dx=to.x-from.x,dz=to.z-from.z,l2=dx*dx+dz*dz,t=l2?clamp(((body.x-from.x)*dx+(body.z-from.z)*dz)/l2,0,1):0;
  return Math.hypot(from.x+dx*t-body.x,from.z+dz*t-body.z)<radius;

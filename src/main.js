@@ -297,6 +297,7 @@ function updatePhysics(dt){
   }
   if(skier.airEvent?.type==='takeoff'||skier.airEvent?.type==='land'||skier.airEvent?.type==='crash'){snowEffects.breakTrail();powder.breakTrail();}
   if(skier.airEvent?.type==='land'&&skier.airEvent.points&&!pendingRecovery)toast(`平稳落地 +${skier.airEvent.points}${skier.airEvent.rotation?' · '+skier.airEvent.rotation+'°':''}${skier.airEvent.grab?' · 抓板':''}`);
+  if(skier.airEvent?.type==='jump-blocked')toast('起跳需要至少 18 km/h · 先撑杖或顺坡加速');
   if(skier.airEvent?.type==='crash')toast('落地失衡，稳住后继续；R 返回检查点');elapsed+=dt;peakSpeed=Math.max(peakSpeed,skier.speed);totalDistance=skier.distance;
   const boundsX=(terrain.width-1)*terrain.spacing/2-20,boundsZ=(terrain.height-1)*terrain.spacing/2-20;
   if(Math.abs(skier.x)>boundsX||Math.abs(skier.z)>boundsZ){resetPosition();toast('已到地形边界，返回检查点');return;}
