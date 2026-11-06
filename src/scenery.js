@@ -1,4 +1,6 @@
 import * as THREE from 'three';
+import {stitchedRegionalGrid,validRegionalGrid} from './regional-scenery.js';
+import {createTerrain} from './terrain.js';
 import {HDRLoader} from 'three/addons/loaders/HDRLoader.js';
 
 // All terrain shares the local tile's UTM origin and metric vertical datum.
@@ -21,7 +23,9 @@ function winterMaterial(texture,snowline=1050){
         vec4 aerial=texture2D(map,vMapUv);
         float luma=dot(aerial.rgb,vec3(.2126,.7152,.0722));
         // Keep photographed glacier channels, rock bands, forests and braided rivers.
+        float water=smoothstep(.85,1.07,aerial.b/max(aerial.g,.02))*(1.-smoothstep(.12,.30,luma))*(1.-smoothstep(.02,.12,vSteep));
         float vegetation=smoothstep(.005,.055,aerial.g-max(aerial.r,aerial.b)*.86);
+        vegetation*=1.-water;
         float rockExposure=smoothstep(.24,.65,vSteep);
         float photographedIce=smoothstep(.25,.70,luma)*(1.-vegetation*.8);
         float winterCover=smoothstep(${snowline.toFixed(1)},${(snowline+(snowline===1050?1000:700)).toFixed(1)},vElevation)*(1.-rockExposure*.88);
@@ -31,11 +35,11 @@ function winterMaterial(texture,snowline=1050){
         vec3 photographed=mix(vec3(luma),aerial.rgb,.78);
         photographed=mix(photographed,photographed*vec3(.76,.91,.90),vegetation*.40);
         // Dark water / low valley pixels remain photographic rather than painted white.
-        cover*=mix(.50,1.,smoothstep(.035,.17,luma));
+        cover*=mix(.50,1.,smoothstep(.035,.17,luma))*(1.-water*.95);
         diffuseColor.rgb*=mix(photographed,winterSnow,clamp(cover,0.,.93));
       #endif`);
   };
-  material.customProgramCacheKey=()=> `georeferenced-winter-aerial-v3-${snowline}`;
+  material.customProgramCacheKey=()=> `georeferenced-winter-aerial-v4-${snowline}`;
   return material;
 }
 
@@ -61,11 +65,20 @@ function addGrid(scene,grid,local,texture,exclude=[],detail){
   const mesh=new THREE.Mesh(distantGeometry(grid,local,exclude,detail),winterMaterial(texture,local.treeMinElevation===0?450:1050));mesh.name='USGS distant terrain';scene.add(mesh);return mesh;
 }
 
-export function addContextTerrain(scene,context,local,texture,rainier){
+export function addContextTerrain(scene,context,local,texture,rainier,regional){
   const halfX=(local.width-1)*local.spacing/2,halfZ=(local.height-1)*local.spacing/2;
   const exclude=[{west:-halfX+180,east:halfX-180,north:-halfZ+180,south:halfZ-180}];
   if(rainier){const b=gridBounds(rainier,local),inset=context.spacing*2;exclude.push({west:b.west+inset,east:b.east-inset,north:b.north+inset,south:b.south-inset});}
+  if(regional&&validRegionalGrid(regional,context)){const b=gridBounds(regional,local);exclude.push(b);return addGrid(scene,context,local,texture,exclude);}
   return addGrid(scene,context,local,texture,exclude,{x:-7500,z:4000,halfX:6500,halfZ:4000});
+}
+
+export function addRegionalTerrain(scene,regional,context,local,texture){
+  const grid=stitchedRegionalGrid(regional,context),halfX=(local.width-1)*local.spacing/2,halfZ=(local.height-1)*local.spacing/2;
+  const exclude=[{west:-halfX+180,east:halfX-180,north:-halfZ+180,south:halfZ-180}],mesh=addGrid(scene,grid,local,texture,exclude,{x:0,z:0,halfX:3500,halfZ:3500});
+  mesh.name='USGS regional ridges / high-detail NAIP';
+  const sampled=createTerrain(grid),bounds=gridBounds(grid,local),cx=(bounds.west+bounds.east)/2,cz=(bounds.north+bounds.south)/2,localSample=local.surface?local:createTerrain(local);
+  scene.userData.droneTerrain={...sampled,flightBounds:{minX:bounds.west+12,maxX:bounds.east-12,minZ:bounds.north+12,maxZ:bounds.south-12},surface:(x,z)=>Math.abs(x)<halfX&&Math.abs(z)<halfZ?localSample.surface(x,z):sampled.surface(x-cx,z-cz)};return mesh;
 }
 
 export function addRainierTerrain(scene,grid,local,texture){

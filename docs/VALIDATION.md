@@ -149,3 +149,7 @@ The HUD reports FPS, raw frame interval P95 / maximum, hitch count, raster scale
 ## Crest micro-hop regression
 
 92 unit tests pass. A local 16m/s fixture over a 10cm bump previously produced a natural takeoff followed by a landing after ~0.192s. Revised tests cover 5–10cm bumps across 1/5/7.4m terrain spacings with zero takeoffs / zero free points; a genuine convex crest still launches once and lands after >0.3s; a sharp rising approach no longer launches and immediately recontacts. Existing manual J airtime, controlled 360 / grab, and landing tests remain passing. No browser tests were added.
+
+## Regional landscape refinement
+
+96 local unit tests pass. New checks cover exact DEM / imagery pixel-edge registration, four-tile metadata, JPEG integrity, ground-distance-per-pixel improvement over the old backgrounds, valid geographic grid indices, unmodified raw elevations, boundary height continuity, independent ray/triangle agreement for the coarse seam sampler, omission of replaced background cells, finite geometry and bounded triangle counts. Expanded drone bounds clamp correctly and preserve the original local ground surface. Existing skiing / animation / contact tests remain passing. Production bundling is checked separately. No browser / GPU visual test was performed, per the requested workflow.

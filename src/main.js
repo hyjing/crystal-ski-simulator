@@ -3,10 +3,11 @@ import './style.css';
 import { createTerrain, getRoutes, getLiftRuns, pointAlongRoute, filterRoutes } from './terrain.js';
 import { createSkier, nearestOnRoute, clamp } from './physics.js';
 import { createSnowMaterial, SnowEffects } from './snow.js';
-import { addContextTerrain, addRainierTerrain, addAlpineSky } from './scenery.js';
+import { addContextTerrain, addRainierTerrain, addRegionalTerrain, addAlpineSky } from './scenery.js';
 import {readGear,saveGear,applyGear,GEAR_PRESETS,SKI_PROFILES} from './wardrobe.js';
 import {createSkiTraffic} from './traffic.js';
 import {safeRecovery,TRAFFIC_PENALTY} from './traffic-brain.js';
+import {validRegionalGrid} from './regional-scenery.js';
 import {flyDrone} from './drone.js';
 import {MOUNTAINS,resolveMountain,mountainAsset} from './mountains.js';
 const mountainId=resolveMountain(new URLSearchParams(location.search).get('mountain')),mountain=MOUNTAINS[mountainId];
@@ -111,14 +112,18 @@ async function init(){
   // Load real far terrain progressively; retain the coarse grid if detailed assets fail.
   fetch(`${import.meta.env.BASE_URL}${mountain.area?'data/snoqualmie/context/dem.json':'data/context-dem.json'}`).then(r=>{if(!r.ok)throw new Error('context DEM');return r.json();}).then(async context=>{
     let coarse=addContextTerrain(scene,context,terrain);
-    if(mountain.area){try{const map=await new THREE.TextureLoader().loadAsync(`${import.meta.env.BASE_URL}data/snoqualmie/context/aerial.jpg`);addContextTerrain(scene,context,terrain,map);scene.remove(coarse);coarse.geometry.dispose();coarse.material.dispose();weather.prepareMaterials();}catch(error){console.warn('Context imagery unavailable',error);}return;}
+    const regionRoot=`${import.meta.env.BASE_URL}data/scenery/${mountain.area?'snoqualmie':'crystal'}/`;
+    const regionAssets=async()=>{try{const [grid,map]=await Promise.all([fetch(regionRoot+'dem.json').then(r=>{if(!r.ok)throw new Error('regional DEM');return r.json();}),new THREE.TextureLoader().loadAsync(regionRoot+'aerial.jpg?v=regional-1')]);if(!validRegionalGrid(grid,context)){map.dispose();throw new Error('regional registration');}map.anisotropy=Math.min(8,renderer.capabilities.getMaxAnisotropy());return{grid,map};}catch(error){console.warn('Regional scenery unavailable; retaining background',error);return null;}};
+    if(mountain.area){try{const [map,region]=await Promise.all([new THREE.TextureLoader().loadAsync(`${import.meta.env.BASE_URL}data/snoqualmie/context/aerial.jpg`),regionAssets()]);addContextTerrain(scene,context,terrain,map,undefined,region?.grid);if(region)addRegionalTerrain(scene,region.grid,context,terrain,region.map);scene.remove(coarse);coarse.geometry.dispose();coarse.material.dispose();weather.prepareMaterials();}catch(error){console.warn('Context imagery unavailable',error);}return;}
+
     try{
-      const [rainier,contextMap,rainierMap]=await Promise.all([
+      const [rainier,contextMap,rainierMap,region]=await Promise.all([
         fetch(`${import.meta.env.BASE_URL}data/rainier-dem.json`).then(r=>{if(!r.ok)throw new Error('Rainier DEM');return r.json();}),
         new THREE.TextureLoader().loadAsync(`${import.meta.env.BASE_URL}data/context-aerial.jpg`),
-        new THREE.TextureLoader().loadAsync(`${import.meta.env.BASE_URL}data/rainier-aerial.jpg`)
+        new THREE.TextureLoader().loadAsync(`${import.meta.env.BASE_URL}data/rainier-aerial.jpg`),
+        regionAssets()
       ]);
-      addContextTerrain(scene,context,terrain,contextMap,rainier);addRainierTerrain(scene,rainier,terrain,rainierMap);weather.prepareMaterials();
+      addContextTerrain(scene,context,terrain,contextMap,rainier,region?.grid);if(region)addRegionalTerrain(scene,region.grid,context,terrain,region.map);addRainierTerrain(scene,rainier,terrain,rainierMap);weather.prepareMaterials();
       scene.remove(coarse);coarse.geometry.dispose();coarse.material.dispose();$('scenery').disabled=false;
     }catch(error){console.warn('Detailed scenery unavailable',error);toast('高清远景暂未载入，已保留基础远山');}
   }).catch(()=>toast('远山数据载入失败，近处地形仍可滑行'));
@@ -315,7 +320,7 @@ function updateCamera(dt,snap=false){
   if(sceneryView){
     if(droneMode==='free'){
       const key=(a,b)=>Number(keys.has(a))-Number(keys.has(b));
-      flyDrone(drone,{forward:key('KeyW','KeyS')+key('ArrowUp','ArrowDown'),right:key('KeyD','KeyA')+key('ArrowRight','ArrowLeft'),up:key('KeyE','KeyQ'),fast:keys.has('ShiftLeft')||keys.has('ShiftRight')},terrain,dt);
+      flyDrone(drone,{forward:key('KeyW','KeyS')+key('ArrowUp','ArrowDown'),right:key('KeyD','KeyA')+key('ArrowRight','ArrowLeft'),up:key('KeyE','KeyQ'),fast:keys.has('ShiftLeft')||keys.has('ShiftRight')},scene.userData.droneTerrain||terrain,dt);
       camera.position.set(drone.x,drone.y,drone.z);camera.lookAt(drone.x+Math.sin(drone.yaw)*Math.cos(drone.pitch)*100,drone.y+Math.sin(drone.pitch)*100,drone.z+Math.cos(drone.yaw)*Math.cos(drone.pitch)*100);displayLook.copy(camera.position);camera.fov=58;camera.updateProjectionMatrix();return;
     }
     const heading=skier.speed>1?Math.atan2(skier.vx,skier.vz):skier.heading,angle=heading+lookYaw,distance=clamp(48+lookDistance*3,22,90);

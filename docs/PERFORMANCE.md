@@ -81,3 +81,9 @@ Player flight adds one ballistic state and bounded terrain queries to the existi
 Only one local mountain pack is requested at a time. Selecting another area reloads the scene, releasing the old terrain / forest rather than retaining four GPU worlds. The broad Snoqualmie context is shared as a cached static resource. Existing skier / sky / fir assets are reused. New local grids are 449–513 columns by 513–577 rows and use the existing static terrain LOD; Alpental is 513².
 
 The revised four-actor CPU benchmark (900 warmed frames) measured median 0.358ms / P95 0.882ms / max 13.167ms on this machine, including route movement rules and staggered poses, with no GPU rendering and no forest-neighbor callback in that fixture. Live fixed-step obstacle checks and the rest of the game add work; these figures do not promise a frame rate. NPCs remain optional.
+
+## Regional landscape refinement
+
+Only the active resort's regional pack loads: ~5.8MiB Crystal / ~6.7MiB Snoqualmie of additional DEM + JPEG downloads. Uncompressed RGBA texture plus mipmaps is approximately 45MiB / 42.7MiB respectively, excluding decoder staging and GPU alignment. Existing background / Rainier textures still have their previous costs.
+
+Static geometry counts (background plus regional mesh, and Rainier for Crystal) are 347,058 triangles for Crystal and 300,858 for the Summit East origin fixture. Other Snoqualmie local origins may change the refined central footprint; tests keep both fixtures below 550k triangles. This replaces overlapping background cells, uses stitched static boundaries, and adds no per-frame DEM generation, particle emitters or shadow casters. Regional geometry / textures load after core skiing initialization; fallback background remains if exports fail. A one-time load / GPU upload may still hitch. No GPU or browser FPS test was performed for this change.

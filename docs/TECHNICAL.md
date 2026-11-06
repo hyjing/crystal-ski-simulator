@@ -207,3 +207,9 @@ Normal follow samples the near grade and the grade 24–32m ahead. A convex down
 ## Stable natural crest contact
 
 Automatic takeoff now samples curvature across a 2.5–6m span tied to DEM spacing, rather than 1–2m triangle-scale creases. It also checks ballistic clearance at 0.04s / 0.12s / 0.30s (>0.5cm / 6cm / 18cm), plus negative required support, and requires the conditions to persist for 25ms. The short probe prevents launching into an immediately rising surface even if longer lookahead sees a drop. A natural release starts with only 6mm numerical clearance, rather than a visible 25mm pop. Landing clears candidate state and uses a 450ms cooldown. Manual J retains its assisted impulse and bypasses natural-crest qualification. This deliberately lets the skier absorb small surface variations instead of bouncing at every DEM crease.
+
+## Region-specific scenery and drone sampling
+
+The broad context remains the outer horizon. Once the optional regional DEM / image succeeds and validates against its background cell indices, background cells inside its footprint are omitted. Regional outer heights blend to the exact piecewise-triangle coarse height over 600m, preventing a mismatched hard boundary. More central cells use native exported samples while distant cells retain the existing static coarse/fine stitching. The active ski tile is excluded as before.
+
+Regional winter material preserves photographic detail and uses a low-slope / dark-blue color heuristic to reduce accidental whitening of water. It shares the existing sky / weather fog treatment. A separate drone sampling view uses local ski surface heights inside the ski tile and stitched regional terrain outside; this expands free-camera bounds without expanding ski physics or making the regional terrain skiable. If the optional pack fails, the original background and local drone bounds remain available.

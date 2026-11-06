@@ -5,5 +5,6 @@ export function flyDrone(drone,input,terrain,dt){
  drone.z+=(Math.cos(drone.yaw)*forward-Math.sin(drone.yaw)*right)*speed*dt/norm;
  drone.y+=up*speed*dt/norm;
  const hx=(terrain.width-1)*terrain.spacing/2-12,hz=(terrain.height-1)*terrain.spacing/2-12;
- drone.x=clamp(drone.x,-hx,hx);drone.z=clamp(drone.z,-hz,hz);drone.y=clamp(drone.y,terrain.surface(drone.x,drone.z)-1200+5,3000);return drone;
+ const bounds=terrain.flightBounds||{minX:-hx,maxX:hx,minZ:-hz,maxZ:hz};
+ drone.x=clamp(drone.x,bounds.minX,bounds.maxX);drone.z=clamp(drone.z,bounds.minZ,bounds.maxZ);drone.y=clamp(drone.y,terrain.surface(drone.x,drone.z)-1200+5,3000);return drone;
 }
