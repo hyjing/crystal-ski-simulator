@@ -82,7 +82,7 @@ export class PowderSurface {
   breakTrail(){this.previous=null;}
   surface(x,z){
     if(!this.enabled||!this.center)return this.terrain.surface(x,z);
-    const distance=Math.min(24-Math.abs(x-this.center.x),24-Math.abs(z-this.center.z)),t=THREE.MathUtils.clamp(distance/4,0,1),fade=t*t*(3-2*t);
+    const distance=Math.min(24-Math.abs(x-this.center.x),24-Math.abs(z-this.center.z));if(distance<=0)return this.terrain.surface(x,z);const t=THREE.MathUtils.clamp(distance/4,0,1),fade=t*t*(3-2*t);
     return this.terrain.surface(x,z)+(drift(x,z)+this.field.get(x,z))*fade;
   }
   update(skier,running,snow){

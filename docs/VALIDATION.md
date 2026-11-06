@@ -153,3 +153,9 @@ The HUD reports FPS, raw frame interval P95 / maximum, hitch count, raster scale
 ## Regional landscape refinement
 
 96 local unit tests pass. New checks cover exact DEM / imagery pixel-edge registration, four-tile metadata, JPEG integrity, ground-distance-per-pixel improvement over the old backgrounds, valid geographic grid indices, unmodified raw elevations, boundary height continuity, independent ray/triangle agreement for the coarse seam sampler, omission of replaced background cells, finite geometry and bounded triangle counts. Expanded drone bounds clamp correctly and preserve the original local ground surface. Existing skiing / animation / contact tests remain passing. Production bundling is checked separately. No browser / GPU visual test was performed, per the requested workflow.
+
+## Crowd population, activities and ski clearance
+
+104 local unit tests pass. New cases verify all 11 Crystal itinerary IDs receive skier plans, the 18-skier / six-visitor population, the 12-visible budget, alternating left/right bank signs, bounded walking / rest / chat / goggles / stretch cycles, actual station anchors outside mapped building footprints, visitor movement blocking, pause / disable behavior, and finite articulated walking / rest bounds. The walking stance-foot fixture nearly cancels forward body movement during its support phase.
+
+For all three ski profiles in both bank directions, tests transform every rendered ski underside vertex into world space over a sloping, uneven snow fixture and verify clearance above that surface. Existing contact penalties, gear recoloring, anatomy, linked pole gestures and energy tests still pass. CPU fixture results are documented in PERFORMANCE.md; no browser or GPU visual testing was performed.

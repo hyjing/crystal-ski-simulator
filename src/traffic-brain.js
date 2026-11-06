@@ -8,8 +8,8 @@ export function chooseTrafficRoutes(route,player,routes=[]){
 }
 export function trafficPoint(route,progress,time,index,avoid=0){
  const at=d=>pointAlongRoute(route,clamp(d,0,route.length)),p=at(progress),q=at(progress+5),r=at(progress-3),dx=q.x-r.x,dz=q.z-r.z,len=Math.max(.01,Math.hypot(dx,dz));
- const width=Math.max(1,pisteHalfWidth(route.name||'',route.difficulty)-4),amplitude=Math.min(width*.55,2.2+index*.65),wave=(progress/(11+index*3))+index*1.8;
- const offset=clamp(Math.sin(wave)*amplitude+avoid,-width,width),derivative=Math.cos(wave)*amplitude/(11+index*3);
+ const style=index%6,width=Math.max(1,pisteHalfWidth(route.name||'',route.difficulty)-4),amplitude=Math.min(width*.70,3.2+style*.6),wavelength=8+style*1.4,wave=(progress/wavelength)+index*1.8;
+ const offset=clamp(Math.sin(wave)*amplitude+avoid,-width,width),derivative=Math.cos(wave)*amplitude/wavelength;
  return{x:p.x+dz/len*offset,z:p.z-dx/len*offset,heading:Math.atan2(dx+dz*derivative,dz-dx*derivative),progress:clamp(progress,0,route.length)};
 }
 export function sweptContact(from,to,body,radius=.9){

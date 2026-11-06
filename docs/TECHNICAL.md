@@ -186,7 +186,7 @@ Queens Run uses retained easy OSM way 127126798 and the Forest Queen Express ter
 
 Follow view waits about 1.8s after pointer release, then smoothly decays yaw/pitch along the shortest rotation back towards travel. Equipment previews have front / back controls and pause the run; wheel distance persists. Air spins and switch travel do not force the camera to orbit with the model's yaw.
 
-`SkiTraffic` has four lower-detail skinned NPCs moving in narrow lanes along the chosen itinerary. Their motion does not collide or claim multiplayer semantics. A fixed pool, staggered IK, frustum culling and shadow / particle suppression keep incremental work bounded. Resetting the run resets traffic; NPCs stop before the lower terminal instead of visibly teleporting to the front.
+`SkiTraffic` uses a fixed pool of 24 lower-detail skinned actors: 18 skiers across mapped itineraries and six lodge / station visitors. At most 12 are drawn, with frustum / distance culling and staggered pose updates. Contact penalties are handled separately from the kinematic movement; there is no multiplayer. Resetting the run resets traffic; skiers stop before the lower terminal instead of visibly teleporting to the front.
 
 `wardrobe.js` validates hex colors and an explicit ski-profile allowlist, clones palette buffers per actor, and stores colors / profile / NPC toggle locally under `crystal-gear-v1`. No appearance or score is uploaded.
 
@@ -196,7 +196,7 @@ J adds a deliberately assisted vertical pop of 5.2–6.6m/s, increasing smoothly
 
 ## NPC behavior, contact and drone camera
 
-Four actors independently select nearby mapped branches sharing the active upper lift, with different bounded carving lines and speed targets. Deterministic local rules predict nearby skiers / trees, ease lateral avoidance and brake. Movement decisions run in the fixed physics step; staggered bone poses remain about 15Hz. These are kinematic agents, not independently simulated skis, a learned model, an LLM service or a navigation-mesh planner.
+The first six skiers populate the active route / nearby lift branches, while the other twelve spread across the remaining mapped long itineraries, with individual bounded carving lines and speed targets. Deterministic local rules predict nearby skiers / trees, ease lateral avoidance and brake. Movement integrates in the fixed physics step; proximity decisions are throttled to ~10Hz nearby / 2Hz far away. Bone poses update at 24/12/5Hz by camera distance, with a 12-person visible budget. These are kinematic agents, not independently simulated skis, a learned model, an LLM service or a navigation-mesh planner.
 
 Swept player-to-NPC contact uses a combined 0.9m horizontal radius and vertical separation check; airborne players above 1.6m do not collide with a standing skier. A contact awards -100 points, rolls both characters into a simple fall pose, then restores the player near their current route progress with zero starting speed. Recovery candidates avoid nearby trunks / NPCs and prefer slopes under ~33°; a bounded route fallback remains for crowded / steep sections. Recovery grants 3s immunity; the struck NPC has its own cooldown. This is contact gameplay, not a full ragdoll.
 
@@ -213,3 +213,11 @@ Automatic takeoff now samples curvature across a 2.5–6m span tied to DEM spaci
 The broad context remains the outer horizon. Once the optional regional DEM / image succeeds and validates against its background cell indices, background cells inside its footprint are omitted. Regional outer heights blend to the exact piecewise-triangle coarse height over 600m, preventing a mismatched hard boundary. More central cells use native exported samples while distant cells retain the existing static coarse/fine stitching. The active ski tile is excluded as before.
 
 Regional winter material preserves photographic detail and uses a low-slope / dark-blue color heuristic to reduce accidental whitening of water. It shares the existing sky / weather fog treatment. A separate drone sampling view uses local ski surface heights inside the ski tile and stitched regional terrain outside; this expands free-camera bounds without expanding ski physics or making the regional terrain skiable. If the optional pack fails, the original background and local drone bounds remain available.
+
+## Crowd activities and snow contact
+
+The 18/6 world population reuses one cached NPC asset. Visitor anchors prefer mapped buildings close to station aprons, with safe station-side fallbacks outside building footprints / the main exit lane. Visitors walk short bounded loops and rest between loops; the movement checks buildings, nearby trunks, other NPCs and the player. Gait phase follows distance moved. Its stance-foot trajectory approximately cancels forward body movement, with a separate lifted swing phase. Idle actions drive head / shoulder glance, conversation, goggle adjustment and stretching through the existing humanoid IK; this is procedural animation, not new motion-capture clips or a seated / ragdoll simulation.
+
+NPC heading follows actual lateral travel; bank angles track turn rate, rather than rotating the model independently of the path. Slow flat sections use pole strokes and straight fast sections blend into a tuck.
+
+`fitSnowContact` samples the actual rendered ski underside vertices after bank / root orientation, then raises the root enough to clear the current snow surface by 12mm. The main scene supplies the live powder surface, so fresh local snow relief is included. Hidden ski / pole rigs are not drawn for visitors; walking boot bounding soles provide conservative support. This is a visual support correction, not independently flexing ski contacts or an NPC rigid-body engine.
