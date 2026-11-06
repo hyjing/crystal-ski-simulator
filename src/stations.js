@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import {colliderFromMesh} from './structure-collision.js';
 import {RoundedBoxGeometry} from 'three/addons/geometries/RoundedBoxGeometry.js';
 import {resortMaterials,mergeAssetGeometry} from './resort-assets.js';
 import {createTerrain,lonLatToUTM,pointAlongRoute} from './terrain.js';
@@ -55,7 +56,7 @@ function label(text,width=512){
 export function addStationStructures(scene,terrain,infrastructure,areas){
   const groups=[];
   const {metal,wood,snow,glass,stone,dark,paint}=resortMaterials();
-  const box=(group,w,h,d,x,y,z,mat)=>{const g=new THREE.BoxGeometry(w,h,d),uv=g.attributes.uv;for(let f=0;f<6;f++){const [u,v]=f<2?[d,h]:f<4?[w,d]:[w,h];for(let k=0;k<4;k++){const i=f*4+k;uv.setXY(i,uv.getX(i)*u/2,uv.getY(i)*v/2);}}const mesh=new THREE.Mesh(g,mat);mesh.position.set(x,y,z);mesh.castShadow=mesh.receiveShadow=true;group.add(mesh);return mesh;};
+  const box=(group,w,h,d,x,y,z,mat)=>{const g=new THREE.BoxGeometry(w,h,d),uv=g.attributes.uv;for(let f=0;f<6;f++){const [u,v]=f<2?[d,h]:f<4?[w,d]:[w,h];for(let k=0;k<4;k++){const i=f*4+k;uv.setXY(i,uv.getX(i)*u/2,uv.getY(i)*v/2);}}const mesh=new THREE.Mesh(g,mat);mesh.position.set(x,y,z);mesh.castShadow=mesh.receiveShadow=true;mesh.userData.structureCollider=h>.4||(h>.08&&Math.min(w,d)<.3);group.add(mesh);return mesh;};
   const terminals=infrastructure.features.filter(f=>f.geometry.type==='LineString'&&(areas.some(a=>a.liftId===String(f.id))||f.properties.name==='Mt. Rainier Gondola'));
   for(const lift of terminals)for(const role of ['upper','lower']){
     let pts=lift.geometry.coordinates.map(ll=>project(terrain,ll));if(terrain.sample(pts[0].x,pts[0].z)>terrain.sample(pts.at(-1).x,pts.at(-1).z))pts.reverse();
@@ -77,6 +78,10 @@ export function addStationStructures(scene,terrain,infrastructure,areas){
     const exit=new THREE.Mesh(new THREE.PlaneGeometry(3,.65),label(role==='upper'?'UNLOAD / EXIT':'LOAD / ENTRANCE'));exit.position.set(5,1.9,11);exit.rotation.y=-Math.PI/5;group.add(exit);
     // A small operator hut beside the terminal.
     box(group,3.2,2.7,3.5,6.8,1.35,-2,wood);box(group,3.5,.3,3.8,6.8,2.85,-2,snow);box(group,2.3,1.2,.04,6.8,1.8,-.23,glass);box(group,.12,1.3,.06,6.8,1.8,-.19,metal);box(group,.9,2.05,.08,8.43,1.05,-2,glass);box(group,.045,.15,.06,8.49,1,-1.8,metal);box(group,1.1,.15,1.2,8.9,.07,-2,stone);
+    // Authored operator hut joinery and pitched snowy eaves, kept in static batches.
+    for(const side of [-1,1]){const roof=box(group,1.95,.18,4.0,6.8+side*.86,3.16,-2,snow);roof.rotation.z=-side*.22;box(group,.10,2.72,.12,6.8+side*1.55,1.38,-.20,dark);box(group,.06,1.24,.08,6.8+side*.80,1.8,-.18,paint);}
+    box(group,2.42,.08,.10,6.8,1.17,-.18,paint);box(group,2.42,.08,.10,6.8,2.43,-.18,paint);
+
   }
   for(const f of infrastructure.features.filter(isDetailedLodge)){
     const points=f.geometry.coordinates[0].map(ll=>project(terrain,ll));let longest={length:0,angle:0};
@@ -104,6 +109,7 @@ export function addStationStructures(scene,terrain,infrastructure,areas){
     const sign=new THREE.Mesh(new THREE.PlaneGeometry(Math.min(width*.7,12),1.3),label(f.properties.name.toUpperCase()));sign.position.set(0,height-.8,depth/2+.15);group.add(sign);
     for(let u=-width*.3;u<width*.4;u+=6){box(group,2.2,.14,.9,u,.7,front,wood);for(const dx of [-.8,.8])box(group,.12,.7,.55,u+dx,.35,front,metal);}
   }
+  scene.updateMatrixWorld(true);scene.userData.structureStatics??=[];for(const group of groups)group.traverse(o=>{if(o.userData.structureCollider)scene.userData.structureStatics.push(colliderFromMesh(o));});
   // Static station buildings share a handful of draw calls rather than one per beam.
   scene.updateMatrixWorld(true);const batches=new Map();
   for(const group of groups){group.traverse(object=>{if(!object.isMesh)return;const key=object.material.uuid;if(!batches.has(key))batches.set(key,{material:object.material,geometries:[]});batches.get(key).geometries.push(object.geometry.clone().applyMatrix4(object.matrixWorld));});scene.remove(group);group.traverse(o=>o.geometry?.dispose());}

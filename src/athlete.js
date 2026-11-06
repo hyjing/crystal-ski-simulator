@@ -67,27 +67,34 @@ export function walkingFoot(phase){
  const t=((phase/(Math.PI*2))%1+1)%1;if(t<.6)return{stride:.6-1.2*t/.6,lift:0};const u=(t-.6)/.4;return{stride:-.6+1.2*u*u*(3-2*u),lift:.20*Math.sin(Math.PI*u)};
 }
 export function updateAthletePose(athlete,s,dt,surface){
-  const {body,skiRig,torso,pelvis,legs,arms,skis}=athlete.userData,turn=s.turn||0,grab=s.airborne?(s.grab||0):0,tuck=Math.max(s.tuck||0,grab*.85),walk=s.walkAmount||0,walkPhase=s.walkPhase||0,pole=s.poling||0,phase=(s.polePhase||0)*Math.PI*2;
+  const {body,skiRig,torso,pelvis,legs,arms,skis}=athlete.userData,turn=s.turn||0,grab=s.airborne?(s.grab||0):0,tuck=Math.max(s.tuck||0,grab*.85,(s.riseLean||0)*.35),walk=s.walkAmount||0,walkPhase=s.walkPhase||0,sit=s.sitAmount||0,fall=s.fallAmount||0,pole=s.poling||0,phase=(s.polePhase||0)*Math.PI*2;
   const plantState=advanceTurnPlant(athlete.userData.plant,s,dt);athlete.userData.poleContact=null;
   const drive=Math.sin(phase),reach=Math.cos(phase),edge=s.edgeAngle||0;
-  const roll=s.edgeRoll??turn*edge,weight=Math.abs(roll),flex=tuck*.38+weight*.20+pole*(.1+.1*Math.max(0,drive)),hipY=1.86-flex+walk*.025*Math.cos(walkPhase*2);
+  const roll=s.edgeRoll??turn*edge,weight=Math.abs(roll),flex=tuck*.38+weight*.20+pole*(.1+.1*Math.max(0,drive)),hipY=THREE.MathUtils.lerp(1.86-flex+walk*.025*Math.cos(walkPhase*2),1.22,sit)-fall*.20;
   const counterTarget=(s.airborne||s.crashRemaining>0?0:upperBodyCounterAngle(s.heading||0,s.downhillHeading??s.heading??0,s))+(s.idleShift||0)*.12;
   const counter=athlete.userData.counterYaw===undefined||dt===0?counterTarget:THREE.MathUtils.lerp(athlete.userData.counterYaw,counterTarget,1-Math.exp(-dt*8));athlete.userData.counterYaw=counter;
   const targetLean=roll,rate=dt>0?1-Math.exp(-dt*12):1;
   athlete.userData.lean=THREE.MathUtils.lerp(athlete.userData.lean||0,targetLean,rate);const lean=athlete.userData.lean,hipX=-lean*.75+(s.idleShift||0)*.08;
   body.rotation.z=0;body.position.y=-pole*.035*Math.sin(phase);pelvis.position.set(hipX,hipY-.06,0);
-  skiRig.position.set(0,grab,grab*.9);
+  skiRig.position.set(0,grab,grab*.9);skiRig.rotation.x=s.ridePose?.15:0;if(s.ridePose)skiRig.position.set(0,-.42,.65);
   skiRig.rotation.z=0;for(const ski of skis)ski.rotation.z=roll*.70;
   torso.position.set(hipX,hipY+.55,.05+tuck*.16);torso.rotation.x=.12+tuck*.7+weight*.08+pole*(.12+.16*Math.max(0,drive));
   torso.rotation.y=counter;torso.rotation.z=lean*.38;
   for(const leg of legs){
     const inside=Math.max(0,-leg.sign*Math.sign(roll)),hip=new THREE.Vector3(hipX+leg.sign*.23,hipY,0),knee=new THREE.Vector3(hipX*.55+leg.sign*(.29+weight*.12),.94-tuck*.18-inside*weight*.12,.38+tuck*.32+inside*weight*.2),ankle=new THREE.Vector3(leg.sign*.30,.45+grab,.15+grab*.9);
-    const gait=walkingFoot(walkPhase+(leg.sign>0?0:Math.PI));ankle.z+=walk*gait.stride;ankle.y+=walk*gait.lift;knee.z+=walk*.25*gait.stride;
+    const gait=walkingFoot(walkPhase+(leg.sign>0?0:Math.PI));ankle.z+=walk*gait.stride;ankle.y+=walk*gait.lift;ankle.z+=sit*.95;knee.z+=walk*.25*gait.stride+sit*.6;
+    if(s.ridePose){ankle.y=.02;ankle.z=.80;}
     leg.target={hip,knee,ankle};if(!athlete.userData.humanRig)shapeLimb(leg.mesh,hip,knee,ankle);
   }
   for(const arm of arms){
     const sign=arm.sign,activePlant=plantState.active&&plantState.plantSide===sign,plant=activePlant?(plantState.phase<.2?THREE.MathUtils.smoothstep(plantState.phase,0,.2):1-THREE.MathUtils.smoothstep(plantState.phase,.32,1)):0,shoulder=new THREE.Vector3(hipX+sign*.48,hipY+1.0-tuck*.2,.12+tuck*.55),hand=new THREE.Vector3(hipX*.45+sign*(.68-tuck*.18+weight*.12),2.05-flex*.45+pole*.15*reach-plant*.16,.58+tuck*.45+pole*.75*reach+plant*.70),elbow=new THREE.Vector3(hipX*.6+sign*.67,(shoulder.y+hand.y)/2-.18,(shoulder.z+hand.z)/2-.10);
     if(walk){hand.z-=walk*.22*Math.sin(walkPhase+(sign>0?0:Math.PI));hand.y-=walk*.20;}
+    if(s.pedestrian){
+      hand.set(hipX+sign*.60,hipY-.10+walk*.025*Math.cos(walkPhase),.12-walk*.28*Math.sin(walkPhase+(sign>0?0:Math.PI)));
+      if(sit)hand.lerp(new THREE.Vector3(hipX+sign*.40,hipY+.02,1.02),sit);
+      if(s.holding&&sign<0)hand.set(hipX-.40,hipY+.38+(s.consumeAmount||0)*.85,.48-(s.consumeAmount||0)*.14);
+    }
+    if(fall)hand.lerp(new THREE.Vector3(hipX+sign*.65,hipY-.65,.85),fall*(s.fallBrace||.6));
     if(s.idleGesture==='goggles'&&sign>0)hand.set(hipX+.32,hipY+1.28,.42);
     if(s.idleGesture==='stretch')hand.set(hipX+sign*.65,hipY+1.55,.1);
     if(s.idleGesture==='chat'&&sign>0)hand.set(hipX+.55,hipY+.85,.9+.08*Math.sin(s.activityTime||0));
@@ -108,8 +115,8 @@ export function updateAthletePose(athlete,s,dt,surface){
     else tip.copy(hand).addScaledVector(poleVector,2.65);
     elbow.set(hipX*.6+sign*.67,(shoulder.y+hand.y)/2-.18,(shoulder.z+hand.z)/2-.10);
     if(!athlete.userData.humanRig)shapeLimb(arm.mesh,shoulder,elbow,hand);arm.glove.position.copy(hand);
-    arm.target={hand:hand.clone(),tip:tip.clone()};
+    arm.target={hand:hand.clone(),tip:tip.clone(),pedestrian:!!s.pedestrian};
     connect(arm.pole,hand,tip);arm.basket.position.copy(tip).y+=.12;arm.basket.rotation.x=Math.PI/2;
   }
-  updateHumanoid(athlete,{hipY,hipX,lean,tuck,counter,roll,grab,headLook:s.headLook||0});
+  updateHumanoid(athlete,{hipY,hipX,lean,tuck,counter,roll,grab,headLook:s.headLook||0,ride:!!s.ridePose});
 }

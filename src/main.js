@@ -5,8 +5,11 @@ import { createSkier, nearestOnRoute, clamp } from './physics.js';
 import { createSnowMaterial, SnowEffects } from './snow.js';
 import { addContextTerrain, addRainierTerrain, addRegionalTerrain, addAlpineSky } from './scenery.js';
 import {readGear,saveGear,applyGear,GEAR_PRESETS,SKI_PROFILES} from './wardrobe.js';
+import {StructureWorld} from './structure-collision.js';
+import {createLiftPassengers} from './lift-passengers.js';
 import {createSkiTraffic} from './traffic.js';
 import {safeRecovery,TRAFFIC_PENALTY} from './traffic-brain.js';
+import {fallAnimation} from './npc-routines.js';
 import {validRegionalGrid} from './regional-scenery.js';
 import {flyDrone} from './drone.js';
 import {MOUNTAINS,resolveMountain,mountainAsset} from './mountains.js';
@@ -35,7 +38,7 @@ let frameTime=1/60,physicsMs=0;
 let powderMs=0,frameSamples=[],frameP95=0,frameMax=0,slowFrames=0;
 let renderScale=Math.min(devicePixelRatio,1.15),qualityClock=0;
 let routeFilter='all',routeQuery='',aerialBounds,stationAreas=[],boundaryPosts,arrivalZone,lookYaw=0,lookPitch=0,lookDistance=0,lookDrag,lookIdle=0,crestCamera=0;
-let weather,hemisphere,cameraHeading=null,traffic,gear=readGear(),gearFrom='intro',gearCamera;
+let weather,hemisphere,cameraHeading=null,traffic,liftPassengers,structures,gear=readGear(),gearFrom='intro',gearCamera;
 
 let qaSlow=false;
 let demoCapture,recordedInput=null,sceneryFrom='intro',sceneryView=false,droneMode='follow',drone={},droneCamera;
@@ -104,7 +107,7 @@ async function init(){
     fetch(asset('vegetation.json')).then(r=>{if(!r.ok)throw new Error('林冠数据载入失败');return r.json();})
   ]);
   routes.forEach(r=>{r.spawn=liftExitSpawn(terrain,r,infrastructure);});
-  treePositions=addForest(scene,terrain,[...mappedRoutes,...routes],landcover,firTexture,vegetation,stationAreas);resortUpdate=addResort(scene,terrain,infrastructure);addStationStructures(scene,terrain,infrastructure,stationAreas);
+  treePositions=addForest(scene,terrain,[...mappedRoutes,...routes],landcover,firTexture,vegetation,stationAreas);resortUpdate=addResort(scene,terrain,infrastructure);addStationStructures(scene,terrain,infrastructure,stationAreas);structures=new StructureWorld(scene);
   addAlpineDetails(scene,terrain,mappedRoutes,stationAreas);
   await createAthlete();snowEffects=new SnowEffects(scene,{...terrain,surface:(x,z)=>powder.surface(x,z)});createMapBackground();
   speedRenderer=new SpeedRenderer(renderer,scene,camera);
@@ -127,7 +130,8 @@ async function init(){
       scene.remove(coarse);coarse.geometry.dispose();coarse.material.dispose();$('scenery').disabled=false;
     }catch(error){console.warn('Detailed scenery unavailable',error);toast('高清远景暂未载入，已保留基础远山');}
   }).catch(()=>toast('远山数据载入失败，近处地形仍可滑行'));
-  createSkiTraffic(scene,{...terrain,surface:(x,z)=>powder.surface(x,z)},{stationAreas,infrastructure}).then(t=>{traffic=t;traffic.reset(route,skier,routes);weather.prepareMaterials();}).catch(error=>console.warn('Other skiers unavailable',error));
+  createSkiTraffic(scene,{...terrain,surface:(x,z)=>powder.surface(x,z)},{stationAreas,infrastructure,onStructuresChanged:()=>structures.rebuild()}).then(t=>{traffic=t;traffic.reset(route,skier,routes);weather.prepareMaterials();}).catch(error=>console.warn('Other skiers unavailable',error));
+  createLiftPassengers(scene,resortUpdate).then(p=>{liftPassengers=p;p.select(route.liftId);weather.prepareMaterials();}).catch(error=>console.warn('Lift riders unavailable',error));
   renderRouteList();
   selectRoute(route.id);weather.update(0,camera,athlete.position);weather.snowfall.mesh.visible=true;speedRenderer.prepare();weather.snowfall.mesh.visible=false;$('loading').classList.add('hidden'); $('start').disabled=false;
   if(import.meta.env.DEV&&new URLSearchParams(location.search).has('visual-qa')){
@@ -227,7 +231,7 @@ $('route-filters').addEventListener('click',event=>{
 });
 
 function selectRoute(id){
-  route=routes.find(r=>r.id===id); checkpoint=0;
+  route=routes.find(r=>r.id===id);liftPassengers?.select(route.liftId); checkpoint=0;
   document.querySelectorAll('[data-route]').forEach(b=>{const active=b.dataset.route===id;b.classList.toggle('active',active);b.setAttribute('aria-pressed',active);});
   $('route-selection').textContent=`已选：${route.name} · ${route.lift} 上站 → ${route.returnLift&&route.returnLift!==route.lift?route.returnLift+' ':''}下站`;
   $('map-label').textContent=route.name.toUpperCase();$('session-name').textContent=route.name.toUpperCase();
@@ -271,7 +275,7 @@ function finishRun(){
 }
 
 function updatePhysics(dt){
-  const previousPosition={x:skier.x,z:skier.z};
+  const previousPosition={x:skier.x,z:skier.z,y:(skier.airborne?skier.airY:terrain.surface(skier.x,skier.z))-1200};
   skier.trafficGrace=Math.max(0,(skier.trafficGrace||0)-dt);
   traffic?.step(dt,skier,gear.npcs,(x,z)=>treePositions.nearby?.(x,z)||[]);
   const steer=(keys.has('KeyD')||keys.has('ArrowRight')?1:0)-(keys.has('KeyA')||keys.has('ArrowLeft')?1:0);
@@ -281,11 +285,12 @@ function updatePhysics(dt){
   stepAirborne(skier,recordedInput||{steer,edge,tuck,pole,jump:keys.has('KeyJ'),spin:(keys.has('KeyE')?1:0)-(keys.has('KeyQ')?1:0),grab:keys.has('KeyF')},terrain,dt,snow);
   if(pendingRecovery&&!skier.crashRemaining){
     const score=skier.freestyleScore,distance=skier.distance,count=skier.collisionCount,p=pendingRecovery;
-    skier=createSkier(p,{x:p.x+Math.sin(p.heading)*5,z:p.z+Math.cos(p.heading)*5});Object.assign(skier,{freestyleScore:score,distance,collisionCount:count,trafficGrace:3,skiSidecut:SKI_PROFILES[gear.board].sidecut});pendingRecovery=null;snowEffects.breakTrail();powder.breakTrail();keys.clear();toast('已在附近安全位置站起 · Shift 撑杖继续');
+    skier=createSkier(p,{x:p.x+Math.sin(p.heading)*5,z:p.z+Math.cos(p.heading)*5});Object.assign(skier,{freestyleScore:score,distance,collisionCount:count,trafficGrace:3,skiSidecut:SKI_PROFILES[gear.board].sidecut});pendingRecovery=null;Object.assign(previousPosition,{x:skier.x,z:skier.z,y:terrain.surface(skier.x,skier.z)-1200});snowEffects.breakTrail();powder.breakTrail();keys.clear();toast('已在附近安全位置站起 · Shift 撑杖继续');
   }
+  if(!skier.crashRemaining&&!pendingRecovery){const contact=structures?.resolve(previousPosition,skier,terrain);if(contact&&contact.impact>4.5){pendingRecovery=safeRecovery(route,skier,terrain,(x,z)=>structures.blocked(x,z,terrain.surface(x,z))||(treePositions.nearby?.(x,z)||[]).some(t=>Math.hypot(t.x-x,t.z-z)<3));skier.airborne=false;skier.crashReason='structure';skier.crashRemaining=skier.crashDuration=1.6;skier.vx=skier.vz=skier.speed=0;keys.clear();snowEffects.breakTrail();powder.breakTrail();toast(`撞到${contact.collider.label||'设施'} · 稍后在附近重新站起`);}}
   if(traffic&&traffic.collide(previousPosition,skier)!==null&&!pendingRecovery){
-    pendingRecovery=safeRecovery(route,skier,terrain,(x,z)=>(treePositions.nearby?.(x,z)||[]).some(t=>Math.hypot(t.x-x,t.z-z)<3)||traffic.states.some(s=>s.point&&Math.hypot(s.point.x-x,s.point.z-z)<5));
-    skier.freestyleScore=(skier.freestyleScore||0)-TRAFFIC_PENALTY;skier.collisionCount=(skier.collisionCount||0)+1;skier.airborne=false;skier.crashReason='traffic';skier.crashRemaining=1.25;skier.vx=skier.vz=skier.speed=0;keys.clear();snowEffects.breakTrail();powder.breakTrail();toast(`碰撞雪友 −${TRAFFIC_PENALTY} 分 · 稍后在附近重新站起`);
+    pendingRecovery=safeRecovery(route,skier,terrain,(x,z)=>(treePositions.nearby?.(x,z)||[]).some(t=>Math.hypot(t.x-x,t.z-z)<3)||traffic.states.some(s=>s.point&&!s.indoor&&Math.hypot(s.point.x-x,s.point.z-z)<5)||structures?.blocked(x,z,terrain.surface(x,z)));
+    skier.freestyleScore=(skier.freestyleScore||0)-TRAFFIC_PENALTY;skier.collisionCount=(skier.collisionCount||0)+1;skier.airborne=false;skier.crashReason='traffic';skier.crashRemaining=1.25;skier.crashDuration=1.25;skier.vx=skier.vz=skier.speed=0;keys.clear();snowEffects.breakTrail();powder.breakTrail();toast(`碰撞雪友 −${TRAFFIC_PENALTY} 分 · 稍后在附近重新站起`);
   }
   if(skier.airEvent?.type==='takeoff'||skier.airEvent?.type==='land'||skier.airEvent?.type==='crash'){snowEffects.breakTrail();powder.breakTrail();}
   if(skier.airEvent?.type==='land'&&skier.airEvent.points&&!pendingRecovery)toast(`平稳落地 +${skier.airEvent.points}${skier.airEvent.rotation?' · '+skier.airEvent.rotation+'°':''}${skier.airEvent.grab?' · 抓板':''}`);
@@ -310,7 +315,7 @@ function updateAthlete(dt){
   athlete.position.set(skier.x,skier.airborne?skier.airY-1200-.07:yAt(skier.x,skier.z)-.07,skier.z);
   groundNormal.set(skier.airborne?0:-g.x,1,skier.airborne?0:-g.z).normalize();skiForward.set(fx,skier.airborne?0:g.x*fx+g.z*fz,fz).normalize();skiRight.crossVectors(groundNormal,skiForward).normalize();
   skiBasis.makeBasis(skiRight,groundNormal,skiForward);athlete.quaternion.setFromRotationMatrix(skiBasis);
-  if(skier.crashRemaining>0)athlete.rotateZ(Math.min(1,skier.crashRemaining/.4)*1.2);
+  const fall=fallAnimation(skier.crashRemaining,skier.crashDuration||1.15);skier.fallAmount=fall.amount;skier.fallBrace=fall.brace;if(fall.amount)athlete.rotateZ(fall.amount*1.2);
   updateAthletePose(athlete,skier,mode==='running'?dt:0,yAt);
 }
 
@@ -403,7 +408,7 @@ function updateUI(){
   $('speed').textContent=Math.round(skier.speed*3.6);$('altitude').textContent=Math.round(skier.airborne?skier.airY:terrain.sample(skier.x,skier.z));
   const g=terrain.gradient(skier.x,skier.z);$('slope').textContent=Math.round(Math.atan(Math.hypot(g.x,g.z))*180/Math.PI);
   $('timer').textContent=clockFormat(elapsed);$('distance').textContent=`${Math.round(totalDistance)} m`;
-  $('stance').textContent=skier.crashRemaining>0?(skier.crashReason==='traffic'?'碰撞倒地':'落地失衡'):skier.airborne?`腾空${skier.grab>.3?' · 抓板':''}`:skier.poling>.2?'双杖蹬撑':skier.edge>.5&&skier.speed<.35?'立刃停稳':skier.edge>.5?`${skier.slip>.5||skier.edgeBrake?'横板搓雪':'加强立刃'} · ${Math.round(skier.edgeAngle*180/Math.PI)}°`:skier.tuck>.5?'收身 · 低风阻':skier.slip>1.5?'侧滑控速':Math.abs(skier.turn)>.15?'沿弧转弯':'直滑';
+  $('stance').textContent=skier.crashRemaining>0?(skier.crashReason==='traffic'?'碰撞倒地':skier.crashReason==='structure'?'撞到设施':'落地失衡'):skier.airborne?`腾空${skier.grab>.3?' · 抓板':''}`:skier.poling>.2?'双杖蹬撑':skier.edge>.5&&skier.speed<.35?'立刃停稳':skier.edge>.5?`${skier.slip>.5||skier.edgeBrake?'横板搓雪':'加强立刃'} · ${Math.round(skier.edgeAngle*180/Math.PI)}°`:skier.tuck>.5?'收身 · 低风阻':skier.slip>1.5?'侧滑控速':Math.abs(skier.turn)>.15?'沿弧转弯':'直滑';
   if(frameSamples.length>10){const sorted=[...frameSamples].sort((a,b)=>a-b);frameP95=sorted[Math.floor(sorted.length*.95)];frameMax=sorted.at(-1);slowFrames=sorted.filter(x=>x>25).length;}
   $('weather-status').textContent=`${WEATHER_PRESETS[weather.id].label}${weather.progress<1?' · 过渡中':''}`;
   $('freestyle').textContent=`特技 ${skier.freestyleScore||0} 分${skier.airborne?' · '+Math.max(0,skier.airY-terrain.surface(skier.x,skier.z)).toFixed(1)+' m 腾空':''}${skier.switchStance?' · Switch':''}${skier.collisionCount?' · 碰撞 '+skier.collisionCount+' 次':''}`;
@@ -436,7 +441,7 @@ function animate(time){
   }else accumulator=0;
   physicsMs=physicsMs*.9+(performance.now()-physicsStart)*.1;
   const powderStart=performance.now();powder.update(skier,mode==='running'&&!skier.airborne&&!skier.crashRemaining,snow);powderMs=performance.now()-powderStart;
-  updateAthlete(dt);updateCamera(dt);snowEffects.update(dt,skier,mode==='running',snow,athlete.userData.poleContact);snowEffects.mesh.material.opacity=snow==='soft'?.29:.65;resortUpdate(time/1000);
+  updateAthlete(dt);updateCamera(dt);snowEffects.update(dt,skier,mode==='running',snow,athlete.userData.poleContact);snowEffects.mesh.material.opacity=snow==='soft'?.29:.65;resortUpdate(time/1000);liftPassengers?.update(time/1000,camera,gear.npcs);
   if(arrivalZone){arrivalZone.visible=mode==='running';arrivalZone.children[0].material.opacity=.55+.15*Math.sin(time*.002);}
   traffic?.update(0,skier,['running','inspection','drone'].includes(mode),gear.npcs,camera);
   weather.update(dt,camera,athlete.position);

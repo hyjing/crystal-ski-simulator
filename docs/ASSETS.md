@@ -147,3 +147,8 @@ The imagery is assembled from four independently exported georegistered tiles; e
 Rebuild using `python3 scripts/fetch-regional-scenery.py crystal` and `python3 scripts/fetch-regional-scenery.py snoqualmie` (Pillow + system curl with certificate validation). Sources: https://elevation.nationalmap.gov/arcgis/rest/services/3DEPElevation/ImageServer and https://imagery.nationalmap.gov/arcgis/rest/services/USGSNAIPImagery/ImageServer . Cached exports can be retained between runs.
 
 The expanded 24-person crowd reuses the existing NPC GLB; no additional external character assets were added. Activity poses are procedural on the existing skeleton. Visitor positions prefer mapped station / lodge surroundings with authored clearance offsets; they do not represent observed real visitor locations.
+
+
+## Working rest cabins and occupied lifts
+
+`src/rest-area.js` adds three authored procedural timber rest cabins with real door openings, hinged doors, snowy pitched roofs, window mullions, benches and entrance ramps. Cups and sandwiches are small authored meshes attached to visitors' hands. These are station-side activity props, not surveyed real lodge interiors. `src/resort-assets.js` adds cushion seams, a back grab rail and grip bolts to the instanced lift chairs. Station operator huts gain pitched eaves and joinery; tower bases gain padded guards and mapped facades gain window framing. No new third-party asset or license is introduced. Lift passengers reuse `skier-npc.glb` with independent skeletons.

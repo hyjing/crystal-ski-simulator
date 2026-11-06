@@ -69,6 +69,7 @@ export function addForest(scene,terrain,routes,landcover,texture,vegetation,stat
 }
 
 export function addResort(scene,terrain,data){
+  scene.userData.structureStatics??=[];scene.userData.structureDynamics??=[];
   const towers=[],chairs=[],cables=[],walls=[],roofs=[],windows=[],facadeFrames=[],buildingMaterials=resortMaterials();
   const height=(x,z)=>terrain.surface(x,z)-1200;
   const inside=p=>Math.abs(p.x)<(terrain.width-2)*terrain.spacing/2&&Math.abs(p.z)<(terrain.height-2)*terrain.spacing/2;
@@ -86,14 +87,14 @@ export function addResort(scene,terrain,data){
         }
         cables.push(new THREE.BufferGeometry().setFromPoints(cable));
         const count=Math.floor(total/38);
-        for(let i=0;i<count;i++)chairs.push({segments,total,offset:i/count*total,side,cabin:feature.properties.aerialway==='gondola'});
+        for(let i=0;i<count;i++)chairs.push({liftId:String(feature.id),seatIndex:i,segments,total,offset:i/count*total,side,cabin:feature.properties.aerialway==='gondola'});
       }
     }else if(feature.geometry.type==='Polygon'){
       if(isDetailedLodge(feature))continue;
       const points=feature.geometry.coordinates[0].map(p=>geographicPoint(terrain,p));if(points.length<4||points.some(p=>!inside(p)))continue;
       const shape=new THREE.Shape(points.map(p=>new THREE.Vector2(p.x,-p.z)));
       const y=Math.min(...points.map(p=>height(p.x,p.z)))-.5;
-      const h=Number(feature.properties.height)||Number(feature.properties['building:levels']||2)*3;
+      const h=Number(feature.properties.height)||Number(feature.properties['building:levels']||2)*3;scene.userData.structureStatics.push({kind:'polygon',polygon:points.map(p=>({x:p.x,z:p.z})),minY:y,maxY:y+h,label:feature.properties.name||'房屋'});
       walls.push(new THREE.ExtrudeGeometry(shape,{depth:h,bevelEnabled:false,steps:1}).rotateX(-Math.PI/2).translate(0,y,0));
       roofs.push(new THREE.ShapeGeometry(shape).rotateX(-Math.PI/2).translate(0,y+h+.25,0));
       for(let j=0;j<points.length-1;j++){
@@ -116,6 +117,8 @@ export function addResort(scene,terrain,data){
   const pylons=new THREE.InstancedMesh(new THREE.CylinderGeometry(.38,.55,16,8),new THREE.MeshStandardMaterial({color:'#68787d',metalness:.6,roughness:.5}),towers.length);
   const crossbars=new THREE.InstancedMesh(new THREE.BoxGeometry(6,.45,.6),new THREE.MeshStandardMaterial({color:'#3b5058',metalness:.4,roughness:.5}),towers.length);
   towers.forEach((p,i)=>{dummy.position.set(p.x,p.y,p.z);dummy.rotation.y=p.heading;dummy.updateMatrix();pylons.setMatrixAt(i,dummy.matrix);dummy.position.y+=7.6;dummy.updateMatrix();crossbars.setMatrixAt(i,dummy.matrix);});
+  for(const p of towers)scene.userData.structureStatics.push({kind:'cylinder',x:p.x,z:p.z,radius:.66,minY:p.y-8,maxY:p.y+8,label:'缆车塔柱'});
+  const pads=new THREE.InstancedMesh(new THREE.CylinderGeometry(.62,.68,1.5,12),new THREE.MeshStandardMaterial({color:'#b56a45',roughness:.9}),towers.length);towers.forEach((p,i)=>{dummy.position.set(p.x,p.y-7.25,p.z);dummy.rotation.set(0,p.heading,0);dummy.updateMatrix();pads.setMatrixAt(i,dummy.matrix);});pads.castShadow=pads.receiveShadow=true;scene.add(pads);
   pylons.castShadow=crossbars.castShadow=true;scene.add(pylons,crossbars);
   const detail=new THREE.InstancedMesh(towerAccessories(),new THREE.MeshStandardMaterial({color:'#394851',metalness:.6,roughness:.42}),towers.length);detail.castShadow=detail.receiveShadow=true;
   towers.forEach((p,i)=>{dummy.position.set(p.x,p.y,p.z);dummy.rotation.set(0,p.heading,0);dummy.updateMatrix();detail.setMatrixAt(i,dummy.matrix);});scene.add(detail);
@@ -123,14 +126,15 @@ export function addResort(scene,terrain,data){
   const instances=(geometries,mats,count)=>geometries.map((geometry,i)=>{const mesh=new THREE.InstancedMesh(geometry,mats[i],count);mesh.castShadow=mesh.receiveShadow=true;scene.add(mesh);return mesh;});
   const seats=instances(detailedChair(),[materials.metal,materials.seat,materials.paint],openChairs.length),cabins=instances(detailedCabin(),[materials.paint,materials.glass,materials.dark],closedCabins.length);
 
-  return time=>{
+  for(const c of chairs){c.collider={kind:'box',position:new THREE.Vector3(),half:new THREE.Vector3(c.cabin?1.3:1.3,c.cabin?1.6:.7,c.cabin?1:.7),quaternion:new THREE.Quaternion(),label:c.cabin?'吊厢':'吊椅'};scene.userData.structureDynamics.push(c.collider);}
+  const animate=time=>{animate.time=time;
     const update=(vehicles,meshes)=>vehicles.forEach((chair,i)=>{
       const distance=((chair.offset+time*2.5*chair.side)%chair.total+chair.total)%chair.total;
       const seg=chair.segments.find(s=>distance<=s.start+s.l)||chair.segments.at(-1),t=(distance-seg.start)/seg.l;
       dummy.position.set(THREE.MathUtils.lerp(seg.a.x,seg.b.x,t)+seg.rx,THREE.MathUtils.lerp(seg.a.y,seg.b.y,t)-Math.sin(Math.PI*t)*1.1-2.8,THREE.MathUtils.lerp(seg.a.z,seg.b.z,t)+seg.rz);
-      dummy.rotation.set(0,Math.atan2(seg.b.x-seg.a.x,seg.b.z-seg.a.z)+(chair.side<0?Math.PI:0),0);dummy.updateMatrix();meshes.forEach(mesh=>mesh.setMatrixAt(i,dummy.matrix));
+      dummy.rotation.set(0,Math.atan2(seg.b.x-seg.a.x,seg.b.z-seg.a.z)+(chair.side<0?Math.PI:0),0);dummy.updateMatrix();chair.collider.position.copy(dummy.position);chair.collider.quaternion.copy(dummy.quaternion);if(chair.riderMatrix)chair.riderMatrix.copy(dummy.matrix);meshes.forEach(mesh=>mesh.setMatrixAt(i,dummy.matrix));
     });update(openChairs,seats);update(closedCabins,cabins);for(const mesh of [...seats,...cabins])mesh.instanceMatrix.needsUpdate=true;
-  };
+  };animate.carriers=openChairs;animate.time=0;animate(0);return animate;
 }
 
 

@@ -52,12 +52,12 @@ export function updateHumanoid(athlete,pose){
   worldQuaternion(bones.neck_01,attitude(pose.counter+(pose.headLook||0)*.5,pose.lean*.08,pose.tuck*.12).multiply(rest.get('neck_01').q));
   worldQuaternion(bones.Head,attitude(pose.counter+(pose.headLook||0),0,pose.tuck*.08).multiply(rest.get('Head').q));
   for(const leg of legs){const suffix=leg.sign>0?'l':'r',l=rig.lengths[suffix],hip=bones[`thigh_${suffix}`].getWorldPosition(new THREE.Vector3()),ankle=body.localToWorld(leg.target.ankle.clone().add(new THREE.Vector3(0,-.05,0))),pole=hip.clone().addScaledVector(forward,.7).addScaledVector(right,leg.sign*.12);
-    const solution=jointSolution(hip,ankle,pole,l.thigh,l.calf);aim(rig,`thigh_${suffix}`,`calf_${suffix}`,solution.joint);aim(rig,`calf_${suffix}`,`foot_${suffix}`,solution.end);worldQuaternion(bones[`foot_${suffix}`],rootQ.clone().multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0,0,1),(pose.roll||0)*.70)).multiply(rest.get(`foot_${suffix}`).q));
+    const solution=jointSolution(hip,ankle,pole,l.thigh,l.calf);aim(rig,`thigh_${suffix}`,`calf_${suffix}`,solution.joint);aim(rig,`calf_${suffix}`,`foot_${suffix}`,solution.end);worldQuaternion(bones[`foot_${suffix}`],rootQ.clone().multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1,0,0),pose.ride?.15:0)).multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0,0,1),(pose.roll||0)*.70)).multiply(rest.get(`foot_${suffix}`).q));
   }
   for(const arm of arms){const suffix=arm.sign>0?'l':'r',l=rig.lengths[suffix],shoulder=bones[`upperarm_${suffix}`].getWorldPosition(new THREE.Vector3()),hand=body.localToWorld(arm.target.hand.clone()),pole=shoulder.clone().addScaledVector(right,arm.sign*.5).addScaledVector(up,-.22);
     const solution=jointSolution(shoulder,hand,pole,l.upper,l.lower);aim(rig,`upperarm_${suffix}`,`lowerarm_${suffix}`,solution.joint);aim(rig,`lowerarm_${suffix}`,`hand_${suffix}`,solution.end);
     const tip=body.localToWorld(arm.target.tip.clone()),gripDirection=tip.clone().sub(solution.end).normalize(),restQ=rest.get(`hand_${suffix}`).q;
-    worldQuaternion(bones[`hand_${suffix}`],new THREE.Quaternion().setFromUnitVectors(Y.clone().applyQuaternion(restQ),gripDirection).multiply(restQ));
+    if(arm.target.pedestrian){bones[`hand_${suffix}`].quaternion.copy(rest.get(`hand_${suffix}`).local);bones[`hand_${suffix}`].updateWorldMatrix(false,true);}else worldQuaternion(bones[`hand_${suffix}`],new THREE.Quaternion().setFromUnitVectors(Y.clone().applyQuaternion(restQ),gripDirection).multiply(restQ));
     const localHand=body.worldToLocal(solution.end.clone()),direction=arm.target.tip.clone().sub(localHand),length=direction.length();arm.pole.position.copy(localHand).add(arm.target.tip).multiplyScalar(.5);arm.pole.quaternion.setFromUnitVectors(Y,direction.normalize());arm.pole.scale.y=length;
   }
   rig.model.updateMatrixWorld(true);

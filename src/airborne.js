@@ -38,7 +38,7 @@ export function stepAirborne(s,input,terrain,dt,snow='packed'){
   const points=quality.clean&&s.flightTime>.18?50+halves*150+(s.grabTime>.16?100:0):0;
   s.freestyleScore+=points;s.airborne=false;s.airY=ground;s.jumpCooldown=.45;s.naturalCandidate=0;s.heading=quality.clean?travel+(quality.switchLanding?Math.PI:0):travel;s.switchStance=quality.clean&&quality.switchLanding;
   s.airEvent={type:quality.clean?'land':'crash',points,rotation:halves*180,grab:s.grabTime>.16,airTime:s.flightTime,impact};
-  if(!quality.clean){s.crashRemaining=1.15;s.vx=s.vz=s.speed=0;}else{s.vx*=.96;s.vz*=.96;s.speed=Math.hypot(s.vx,s.vz);}
+  if(!quality.clean){s.crashRemaining=1.15;s.crashDuration=1.15;s.vx=s.vz=s.speed=0;}else{s.vx*=.96;s.vz*=.96;s.speed=Math.hypot(s.vx,s.vz);}
   s.trickYaw=0;s.spinRate=0;s.grab=0;
  }
  return s;

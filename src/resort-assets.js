@@ -27,6 +27,10 @@ export function detailedChair(){
   pipe(0,[[-1.18,.55,.65],[0,.55,.65],[1.18,.55,.65]],.036);
   box(0,2.5,.08,1.02,0,-.08,0);box(0,2,.05,.20,0,-.65,.8);box(0,.38,.16,.26,0,2.80,0);
   for(let i=0;i<4;i++){const x=-.91+i*.60;const seat=new RoundedBoxGeometry(.56,.13,.78,2,.045);seat.translate(x,.03,.01);parts[1].push(seat);const back=new RoundedBoxGeometry(.56,.57,.13,2,.04);back.translate(x,.35,-.40);parts[1].push(back);}
+  // Recessed cushion seams, back grab rail and a bolted cable grip.
+  for(let i=0;i<4;i++){const x=-.91+i*.60;for(const dx of [-.18,.18])box(0,.012,.008,.58,x+dx,.099,.02);}
+  pipe(0,[[-1.12,.64,-.43],[0,.68,-.46],[1.12,.64,-.43]],.025);
+  for(const x of [-.15,.15]){const bolt=new THREE.CylinderGeometry(.035,.035,.18,6);bolt.rotateX(Math.PI/2);bolt.translate(x,2.8,0);parts[0].push(bolt);}
   box(2,.32,.18,.04,0,.70,-.44);
   return parts.map(list=>{const g=mergeAssetGeometry(list);list.forEach(x=>x.dispose());return g;});
 }

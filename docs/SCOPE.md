@@ -31,7 +31,7 @@ Complete resort recreation, multiplayer, live weather / snow conditions, avalanc
 ## Gameplay first pass
 
 - [x] Queens Run, the eleventh selectable lift itinerary.
-- [x] 24 lightweight NPCs (18 trail skiers / six station visitors) with rule-based route / speed / avoidance decisions and collision recovery; local visibility toggle.
+- [x] 24 ground NPCs (18 trail skiers / six station visitors), plus eight lift riders with rule-based route / speed / avoidance decisions and collision recovery; local visibility toggle.
 - [x] Oversized freeride silhouette, palette presets, individual colors and three ski profiles, saved locally.
 - [x] Faster progressive bank response and park / powder sidecut differences.
 - [x] Mouse-look recovery after release, with stable forward travel view during air spins.
@@ -44,3 +44,7 @@ Next: marked slalom / time challenges, persistent local records, linked trick co
 - [x] Anticipatory crest camera lift, pullback and terrain sightline clearance.
 
 - [x] More visible carving / pole / tuck variation, walking / rest gestures and ski-underside snow support, with a 12-person render budget.
+
+- [x] Arrival-gated visitor sit / stand / walk / indoor routines, working cabin doors, benches and refreshments.
+- [x] Varied skier pace, roadside pauses, occasional falls and eased player / NPC fall recovery.
+- [x] Player collision against mapped buildings, station structures, towers and moving carriers; finer authored facility details.
