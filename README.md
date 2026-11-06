@@ -136,7 +136,17 @@ Crystal Mountain 菜单保留 **11 条缆车整趟路线**，长度约 **0.6–2
 
 ## 快速开始
 
-准备 **Node.js 20.19+ 或 22.12+**，以及支持 WebGL 的浏览器。
+**直接玩：** [打开在线版](https://hyjing.github.io/crystal-ski-simulator/)，无需安装。
+
+**本地双击启动：** 下载 / 克隆项目并解压，安装一次 [Node.js](https://nodejs.org/)（20.19+ 或 22.12+），之后：
+
+- macOS：双击根目录的 `启动滑雪.command`。如果下载的 ZIP 未保留执行权限，可在终端进入项目目录执行 `chmod +x 启动滑雪.command`；系统拦截时按提示检查并允许运行。
+- Windows：双击 `启动滑雪.bat`。
+- 终端通用入口：`npm start`。
+
+启动器自动进入项目目录，首次安装依赖（需要网络），再启动服务并打开浏览器。默认端口被占用时自动选择空闲端口。关闭终端窗口或按 Ctrl+C 停止服务。依赖不变时再次启动会跳过安装；本地版仍需支持 WebGL 的浏览器。
+
+开发者也可以手动运行：
 
 ```sh
 git clone https://github.com/hyjing/crystal-ski-simulator.git
