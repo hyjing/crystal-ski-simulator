@@ -27,7 +27,7 @@ export function advanceTurnPlant(state,skier,dt){
     if(side===state.targetSide)state.incomingHeld+=dt;
     else if(!state.touched){state.active=false;state.worldPoint=null;}
     const flattened=skier.edgeRoll===undefined?Math.sign(skier.turn||0)===state.targetSide:skier.edgeRoll*state.targetSide>=-.035;
-    if(state.active&&!state.touched&&state.incomingHeld>=.055&&flattened&&state.time<.26){state.touched=true;state.contactAge=0;state.contactStarted=true;}
+    if(state.active&&!state.touched&&state.incomingHeld>=.055&&flattened&&state.time<.26){state.touched=true;state.contactAge=0;state.contactStarted=true;state.contactId=(state.contactId||0)+1;}
     if(state.touched){if(!state.contactStarted)state.contactAge+=dt;state.contact=state.contactAge<=.075;}
     if(state.time>=.5||(!state.touched&&state.time>=.26)){state.active=false;state.contact=false;state.worldPoint=null;}
   }

@@ -197,3 +197,7 @@ The November 6, 2026 npm audit reported zero known vulnerabilities. Gitleaks sca
 ### Ski animation refinement — November 6, 2026
 
 165 unit tests pass. New integration cases exercise the buffered manual pop, broad terrain absorption without flat-slope oscillation, edge-release decay, outside-leg loading, airborne ski-to-boot attachment, impact-dependent pelvis compression, event-locked landing playback, full fall phases, feasible fixed-length pole contact, grab transitions and a complete physics-driven jump/recovery sequence. Production build with the GitHub Pages base path passes. No browser testing or visual-quality approval was performed.
+
+### Palm / pole attachment regression
+
+170 tests pass. Added frame-by-frame shaft-to-palm equality checks for native and clip poses, full double-pole cycles, rotated / translated actors, tuck / turn blends, clip-to-grab transitions and every intermediate staggered NPC render frame. Additional anatomical assertions keep wrists outside shoulders during propulsion and finger directions forward / outward. Production build passes; no browser visual testing was performed.

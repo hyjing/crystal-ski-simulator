@@ -62,6 +62,7 @@ export function createAthleteRig(scene){
     add(singleSki,new THREE.BoxGeometry(.12,.008,1.15),mat('#b9da87'),sign*.32,.285,1.05);
     for(const child of singleSki.children){child.position.x-=sign*.32;child.position.y-=.24;}
   }
+  for(const arm of arms){const grip=new THREE.Mesh(new THREE.CapsuleGeometry(.045,.12,4,8),metal);grip.name='Ski pole grip';grip.scale.y=1/2.65;grip.position.y=-.5+.015/2.65;arm.pole.add(grip);}
   athlete.userData={body,skiRig,torso,pelvis,legs,arms,skis,plant:{}};athlete.scale.setScalar(.52);athlete.traverse(o=>{if(o.isMesh){o.castShadow=o.receiveShadow=true;}});scene.add(athlete);return athlete;
 }
 export function walkingFoot(phase){

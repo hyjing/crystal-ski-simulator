@@ -4,7 +4,7 @@ const clamp=THREE.MathUtils.clamp;
 // legacy character units. IK corrects these poses instead of inventing the pose.
 export function skiArmOffset(motion,sign){
  const tuck=clamp(motion.tuck||0,0,1),pole=clamp(motion.poling||0,0,1),phase=(motion.polePhase||0)*Math.PI*2,bank=motion.edgeRoll||0,plant=clamp(motion.plant||0,0,1);
- const neutral=new THREE.Vector3(sign*.24,-.46,.57),tucked=new THREE.Vector3(-sign*.18,-.15,.55),pushing=new THREE.Vector3(sign*.24,-.46-.12*Math.sin(phase),.25+.45*Math.cos(phase));
+ const neutral=new THREE.Vector3(sign*.24,-.46,.57),tucked=new THREE.Vector3(sign*.08,-.20,.56),pushing=new THREE.Vector3(sign*.34,-.46-.12*Math.sin(phase),.35+.36*Math.cos(phase));
  neutral.lerp(tucked,tuck).lerp(pushing,pole);neutral.x+=sign*Math.abs(bank)*.05;neutral.y+=sign*bank*.08;
  neutral.lerp(new THREE.Vector3(sign*.25,-.42,.64),plant);
  const shape=motion.shape||{};neutral.y+=shape.armLift||0;

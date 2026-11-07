@@ -39,3 +39,7 @@ node scripts/build-skier-motion.mjs /path/to/UAL1_Standard.glb --preview /path/t
 The preview omits runtime procedural fabric textures and is not a screenshot of the game renderer. GLB import exposes the named animation clips; further keyframe edits can be exported as glTF/GLB and retargeted back to the same native bone names. Keep root translation separate from physics motion, maintain loop seams and preserve the anatomical elbow / wrist bounds. The runtime motion JSON is ~524KiB uncompressed and is fetched / parsed once; actors share immutable clips with independent mixers.
 
 No browser regression testing or visual-quality approval was performed in this iteration. Numeric continuity / rig tests establish constraints and integration, not professional animation quality.
+
+## Palm grip attachment correction
+
+Pole shafts now begin at a native hand-local palm socket between the thumb and finger bases, rather than the wrist origin. A visible rubber handle surrounds the socket. `syncHandPoles` runs after player transition blending and after every rendered NPC bone interpolation; deferred target poses do not update equipment. Snow contact projects from the final palm grip, preserves shaft length and never moves the hand to meet a pole. A per-contact identifier prevents repeated projection during NPC interpolation. Double-pole elbow bend references are closer to the torso, and tuck / stroke hand offsets keep both hands on their own sides with forward-facing fingers.

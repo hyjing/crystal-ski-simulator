@@ -116,3 +116,5 @@ The clip-based crowd fixture now explicitly installs the shared motion library /
 ### Expanded ski animation clips — November 6, 2026
 
 Isolated traffic benchmark with 24 NPCs, 12 visible and 900 measured frames: median **0.297ms**, P95 **0.533ms**, max **1.066ms** CPU. This includes motion mixing and staggered contact / IK, and excludes GPU / forest callbacks. Clip-to-procedural transition buffers are reused and only copied during transitions. The expanded 20-clip library is **536,216 bytes** uncompressed after removing redundant held-pose keys, smaller than the previous nine-clip library. These measurements are not an end-to-end FPS guarantee.
+
+Palm attachment follow-up: synchronizing the actual rendered NPC hand sockets every frame measured **0.369ms median / 0.651ms P95 / 2.017ms max** in the same isolated CPU traffic benchmark (24 NPCs, 12 visible, 900 frames). The synchronizer updates only the required transform chains, rather than recursively updating the entire actor on every render frame. GPU rendering remains excluded.
