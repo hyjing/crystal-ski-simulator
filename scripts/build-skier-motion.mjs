@@ -15,7 +15,7 @@ const definitions=[
  ['ski-carve-left',2,()=>({edgeRoll:-.9,edgeAngle:.9,poseShape:{hipForward:.02,knee:.06}})],
  ['ski-carve-right',2,()=>({edgeRoll:.9,edgeAngle:.9,poseShape:{hipForward:.02,knee:.06}})],
  ['ski-pole-push',1/1.35,t=>({poling:1,polePhase:t})],
- ['ski-release',2,held({flex:.08,bend:-.035,hipForward:.025,knee:.06})],
+ ['ski-release',2,held({flex:-.04,bend:-.025,hipForward:.015,knee:.02})],
  ['ski-absorb',2,held({flex:.30,bend:.045,knee:.16,hipForward:.04})],
  ['ski-preload',2,held({flex:.33,bend:.08,knee:.16,armLift:-.04})],
  ['ski-air-rise',2,held({flex:-.05,bend:-.06,fold:.06,armLift:-.025})],
@@ -28,7 +28,7 @@ const definitions=[
  ['ski-fall-rise',2,held({flex:.56,bend:.28,brace:.9,knee:.28,hipForward:.07})],
 ];
 const clips=[];for(const [name,duration,sample] of definitions){const a=createAthleteRig(new THREE.Scene()),r=attachHumanoid(a,clone(source.scene)),frames=Math.round(duration*30),times=Array.from({length:frames+1},(_,i)=>i/frames*duration),values=new Map(names.map(n=>[n,[]])),positions=[];
- for(let i=0;i<=frames;i++){const t=i/frames,s={speed:12,heading:0,downhillHeading:0,...sample(t)};a.userData.plant={};updateAthletePose(a,s,0,()=>0);if(duration===2)r.bones.pelvis.position.z+=.002*Math.sin(t*Math.PI*2);for(const n of names)values.get(n).push(...r.bones[n].quaternion.toArray());positions.push(...r.bones.pelvis.position.toArray());}
+ for(let i=0;i<=frames;i++){const t=i/frames,s={poseAuthoring:true,speed:12,heading:0,downhillHeading:0,...sample(t)};a.userData.plant={};updateAthletePose(a,s,0,()=>0);if(duration===2)r.bones.pelvis.position.z+=.002*Math.sin(t*Math.PI*2);for(const n of names)values.get(n).push(...r.bones[n].quaternion.toArray());positions.push(...r.bones.pelvis.position.toArray());}
  const tracks=names.map(n=>new THREE.QuaternionKeyframeTrack(`${n}.quaternion`,times,values.get(n)));tracks.push(new THREE.VectorKeyframeTrack('pelvis.position',times,positions));const clip=new THREE.AnimationClip(name,duration,tracks);clips.push(duration===2?clip.optimize():clip);}
 const vendorPath=process.argv[2];if(vendorPath){const vendor=await read(vendorPath),rest=new Map();vendor.scene.traverse(o=>{if(o.isBone)rest.set(o.name,{q:o.quaternion.clone(),p:o.position.clone()});});const targetRest=new Map();source.scene.traverse(o=>{if(o.isBone)targetRest.set(o.name,{q:o.quaternion.clone(),p:o.position.clone()});});
  for(const [original,name] of [['Walk_Loop','visitor-walk'],['Idle_Loop','visitor-idle']]){const clip=vendor.animations.find(c=>c.name===original);if(!clip)throw Error(`missing ${original}`);const tracks=[];for(const t of clip.tracks){const [n,property]=t.name.split('.');if(!names.includes(n)||!rest.has(n)||!targetRest.has(n))continue;const v=t.values.slice(),from=rest.get(n),to=targetRest.get(n);if(property==='quaternion'){for(let i=0;i<v.length;i+=4){const q=to.q.clone().multiply(from.q.clone().invert()).multiply(new THREE.Quaternion().fromArray(v,i)).normalize();q.toArray(v,i);}tracks.push(new THREE.QuaternionKeyframeTrack(t.name,t.times,v));}else if(n==='pelvis'&&property==='position'){const ratio=to.p.z/from.p.z;for(let i=0;i<v.length;i+=3){v[i]=to.p.x+(v[i]-from.p.x)*ratio;v[i+1]=to.p.y+(v[i+1]-from.p.y)*ratio;v[i+2]=to.p.z+(v[i+2]-from.p.z)*ratio;}tracks.push(new THREE.VectorKeyframeTrack(t.name,t.times,v));}}

@@ -205,3 +205,7 @@ The November 6, 2026 npm audit reported zero known vulnerabilities. Gitleaks sca
 ### Outward elbow regression
 
 173 tests pass. New checks measure actual elbow joints relative to the chest through every pole-stroke phase, particularly the previously collapsed rear phase; also exercise tuck / carve / counter-rotation blends, rotated actor roots and intermediate NPC render frames. Both elbows retain lateral clearance, stay below the shoulder, and retain palm-to-pole attachment. Existing wrist, reach and continuity tests pass. Production build passes; no browser visual test performed.
+
+### Responsive linked turns / body motion
+
+179 tests pass. New tests cover initial real-path turning at 12/20m/s, rapid edge changes with retained momentum, prompt release, progressive analog steering, causal body response / settling at rest, load-driven knee flex with grounded feet, and physics-driven linked turns retaining outward elbows and palm attachments. Existing inclined-plane energy, skid stops, jump/landing and route-completion tests pass. The progressive-bank test now checks the stronger initial bite and remaining buildup rather than enforcing the old slow initial response. Production Pages-path build passes. No browser visual test performed.

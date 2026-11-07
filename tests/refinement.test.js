@@ -13,7 +13,7 @@ import {detailedChair,detailedCabin,towerAccessories} from '../src/resort-assets
 test('holding a turn progressively banks and tightens the actual path',()=>{
  const s=createSkier({x:0,z:0},{x:0,z:1});s.vz=s.speed=12;const flat={gradient:()=>({x:0,z:0})};
  let early;for(let i=0;i<180;i++){stepSkier(s,{steer:1},flat,1/120);if(i===29)early=s.edgeAngle;}
- assert.ok(s.edgeAngle>early+.4);assert.ok(s.edgeAngle>.95);assert.ok(Math.abs(s.heading)>1.0);const bank=s.edgeAngle;stepSkier(s,{steer:-1},flat,1/120);assert.ok(s.turnHold<.02);assert.ok(s.edgeAngle>bank*.6,'reversal must not snap the skis upright');
+ assert.ok(early>.7,'initial edge bite should respond within a quarter second');assert.ok(s.edgeAngle>early+.2);assert.ok(s.edgeAngle>.95);assert.ok(Math.abs(s.heading)>1.0);const bank=s.edgeAngle;stepSkier(s,{steer:-1},flat,1/120);assert.ok(s.turnHold<.02);assert.ok(s.edgeAngle>bank*.6,'reversal must not snap the skis upright');
 });
 test('moving the focus within a shadow texel preserves the light-space grid',()=>{
  const d=new THREE.Vector3(-.5,.8,.3).normalize(),right=new THREE.Vector3().crossVectors(new THREE.Vector3(0,1,0),d).normalize(),up=new THREE.Vector3().crossVectors(d,right).normalize();

@@ -14,8 +14,17 @@ export function advanceSkiGesture(state,s,dt,surface){
  if(grounded&&surface&&Number.isFinite(s.x)&&Number.isFinite(s.z)&&s.speed>1){const h=s.heading||0,fx=Math.sin(h),fz=Math.cos(h),d=2.4,y=surface(s.x,s.z),curve=(surface(s.x+fx*d,s.z+fz*d)-2*y+surface(s.x-fx*d,s.z-fz*d))/(d*d);target=clamp(curve*s.speed*s.speed/18,-.18,.75);}
  state.absorption=(state.absorption||0)+(target-(state.absorption||0))*(dt?1-Math.exp(-dt*12):1);
  if(!grounded)state.absorption=0;
+ // Driven by edge changes and actual snow reaction, not an idle sine loop.
+ const live=grounded&&!s.poseAuthoring&&(s.speed||0)>.5,load=live?clamp((s.turnAcceleration??(9.81*Math.tan(Math.min(Math.abs(edge),1.05))))/9.81,0,1.6)*smoothstep(s.speed||0,1,5):0;
+ const follow=(value,target,rate)=>dt?value+(target-value)*(1-Math.exp(-dt*rate)):target;
+ state.chestBank=follow(state.chestBank??edge,edge,8);
+ const flexTarget=live?load*.027-release*.018:0;
+ state.bodyFlex=follow(state.bodyFlex||0,flexTarget,12);
+ const acceleration=dt&&state.previousSpeed!==undefined?clamp(((s.speed||0)-state.previousSpeed)/dt,-4,4):0;
+ state.previousSpeed=s.speed||0;state.chestPitch=follow(state.chestPitch||0,live?acceleration*.010:0,7);
+ const dynamic={flex:live?state.bodyFlex:0,roll:live?clamp(state.chestBank-edge,-.4,.4)*.14:0,pitch:live?state.chestPitch:0};
  const landing=s.landingAnimationRemaining>0?Math.sin(Math.PI*clamp(1-s.landingAnimationRemaining/(s.landingAnimationDuration||.55),0,1)):0;
- return {release,absorption:state.absorption,landing,landingPhase:s.landingAnimationRemaining>0?clamp(1-s.landingAnimationRemaining/(s.landingAnimationDuration||.55),0,1):1,landingStrength:clamp(s.landingStrength||0,0,1)};
+ return {dynamic,release,absorption:state.absorption,landing,landingPhase:s.landingAnimationRemaining>0?clamp(1-s.landingAnimationRemaining/(s.landingAnimationDuration||.55),0,1):1,landingStrength:clamp(s.landingStrength||0,0,1)};
 }
 // Normalized authoring controls used by the offline native-skeleton baker.
 export function skiShape(s){

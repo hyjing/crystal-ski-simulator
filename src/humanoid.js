@@ -65,7 +65,8 @@ export function updateHumanoid(athlete,pose){
   worldQuaternion(bones.neck_01,attitude(pose.counter+(pose.headLook||0)*.5,pose.lean*.08,pose.tuck*.12).multiply(rest.get('neck_01').q));
   worldQuaternion(bones.Head,attitude(pose.counter+(pose.headLook||0),0,pose.tuck*.08).multiply(rest.get('Head').q));
   }else{
-    const names=['pelvis','spine_01','spine_02','spine_03','neck_01','Head'],fractions=[.18,.40,.72,1,1,1],worlds=names.map(n=>bones[n].getWorldQuaternion(new THREE.Quaternion()));for(let i=0;i<names.length;i++){const yaw=pose.counter*fractions[i]+((i>3)?(pose.headLook||0)*.4:0),delta=new THREE.Quaternion().setFromAxisAngle(up,yaw);worldQuaternion(bones[names[i]],delta.multiply(worlds[i]));}
+    const dynamic=pose.dynamic||{},hip=bones.pelvis.getWorldPosition(new THREE.Vector3()).addScaledVector(up,-(dynamic.flex||0));bones.pelvis.position.copy(bones.pelvis.parent.worldToLocal(hip));
+    const names=['pelvis','spine_01','spine_02','spine_03','neck_01','Head'],fractions=[.18,.40,.72,1,1,1],follow=[0,.35,.65,1,.75,.55],worlds=names.map(n=>bones[n].getWorldQuaternion(new THREE.Quaternion()));for(let i=0;i<names.length;i++){const yaw=pose.counter*fractions[i]+((i>3)?(pose.headLook||0)*.4:0),delta=new THREE.Quaternion().setFromAxisAngle(up,yaw),response=rootQ.clone().multiply(new THREE.Quaternion().setFromEuler(new THREE.Euler((dynamic.pitch||0)*follow[i],0,(dynamic.roll||0)*follow[i]))).multiply(rootQ.clone().invert());worldQuaternion(bones[names[i]],delta.multiply(response).multiply(worlds[i]));}
   }
   if(motionMode!=='visitor'&&!(motionMode&&(pose.airborne||pose.crashRemaining>0)))
   for(const leg of legs){const suffix=leg.sign>0?'l':'r',l=rig.lengths[suffix],hip=bones[`thigh_${suffix}`].getWorldPosition(new THREE.Vector3()),ankle=body.localToWorld(leg.target.ankle.clone().add(new THREE.Vector3(0,-.05,0))),pole=motionMode?bones[`calf_${suffix}`].getWorldPosition(new THREE.Vector3()):body.localToWorld(leg.target.knee.clone());

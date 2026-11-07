@@ -47,3 +47,9 @@ Pole shafts now begin at a native hand-local palm socket between the thumb and f
 ### Outward elbow constraint
 
 The previous loose elbow reference collapsed toward the torso during the rear half of the pole stroke. Ski arms now choose the elbow lateral coordinate directly on the exact two-bone joint circle in the moving chest frame. This retains segment lengths and hand targets while keeping a stable outward / rearward bend branch. Clips are rebuilt with the same solver; a bounded runtime check corrects inward elbows caused by clip blending. Walking, grab and fall IK retain their specialized poses. Palm attachments still run after the final rendered pose.
+
+## Load-driven motion and faster linked turns
+
+Grounded movement adds bounded vertical flex from actual turn acceleration (up to about 4.3cm), a small release extension, chest roll lag and fore/aft response to acceleration. They settle at constant load and are disabled at rest, in the air and during special states; no periodic wobble is added. Foot IK keeps snow contact while the pelvis flexes. The inside ski / boot advances slightly during the arc. Offline bakes disable this runtime response so it cannot be counted twice. Motion weights follow input at 22/s instead of 14/s, and the procedural lean response is 20/s instead of 12/s. Outward elbow constraints and final-palm attachments remain active.
+
+The ground controller has quicker edge engagement / release, a 0.55s progressive bank ramp instead of 0.80s, stronger initial edge bite, increased lateral support and an effective sidecut radius scale of 0.82. This is a gameplay tuning choice, not measured ski equipment data. Curving still rotates the actual slope-tangent velocity and does not inject kinetic energy or snap away lateral momentum. At 12m/s, a 0.5s held turn changes heading by about 0.399rad (previously 0.251rad); at 20m/s it is about 0.241rad (previously 0.152rad).
