@@ -157,3 +157,7 @@ The expanded 24-person crowd reuses the existing NPC GLB; no additional external
 ## Whistler / Blackcomb open map pack
 
 See [WHISTLER.md](WHISTLER.md) for tile sources, licenses, rebuilding and route exclusions. Mapzen / Tilezen Terrain Tiles are reprojected from Terrarium PNG pixel centers into UTM zone 10N; the local and context grids use 25m / 90m export spacing. Canada terrain data contains information licensed under the Open Government Licence – Canada; global SRTM / GMTED2010 data courtesy USGS. OpenStreetMap geometry is ODbL 1.0, © OpenStreetMap contributors. Forest reference images and tree candidates are derived from mapped polygons, not satellite imagery. Raw OSM editor metadata stays outside the repository. `public/social-card.png` is a byte-for-byte copy of the current live capture frame `docs/media/current-crystal.png`, with no new third-party media license.
+
+## Native ski clips and free visitor animation
+
+`public/assets/skier-motion.json` adds seven project-authored native-skeleton ski clips and two retargeted Quaternius Universal Animation Library Standard clips (`Walk_Loop`, `Idle_Loop`). The official Standard archive was downloaded from the author on November 6, 2026; its included license is CC0 1.0 and copied to `QUATERNIUS-ANIMATION-LICENSE.txt`. The source archive contains 43 clips; no downhill-ski animation was included. It is not redistributed wholesale. See [ANIMATION.md](ANIMATION.md) for source, license, retargeting, rebuilding and the distinction between baked authored poses and motion capture.

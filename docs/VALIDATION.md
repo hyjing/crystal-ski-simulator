@@ -189,3 +189,7 @@ The November 6, 2026 npm audit reported zero known vulnerabilities. Gitleaks sca
 ## Player arm reach and wrist correction
 
 147 local unit tests and the production build pass. Five new fixtures inspect the actual skinned player GLB through neutral, tuck, both banks and a full pole cycle. They check reachable hands, bent rather than locked elbows, bounded local wrist angles and constant pole length. Additional fixtures cover translated / rotated player roots, continuous pose transitions and release of an impossible planted contact. The linked-turn fixture also rejects wrist jumps on both accepted and rejected contact frames; failed pole constraints restore the free hand target. No browser regression or new media capture was performed for this change.
+
+## Native animation clips and free asset integration
+
+154 local tests and the production build pass. Seven new animation tests check the nine-clip asset, no root travel, loop seams, adjacent-frame quaternion continuity, full-body blend / reach / wrist bounds, phase-locked pole playback, independent mixers and unchanged actor travel, fallback for special states, and additive single-arm point plants without wrist jumps. The editable GLB was exported and re-parsed with all nine named clips. No browser visual regression or new gameplay recording was performed for this animation iteration.

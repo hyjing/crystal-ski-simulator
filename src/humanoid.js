@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import {GLTFLoader} from 'three/addons/loaders/GLTFLoader.js';
+import {SkierMotion,loadMotionClips} from './skier-motion.js';
 import {skiArmOffset,reachableHand,smoothHand} from './arm-pose.js';
 import {clone as cloneSkeleton} from 'three/addons/utils/SkeletonUtils.js';
 const modelSources=new Map();
@@ -15,7 +16,7 @@ export function upperBodyCounterAngle(heading,fallLine,motion={}){
 export async function loadHumanoid(athlete,variant='player'){
  const file=variant==='npc'?'skier-npc.glb':'skier-complete.glb';
  if(!modelSources.has(file))modelSources.set(file,new GLTFLoader().loadAsync(`${import.meta.env.BASE_URL}assets/${file}?v=knit-beanie-5`));
- return attachHumanoid(athlete,cloneSkeleton((await modelSources.get(file)).scene));
+ const [source,clips]=await Promise.all([modelSources.get(file),loadMotionClips()]);const rig=attachHumanoid(athlete,cloneSkeleton(source.scene));if(clips)rig.motion=new SkierMotion(rig.model,clips);return rig;
 }
 function jointSolution(a,target,pole,l1,l2){
   const delta=target.clone().sub(a),d=THREE.MathUtils.clamp(delta.length(),Math.abs(l1-l2)+.001,l1+l2-.002),axis=delta.normalize();
@@ -42,22 +43,33 @@ function aim(rig,name,childName,target){
   const restQ=rig.model.getWorldQuaternion(new THREE.Quaternion()).multiply(rig.rest.get(name).q),restAxis=child.position.clone().normalize().applyQuaternion(restQ);
   worldQuaternion(bone,new THREE.Quaternion().setFromUnitVectors(restAxis,direction).multiply(restQ));
 }
+function aimInPlane(rig,name,childName,target,normal){
+ const bone=rig.bones[name],child=rig.bones[childName],origin=bone.getWorldPosition(new THREE.Vector3()),y=target.clone().sub(origin).normalize(),x=normal.clone().addScaledVector(y,-normal.dot(y)).normalize(),z=new THREE.Vector3().crossVectors(x,y).normalize();
+ const localY=child.position.clone().normalize(),localX=new THREE.Vector3(1,0,0).addScaledVector(localY,-localY.x).normalize(),localZ=new THREE.Vector3().crossVectors(localX,localY).normalize(),localFrame=new THREE.Quaternion().setFromRotationMatrix(new THREE.Matrix4().makeBasis(localX,localY,localZ)),frame=new THREE.Quaternion().setFromRotationMatrix(new THREE.Matrix4().makeBasis(x,y,z));worldQuaternion(bone,frame.multiply(localFrame.invert()));
+}
 export function updateHumanoid(athlete,pose){
   const rig=athlete.userData.humanRig;if(!rig)return;
   const {bones,rest}=rig,{body,arms,legs}=athlete.userData;athlete.updateWorldMatrix(true,true);
   const rootQ=athlete.getWorldQuaternion(new THREE.Quaternion()),forward=new THREE.Vector3(0,0,1).applyQuaternion(rootQ),up=new THREE.Vector3(0,1,0).applyQuaternion(rootQ),right=new THREE.Vector3(1,0,0).applyQuaternion(rootQ);
+  const motionMode=rig.motion?.apply(pose,pose.dt||0);
+  if(!motionMode){
   const hip=body.localToWorld(new THREE.Vector3(pose.hipX,pose.hipY+.07,0));bones.pelvis.position.copy(bones.pelvis.parent.worldToLocal(hip));
   const attitude=(yaw,lean,bend)=>rootQ.clone().multiply(new THREE.Quaternion().setFromEuler(new THREE.Euler(bend,yaw,lean,'YXZ')));
   worldQuaternion(bones.pelvis,attitude(pose.counter*.18,pose.lean*.10,.03).multiply(rest.get('pelvis').q));
   for(const [name,fraction] of [['spine_01',.40],['spine_02',.72],['spine_03',1]])worldQuaternion(bones[name],attitude(pose.counter*fraction,pose.lean*.15,.08+pose.tuck*.40+(pose.grab||0)*.35).multiply(rest.get(name).q));
   worldQuaternion(bones.neck_01,attitude(pose.counter+(pose.headLook||0)*.5,pose.lean*.08,pose.tuck*.12).multiply(rest.get('neck_01').q));
   worldQuaternion(bones.Head,attitude(pose.counter+(pose.headLook||0),0,pose.tuck*.08).multiply(rest.get('Head').q));
+  }else{
+    const names=['pelvis','spine_01','spine_02','spine_03','neck_01','Head'],fractions=[.18,.40,.72,1,1,1],worlds=names.map(n=>bones[n].getWorldQuaternion(new THREE.Quaternion()));for(let i=0;i<names.length;i++){const yaw=pose.counter*fractions[i]+((i>3)?(pose.headLook||0)*.4:0),delta=new THREE.Quaternion().setFromAxisAngle(up,yaw);worldQuaternion(bones[names[i]],delta.multiply(worlds[i]));}
+  }
+  if(motionMode!=='visitor')
   for(const leg of legs){const suffix=leg.sign>0?'l':'r',l=rig.lengths[suffix],hip=bones[`thigh_${suffix}`].getWorldPosition(new THREE.Vector3()),ankle=body.localToWorld(leg.target.ankle.clone().add(new THREE.Vector3(0,-.05,0))),pole=hip.clone().addScaledVector(forward,.7).addScaledVector(right,leg.sign*.12);
     const solution=jointSolution(hip,ankle,pole,l.thigh,l.calf);aim(rig,`thigh_${suffix}`,`calf_${suffix}`,solution.joint);aim(rig,`calf_${suffix}`,`foot_${suffix}`,solution.end);worldQuaternion(bones[`foot_${suffix}`],rootQ.clone().multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1,0,0),pose.ride?.15:0)).multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0,0,1),(pose.roll||0)*.70)).multiply(rest.get(`foot_${suffix}`).q));
   }
   for(const arm of arms){
     const suffix=arm.sign>0?'l':'r',l=rig.lengths[suffix],length=l.upper+l.lower,shoulder=bones[`upperarm_${suffix}`].getWorldPosition(new THREE.Vector3()),handBone=bones[`hand_${suffix}`],pedestrian=arm.target.pedestrian;
     const torsoQ=bones.spine_03.getWorldQuaternion(new THREE.Quaternion()).multiply(rest.get('spine_03').q.clone().invert()),poseRight=new THREE.Vector3(1,0,0).applyQuaternion(torsoQ),poseUp=new THREE.Vector3(0,1,0).applyQuaternion(torsoQ),poseForward=new THREE.Vector3(0,0,1).applyQuaternion(torsoQ);
+    if(motionMode){const hand=handBone.getWorldPosition(new THREE.Vector3()),localHand=body.worldToLocal(hand.clone()),direction=arm.target.tip.clone().sub(localHand).normalize(),tip=localHand.clone().addScaledVector(direction,2.65);if(arm.target.planted&&Math.abs(localHand.distanceTo(arm.target.tip)-2.65)>.05){athlete.userData.plant.worldPoint=null;athlete.userData.plant.contact=false;athlete.userData.poleContact=null;}arm.pole.position.copy(localHand).add(tip).multiplyScalar(.5);arm.pole.quaternion.setFromUnitVectors(Y,direction);arm.pole.scale.y=2.65;arm.basket.position.copy(tip).y+=.12;arm.poseHand=athlete.worldToLocal(hand.clone());arm.poseMetrics={reach:shoulder.distanceTo(hand),length,clip:true};continue;}
     let hand;
     if(pedestrian||pose.grab||pose.fall||pose.crouch)hand=body.localToWorld(arm.target.hand.clone());
     else hand=shoulder.clone().add(skiArmOffset({...pose,plant:arm.target.plant},arm.sign).multiplyScalar(length).applyQuaternion(torsoQ));
@@ -67,8 +79,8 @@ export function updateHumanoid(athlete,pose){
     // A planted pole and an arm must both be reachable. Release an impossible
     // contact instead of stretching the elbow or lengthening the equipment.
     if(contact){const freeHand=hand.clone(),poleLength=2.65*.52;for(let i=0;i<12;i++){hand.copy(tip).add(hand.clone().sub(tip).normalize().multiplyScalar(poleLength));hand=reachableHand(shoulder,hand,length);}if(Math.abs(hand.distanceTo(tip)-poleLength)>.025||hand.distanceTo(freeHand)>Math.max(.008,length*4*(pose.dt||0))){hand.copy(freeHand);contact=false;athlete.userData.plant.worldPoint=null;athlete.userData.plant.contact=false;athlete.userData.poleContact=null;}}
-    const elbow=shoulder.clone().addScaledVector(poseRight,arm.sign*.20).addScaledVector(poseUp,-.20).addScaledVector(poseForward,-.06),solution=jointSolution(shoulder,hand,elbow,l.upper,l.lower);
-    aim(rig,`upperarm_${suffix}`,`lowerarm_${suffix}`,solution.joint);aim(rig,`lowerarm_${suffix}`,`hand_${suffix}`,solution.end);
+    const elbow=shoulder.clone().addScaledVector(poseRight,arm.sign*.35).addScaledVector(poseUp,-.05).addScaledVector(poseForward,-.10),solution=jointSolution(shoulder,hand,elbow,l.upper,l.lower);
+    const plane=solution.joint.clone().sub(shoulder).cross(solution.end.clone().sub(solution.joint)).normalize();aimInPlane(rig,`upperarm_${suffix}`,`lowerarm_${suffix}`,solution.joint,plane);aimInPlane(rig,`lowerarm_${suffix}`,`hand_${suffix}`,solution.end,plane);
     // Wrist belongs to the forearm. Never align its world quaternion to the
     // entire pole vector, which previously introduced ~90-degree local twists.
     const wrist=rest.get(`hand_${suffix}`).local.clone();if(!pedestrian)wrist.multiply(new THREE.Quaternion().setFromEuler(new THREE.Euler(.06+(pose.poling||0)*.12*Math.cos((pose.polePhase||0)*Math.PI*2),0,arm.sign*(pose.edgeRoll||0)*.08)));
