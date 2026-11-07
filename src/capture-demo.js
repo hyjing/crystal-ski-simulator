@@ -41,6 +41,7 @@ export function installDemoCapture(api){
         title(api.mountain().referenceMap?'© OSM · Mapzen / Canada OGL':'© OSM · USGS / USDA NAIP',1015,689,8,'#49654f',500);
       }
     }
+    if(api.mountain().pack==='whistler')title('EOxCloudless https://cloudless.eox.at by EOX IT Services GmbH (Contains modified Copernicus Sentinel data 2016) · CC BY 4.0',40,706,8,'#eef3e8',400);
     ctx.fillStyle='#d9eea8';ctx.fillRect(0,716,1280*clamp(t/24,0,1),4);
   }
   button.addEventListener('click',()=>{

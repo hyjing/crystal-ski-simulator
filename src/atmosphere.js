@@ -5,7 +5,7 @@ export function prepareAtmosphere(scene,clock){
     if(!material||material.fog===false||material.userData.mountainFog)return;
     material.userData.mountainFog=true;const original=material.onBeforeCompile,key=material.customProgramCacheKey();
     material.onBeforeCompile=shader=>{
-      original.call(material,shader);shader.uniforms.mountainFogTime=clock;
+      original.call(material,shader);shader.uniforms.mountainFogTime=clock;shader.uniforms.valleyAltitude={value:(scene.userData.sceneryProfile?.valleyAltitude??1200)-1200};shader.uniforms.valleyHaze={value:scene.userData.sceneryProfile?.haze??.14};
       const point=shader.vertexShader.includes('#include <begin_vertex>')?'transformed':'position';
       shader.vertexShader=shader.vertexShader.replace('#include <fog_pars_vertex>','#include <fog_pars_vertex>\nvarying vec3 vMountainFogWorld;')
         .replace('#include <fog_vertex>',`#include <fog_vertex>
@@ -17,7 +17,7 @@ export function prepareAtmosphere(scene,clock){
         `);
       const lights=THREE.ShaderChunk.lights_fragment_begin.replaceAll('directionalLightShadow.shadowIntensity','(directionalLightShadow.shadowIntensity * (1.-smoothstep(170.,210.,distance(cameraPosition.xz,vMountainFogWorld.xz))))');
       shader.fragmentShader=shader.fragmentShader.replace('#include <lights_fragment_begin>',lights);
-      shader.fragmentShader=shader.fragmentShader.replace('#include <fog_pars_fragment>','#include <fog_pars_fragment>\nvarying vec3 vMountainFogWorld;uniform float mountainFogTime;')
+      shader.fragmentShader=shader.fragmentShader.replace('#include <fog_pars_fragment>','#include <fog_pars_fragment>\nvarying vec3 vMountainFogWorld;uniform float mountainFogTime,valleyAltitude,valleyHaze;')
         .replace('#include <fog_fragment>',`
           #ifdef USE_FOG
             #ifdef FOG_EXP2
@@ -28,7 +28,10 @@ export function prepareAtmosphere(scene,clock){
               float pockets=.65+.25*sin(gustUV.x+sin(gustUV.y*.73))+.10*sin(gustUV.y*2.3);
               float heightWeight=.45+.55*exp(-abs(vMountainFogWorld.y-cameraPosition.y)*.008);
               float driftingMist=1.-exp(-mistDistance*fogDensity*weatherAmount*pockets*heightWeight*.55);
-              fogFactor=1.-(1.-fogFactor)*(1.-driftingMist);
+              float valleyWeight=exp(-max(0.,vMountainFogWorld.y-valleyAltitude)*.0015);
+              float valleyLayer=(1.-exp(-max(0.,mistDistance-300.)*.00011))*valleyWeight*valleyHaze*(1.-weatherAmount);
+              float ridgeLayer=(1.-exp(-max(0.,mistDistance-700.)*.000045))*.08*(1.-weatherAmount);
+              fogFactor=1.-(1.-fogFactor)*(1.-driftingMist)*(1.-valleyLayer)*(1.-ridgeLayer);
             #else
               float fogFactor=smoothstep(fogNear,fogFar,vFogDepth);
             #endif
@@ -36,7 +39,7 @@ export function prepareAtmosphere(scene,clock){
           #endif
         `);
     };
-    material.customProgramCacheKey=()=>key+'-mountain-mist-v1';material.needsUpdate=true;
+    material.customProgramCacheKey=()=>key+'-mountain-valley-mist-v2';material.needsUpdate=true;
   };
   scene.traverse(o=>{if(o.material)for(const material of Array.isArray(o.material)?o.material:[o.material])patch(material);});
 }

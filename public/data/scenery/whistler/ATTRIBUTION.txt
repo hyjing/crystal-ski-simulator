@@ -1,0 +1,17 @@
+Satellite-derived game textures:
+EOxCloudless https://cloudless.eox.at by EOX IT Services GmbH
+(Contains modified Copernicus Sentinel data 2016)
+CC BY 4.0 — https://creativecommons.org/licenses/by/4.0/
+Source WMS: https://tiles.maps.eox.at/wms — s2cloudless_3857 (2016)
+Changes: cropped / reprojected from EPSG:3857 into EPSG:32610, JPEG compression;
+seasonal winter cover / tone and lighting are authored by the game renderer.
+Files: data/scenery/whistler/aerial.jpg,
+data/whistler/shared/satellite.jpg, data/whistler/context/satellite.jpg.
+These are derived in-game textures, not a standalone raw satellite tile collection.
+Acquisition vintage is 2016; this is not live imagery or observed winter snow.
+
+Regional elevation:
+Mapzen Terrain Tiles — https://registry.opendata.aws/terrain-tiles/
+Attribution: https://github.com/tilezen/joerd/blob/master/docs/attribution.md
+Canada terrain contains information licensed under Open Government Licence – Canada;
+global SRTM / GMTED2010 data courtesy USGS. Export spacing is not survey resolution.

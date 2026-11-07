@@ -161,3 +161,9 @@ See [WHISTLER.md](WHISTLER.md) for tile sources, licenses, rebuilding and route 
 ## Native ski clips and free visitor animation
 
 `public/assets/skier-motion.json` adds seven project-authored native-skeleton ski clips and two retargeted Quaternius Universal Animation Library Standard clips (`Walk_Loop`, `Idle_Loop`). The official Standard archive was downloaded from the author on November 6, 2026; its included license is CC0 1.0 and copied to `QUATERNIUS-ANIMATION-LICENSE.txt`. The source archive contains 43 clips; no downhill-ski animation was included. It is not redistributed wholesale. See [ANIMATION.md](ANIMATION.md) for source, license, retargeting, rebuilding and the distinction between baked authored poses and motion capture.
+
+## Coast Mountains satellite scenery
+
+`public/data/whistler/shared/satellite.jpg`, `public/data/whistler/context/satellite.jpg` and `public/data/scenery/whistler/aerial.jpg` are derived from **EOxCloudless 2016** by EOX IT Services GmbH (Contains modified Copernicus Sentinel data 2016), [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). Source: [EOxCloudless](https://cloudless.eox.at), `https://tiles.maps.eox.at/wms`, layer `s2cloudless_3857`. They are cropped / reprojected into the game's existing EPSG:32610 footprints and JPEG-compressed; winter cover / shading is authored. Each image has an adjacent JSON with exact footprint, pixel dimensions and source. Persistent game credits and the development video exporter include attribution. No game screenshot or asset from the visual-reference titles is bundled. See `SCENERY.md` and `public/data/scenery/whistler/ATTRIBUTION.txt`.
+
+The regional Canadian DEM uses higher-zoom Mapzen Terrain Tiles with the same source / Canada OGL attribution as the original Whistler pack. It is registered to the original background mesh and edge-stitched at runtime. Export spacing does not establish underlying survey resolution.

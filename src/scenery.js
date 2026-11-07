@@ -11,14 +11,14 @@ export function gridBounds(grid,local){
     north:centerN-grid.originUTM[1],south:centerN-grid.originUTM[1]+(grid.height-1)*grid.spacing};
 }
 
-function winterMaterial(texture,snowline=1050){
+export function winterMaterial(texture,snowline=1050){
   if(!texture)return new THREE.MeshStandardMaterial({color:'#c1cdd6',roughness:1});
   texture.colorSpace=THREE.SRGBColorSpace;texture.anisotropy=8;
   const material=new THREE.MeshStandardMaterial({map:texture,roughness:1});
   material.onBeforeCompile=shader=>{
-    shader.vertexShader=shader.vertexShader.replace('#include <common>','#include <common>\nvarying float vElevation; varying float vSteep;')
-      .replace('#include <begin_vertex>','#include <begin_vertex>\nvElevation=position.y+1200.; vSteep=1.-abs(normal.y);');
-    shader.fragmentShader=shader.fragmentShader.replace('#include <common>','#include <common>\nvarying float vElevation; varying float vSteep;')
+    shader.vertexShader=shader.vertexShader.replace('#include <common>','#include <common>\nvarying float vElevation; varying float vSteep; varying vec3 vSceneryPosition;')
+      .replace('#include <begin_vertex>','#include <begin_vertex>\nvElevation=position.y+1200.; vSteep=1.-abs(normal.y); vSceneryPosition=position;');
+    shader.fragmentShader=shader.fragmentShader.replace('#include <common>','#include <common>\nvarying float vElevation; varying float vSteep; varying vec3 vSceneryPosition;')
       .replace('#include <map_fragment>',`#ifdef USE_MAP
         vec4 aerial=texture2D(map,vMapUv);
         float luma=dot(aerial.rgb,vec3(.2126,.7152,.0722));
@@ -30,7 +30,9 @@ function winterMaterial(texture,snowline=1050){
         float photographedIce=smoothstep(.25,.70,luma)*(1.-vegetation*.8);
         float winterCover=smoothstep(${snowline.toFixed(1)},${(snowline+(snowline===1050?1000:700)).toFixed(1)},vElevation)*(1.-rockExposure*.88);
         float cover=max(photographedIce*.88,winterCover*(.76-vegetation*.18));
+        float strata=.5+.5*sin(vElevation*.055+sin(vSceneryPosition.x*.013+vSceneryPosition.z*.009)*2.3);
         float detail=clamp(.62+.55*sqrt(luma),.62,1.08);
+        detail*=1.-rockExposure*strata*.12;
         vec3 winterSnow=vec3(.88,.94,1.)*detail;
         vec3 photographed=mix(vec3(luma),aerial.rgb,.78);
         photographed=mix(photographed,photographed*vec3(.76,.91,.90),vegetation*.40);
@@ -39,13 +41,13 @@ function winterMaterial(texture,snowline=1050){
         diffuseColor.rgb*=mix(photographed,winterSnow,clamp(cover,0.,.93));
       #endif`);
   };
-  material.customProgramCacheKey=()=> `georeferenced-winter-aerial-v4-${snowline}`;
+  material.customProgramCacheKey=()=> `georeferenced-winter-aerial-v5-${snowline}`;
   return material;
 }
 
 export function distantGeometry(grid,local,exclude=[],detail){
-  const b=gridBounds(grid,local),positions=[],uvs=[],indices=[],vertices=new Map(),step=grid.width>700?4:2;
-  const refined=(x,z)=>!!detail&&x>=0&&z>=0&&x+step<grid.width&&z+step<grid.height&&Math.abs(b.west+(x+step*.5)*grid.spacing-detail.x)<detail.halfX&&Math.abs(b.north+(z+step*.5)*grid.spacing-detail.z)<detail.halfZ;
+  const b=gridBounds(grid,local),positions=[],uvs=[],indices=[],vertices=new Map(),step=grid.renderStep===2?2:grid.width>700?4:2;
+  const patches=detail?(Array.isArray(detail)?detail:[detail]):[],refined=(x,z)=>x>=0&&z>=0&&x+step<grid.width&&z+step<grid.height&&patches.some(p=>Math.abs(b.west+(x+step*.5)*grid.spacing-p.x)<p.halfX&&Math.abs(b.north+(z+step*.5)*grid.spacing-p.z)<p.halfZ);
   const vertex=(x,z)=>{const key=z*grid.width+x;if(vertices.has(key))return vertices.get(key);const i=positions.length/3;vertices.set(key,i);positions.push(b.west+x*grid.spacing,grid.heights[key]-1200,b.north+z*grid.spacing);uvs.push((x+.5)/grid.width,1-(z+.5)/grid.height);return i;};
   const quad=(x,z,x1,z1)=>{const a=vertex(x,z),b=vertex(x1,z),c=vertex(x,z1),d=vertex(x1,z1);indices.push(a,c,b,b,c,d);};
   for(let z=0;z<grid.height-1;z+=step)for(let x=0;x<grid.width-1;x+=step){
@@ -62,7 +64,7 @@ export function distantGeometry(grid,local,exclude=[],detail){
 }
 
 function addGrid(scene,grid,local,texture,exclude=[],detail){
-  const mesh=new THREE.Mesh(distantGeometry(grid,local,exclude,detail),winterMaterial(texture,local.treeMinElevation===0?450:1050));mesh.name='USGS distant terrain';scene.add(mesh);return mesh;
+  const mesh=new THREE.Mesh(distantGeometry(grid,local,exclude,detail),winterMaterial(texture,local.sceneryProfile?.snowline??(local.treeMinElevation===0?450:1050)));mesh.name='USGS distant terrain';scene.add(mesh);return mesh;
 }
 
 export function addContextTerrain(scene,context,local,texture,rainier,regional){
@@ -75,7 +77,7 @@ export function addContextTerrain(scene,context,local,texture,rainier,regional){
 
 export function addRegionalTerrain(scene,regional,context,local,texture){
   const grid=stitchedRegionalGrid(regional,context),halfX=(local.width-1)*local.spacing/2,halfZ=(local.height-1)*local.spacing/2;
-  const exclude=[{west:-halfX+180,east:halfX-180,north:-halfZ+180,south:halfZ-180}],mesh=addGrid(scene,grid,local,texture,exclude,{x:0,z:0,halfX:3500,halfZ:3500});
+  const exclude=[{west:-halfX+180,east:halfX-180,north:-halfZ+180,south:halfZ-180}],mesh=addGrid(scene,grid,local,texture,exclude,local.sceneryProfile?.ridgeDetail||{x:0,z:0,halfX:3500,halfZ:3500});
   mesh.name='USGS regional ridges / high-detail NAIP';
   const sampled=createTerrain(grid),bounds=gridBounds(grid,local),cx=(bounds.west+bounds.east)/2,cz=(bounds.north+bounds.south)/2,localSample=local.surface?local:createTerrain(local);
   scene.userData.droneTerrain={...sampled,flightBounds:{minX:bounds.west+12,maxX:bounds.east-12,minZ:bounds.north+12,maxZ:bounds.south-12},surface:(x,z)=>Math.abs(x)<halfX&&Math.abs(z)<halfZ?localSample.surface(x,z):sampled.surface(x-cx,z-cz)};return mesh;

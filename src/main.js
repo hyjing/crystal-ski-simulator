@@ -3,7 +3,7 @@ import './style.css';
 import {HeldControls,bindTouchControls} from './controls.js';
 import { createTerrain, getRoutes, getLiftRuns, pointAlongRoute, filterRoutes } from './terrain.js';
 import { createSkier, nearestOnRoute, clamp } from './physics.js';
-import { createSnowMaterial, SnowEffects } from './snow.js';
+import { SnowEffects } from './snow.js';
 import { addContextTerrain, addRainierTerrain, addRegionalTerrain, addAlpineSky } from './scenery.js';
 import {readGear,saveGear,applyGear,GEAR_PRESETS,SKI_PROFILES} from './wardrobe.js';
 import {StructureWorld} from './structure-collision.js';
@@ -13,6 +13,8 @@ import {safeRecovery,TRAFFIC_PENALTY} from './traffic-brain.js';
 import {fallAnimation} from './npc-routines.js';
 import {validRegionalGrid} from './regional-scenery.js';
 import {flyDrone} from './drone.js';
+import {applyMountainIdentity} from './mountain-identity.js';
+import {sceneryProfile} from './scenery-profile.js';
 import {MOUNTAINS,resolveMountain,mountainAsset} from './mountains.js';
 const mountainId=resolveMountain(new URLSearchParams(location.search).get('mountain')),mountain=MOUNTAINS[mountainId];
 const asset=name=>`${import.meta.env.BASE_URL}${mountainAsset(mountainId,name)}`;
@@ -45,6 +47,7 @@ let weather,hemisphere,cameraHeading=null,traffic,liftPassengers,structures,gear
 let qaSlow=false;
 let demoCapture,recordedInput=null,sceneryFrom='intro',sceneryView=false,droneMode='follow',drone={},droneCamera;
 let pendingRecovery=null;
+let hasSatellite=false;
 let treePositions=[], trailPoints=[], mapBackground, snowEffects, sun, powder, speedRenderer, aerialImage, mapLayer='terrain', resortUpdate=()=>{};
 const baseElevation=1200, fixedStep=1/120;
 const forward = new THREE.Vector3(), targetCamera = new THREE.Vector3(), lookTarget = new THREE.Vector3();
@@ -58,9 +61,8 @@ function random(seed=42){ return ()=>{seed=(Math.imul(seed,1664525)+1013904223)|
 
 async function init(){
   $('start').disabled=true;
-  $('mountain').value=mountainId;$('mountain-coordinates').textContent=mountain.coordinates;$('mountain-description').textContent=`在 ${mountain.name} 的真实地形上，找到自己的线路。`;$('world').setAttribute('aria-label',`${mountain.name} 3D 滑雪场景`);document.title=`${mountain.name} / Terrain Sessions`;
-  document.querySelector('.terrain-caption>span:last-child').firstChild.textContent=mountain.name.toUpperCase();
-  if(mountain.referenceMap){$('map-layer').textContent='参考图';document.querySelector('.map-attribution').textContent='© OSM · Mapzen / Canada OGL';document.querySelector('.map-attribution').href='https://github.com/tilezen/joerd/blob/master/docs/attribution.md';document.querySelector('.data-note>span:last-child').textContent='缆车上站到下站 / OSM 林区参考 / 局部粉雪形变';document.querySelector('.terrain-caption>span:last-child>span').firstChild.textContent='Mapzen Terrain Tiles · ';}
+  $('mountain').value=mountainId;applyMountainIdentity(document,mountainId);
+  if(mountain.referenceMap){$('map-layer').textContent='参考图';document.querySelector('.map-attribution').textContent='© OSM · Mapzen / Canada OGL';document.querySelector('.map-attribution').href='https://github.com/tilezen/joerd/blob/master/docs/attribution.md';document.querySelector('.data-note>span:last-child').textContent='缆车上站到下站 / OSM 林区参考 / 局部粉雪形变';}
   const response=await fetch(asset('dem.json'));
   if(!response.ok) throw new Error('无法载入高程数据，请刷新重试。');
   terrain=createTerrain(await response.json());
@@ -70,7 +72,7 @@ async function init(){
     const heights=new Float32Array(bytes);if(heights.length!==detail.width*detail.height)throw new Error('detail size');
     terrain=createTerrain({...detail,heights});
   }catch(error){console.warn('Detailed ground unavailable, using base DEM',error);}
-  if(mountain.area)terrain.treeMinElevation=0;
+  if(mountain.area)terrain.treeMinElevation=0;terrain.sceneryProfile=sceneryProfile(mountainId);
   const trailResponse=await fetch(asset('trails.json'));
   if(!trailResponse.ok)throw new Error('无法载入雪道数据');
   const mappedRoutes=getRoutes(terrain,await trailResponse.json());
@@ -83,7 +85,7 @@ async function init(){
   const stationGround=prepareStationTerrain(terrain,routes,infrastructure);terrain=stationGround.terrain;stationAreas=stationGround.areas;
   routes=getLiftRuns(terrain,runs);route=routes[0];
   $('terrain-resolution').textContent=`真实 ${mountain.elevationLabel||'USGS'} 高程 · 约 ${Math.round(terrain.spacing)}m 导出采样`;
-  scene=new THREE.Scene(); scene.background=new THREE.Color('#cbdce9'); scene.fog=new THREE.Fog('#cbdce9',12000,65000);
+  scene=new THREE.Scene();scene.userData.sceneryProfile=sceneryProfile(mountainId); scene.background=new THREE.Color('#cbdce9'); scene.fog=new THREE.Fog('#cbdce9',12000,65000);
   camera=new THREE.PerspectiveCamera(58,innerWidth/innerHeight,1,65000);
   renderer=new THREE.WebGLRenderer({antialias:true, powerPreference:'high-performance'});
   renderer.setSize(innerWidth,innerHeight); renderer.setPixelRatio(renderScale);
@@ -99,10 +101,11 @@ async function init(){
   Object.assign(sun.shadow.camera,{left:-240,right:240,top:240,bottom:-240,near:1,far:1400});sun.shadow.bias=-.0002;sun.shadow.normalBias=.06;sun.shadow.camera.updateProjectionMatrix();scene.add(sun,sun.target);
   await addAlpineSky(scene,renderer);
   weather=new MountainWeather(scene,renderer,sun,hemisphere);
-  const [canopy,canopyReference]=await Promise.all([new THREE.TextureLoader().loadAsync(asset('canopy.png')),fetch(asset('landcover.json')).then(r=>r.json())]);
+  const [canopy,canopyReference,satellite]=await Promise.all([new THREE.TextureLoader().loadAsync(asset('canopy.png')),fetch(asset('landcover.json')).then(r=>r.json()),mountain.pack==='whistler'?new THREE.TextureLoader().loadAsync(asset('satellite.jpg')).catch(error=>{console.warn('Satellite surface unavailable',error);return null;}):null]);
+  hasSatellite=!!satellite;if(hasSatellite){$('imagery-credit').classList.remove('hidden');$('map-layer').textContent='卫星图';}
   const centerE=terrain.originUTM[0]+(terrain.width-1)*terrain.spacing/2,centerN=terrain.originUTM[1]-(terrain.height-1)*terrain.spacing/2;
   aerialBounds={minX:canopyReference.extent.xmin-centerE,maxX:canopyReference.extent.xmax-centerE,minZ:centerN-canopyReference.extent.ymax,maxZ:centerN-canopyReference.extent.ymin};
-  if(terrain.spacing<10)addDetailedGround(scene,terrain,renderer,canopy,canopyReference.extent);else createMountain();
+  addDetailedGround(scene,terrain,renderer,canopy,canopyReference.extent,satellite);
   powder=new PowderSurface(scene,terrain,renderer);
   const [landcover,firTexture,vegetation]=await Promise.all([
     fetch(asset('landcover.json')).then(r=>{if(!r.ok)throw new Error('林地数据载入失败');return r.json();}),
@@ -114,11 +117,15 @@ async function init(){
   addAlpineDetails(scene,terrain,mappedRoutes,stationAreas);
   await createAthlete();snowEffects=new SnowEffects(scene,{...terrain,surface:(x,z)=>powder.surface(x,z)});createMapBackground();
   speedRenderer=new SpeedRenderer(renderer,scene,camera);
-  aerialImage=new Image();aerialImage.onload=()=>drawMap();aerialImage.src=asset('aerial.jpg');
+  aerialImage=new Image();aerialImage.onload=()=>drawMap();aerialImage.src=asset(hasSatellite?'satellite.jpg':'aerial.jpg');
   // Load real far terrain progressively; retain the coarse grid if detailed assets fail.
   fetch(`${import.meta.env.BASE_URL}${mountain.context||(mountain.area?'data/snoqualmie/context/dem.json':'data/context-dem.json')}`).then(r=>{if(!r.ok)throw new Error('context DEM');return r.json();}).then(async context=>{
     let coarse=addContextTerrain(scene,context,terrain);
-    if(mountain.pack==='whistler'){try{const map=await new THREE.TextureLoader().loadAsync(`${import.meta.env.BASE_URL}data/whistler/context/aerial.jpg`);addContextTerrain(scene,context,terrain,map);scene.remove(coarse);coarse.geometry.dispose();coarse.material.dispose();weather.prepareMaterials();}catch(error){console.warn('Whistler context reference unavailable',error);}return;}
+    if(mountain.pack==='whistler'){
+      try{const [map,grid,regionalMap]=await Promise.all([new THREE.TextureLoader().loadAsync(`${import.meta.env.BASE_URL}data/whistler/context/satellite.jpg`),fetch(`${import.meta.env.BASE_URL}data/scenery/whistler/dem.json`).then(r=>{if(!r.ok)throw new Error('Coast Mountains terrain');return r.json();}),new THREE.TextureLoader().loadAsync(`${import.meta.env.BASE_URL}data/scenery/whistler/aerial.jpg`)]);
+        if(!validRegionalGrid(grid,context))throw new Error('Whistler regional registration');addContextTerrain(scene,context,terrain,map,undefined,grid);addRegionalTerrain(scene,grid,context,terrain,regionalMap);$('imagery-credit').classList.remove('hidden');scene.remove(coarse);coarse.geometry.dispose();coarse.material.dispose();weather.prepareMaterials();
+      }catch(error){console.warn('Whistler detailed scenery unavailable; retaining base ridges',error);}return;
+    }
     const regionRoot=`${import.meta.env.BASE_URL}data/scenery/${mountain.area?'snoqualmie':'crystal'}/`;
     const regionAssets=async()=>{try{const [grid,map]=await Promise.all([fetch(regionRoot+'dem.json').then(r=>{if(!r.ok)throw new Error('regional DEM');return r.json();}),new THREE.TextureLoader().loadAsync(regionRoot+'aerial.jpg?v=regional-1')]);if(!validRegionalGrid(grid,context)){map.dispose();throw new Error('regional registration');}map.anisotropy=Math.min(8,renderer.capabilities.getMaxAnisotropy());return{grid,map};}catch(error){console.warn('Regional scenery unavailable; retaining background',error);return null;}};
     if(mountain.area){try{const [map,region]=await Promise.all([new THREE.TextureLoader().loadAsync(`${import.meta.env.BASE_URL}data/snoqualmie/context/aerial.jpg`),regionAssets()]);addContextTerrain(scene,context,terrain,map,undefined,region?.grid);if(region)addRegionalTerrain(scene,region.grid,context,terrain,region.map);scene.remove(coarse);coarse.geometry.dispose();coarse.material.dispose();weather.prepareMaterials();}catch(error){console.warn('Context imagery unavailable',error);}return;}
@@ -164,36 +171,6 @@ async function init(){
       aerial:()=>{mapLayer='aerial';$('map-layer').textContent='地形图';drawMap();}});
   }
   requestAnimationFrame(animate);
-}
-
-function createMountain(){
-  const {width:w,height:h,spacing:s}=terrain;
-  const mesh=new THREE.PlaneGeometry((w-1)*s,(h-1)*s,w-1,h-1); mesh.rotateX(-Math.PI/2);
-  const pos=mesh.attributes.position, colors=new Float32Array(pos.count*3), white=new THREE.Color('#e8f0eb'), ice=new THREE.Color('#b7ced4'), rock=new THREE.Color('#899e9f');
-  for(let i=0;i<pos.count;i++){
-    const x=pos.getX(i),z=pos.getZ(i),height=terrain.heights[i],g=terrain.gradient(x,z),slope=Math.hypot(g.x,g.z);
-    pos.setY(i,height-baseElevation);
-    const color=white.clone().lerp(ice,clamp(slope*.29,0,.6));
-    if(slope>1.15) color.lerp(rock,clamp((slope-1.15)*.65,0,.7));
-    const variation=Math.sin(x*.024)*Math.sin(z*.019)*.012;
-    color.offsetHSL(0,0,variation); color.toArray(colors,i*3);
-  }
-  mesh.setAttribute('color',new THREE.BufferAttribute(colors,3)); mesh.computeVertexNormals();
-  terrain.renderNormals=mesh.attributes.normal.array;
-  const mountain=new THREE.Mesh(mesh,createSnowMaterial((w-1)*s,(h-1)*s,renderer));mountain.receiveShadow=true;
-  scene.add(mountain);
-  // A skirt closes the DEM tile at the horizon without modifying its actual heights.
-  const edge=[];
-  for(let x=0;x<w;x++)edge.push([x,0]); for(let z=1;z<h;z++)edge.push([w-1,z]);
-  for(let x=w-2;x>=0;x--)edge.push([x,h-1]); for(let z=h-2;z>=0;z--)edge.push([0,z]);
-  const vertices=[];
-  for(let i=0;i<edge.length;i++){
-    const a=edge[i],b=edge[(i+1)%edge.length],p=terrain.world(...a),q=terrain.world(...b),ay=yAt(p.x,p.z),by=yAt(q.x,q.z);
-    vertices.push(p.x,ay,p.z,q.x,by,q.z,p.x,-400,p.z,q.x,by,q.z,q.x,-400,q.z,p.x,-400,p.z);
-  }
-  const skirt=new THREE.BufferGeometry();skirt.setAttribute('position',new THREE.Float32BufferAttribute(vertices,3));skirt.computeVertexNormals();
-  // Surrounding DEM supplies the horizon; keep the skirt below the data boundary.
-  scene.add(new THREE.Mesh(skirt,new THREE.MeshStandardMaterial({color:'#a4bcc0',roughness:1,side:THREE.DoubleSide})));
 }
 
 async function createAthlete(){athlete=createAthleteRig(scene);await loadHumanoid(athlete);applyGear(athlete,gear);$('equipment').disabled=false;$('scenery').disabled=false;}
@@ -520,7 +497,7 @@ $('help').addEventListener('click',openHelp);document.querySelectorAll('.close-d
 $('help-dialog').addEventListener('cancel',e=>{e.preventDefault();closeHelp();});
 $('overview').addEventListener('click',()=>{if(mode==='intro'){toast('开始滑行后，可以切换跟随 / 俯瞰镜头');return;}view=view==='follow'?'overview':'follow';$('overview').innerHTML=view==='overview'?'跟随 <kbd>O</kbd>':'俯瞰 <kbd>O</kbd>';});
 $('blur').addEventListener('click',()=>{speedRenderer.enabled=!speedRenderer.enabled;$('blur').textContent=speedRenderer.enabled?'速度模糊开':'速度模糊关';$('blur').setAttribute('aria-pressed',speedRenderer.enabled);});
-$('map-layer').addEventListener('click',()=>{mapLayer=mapLayer==='terrain'?'aerial':'terrain';$('map-layer').textContent=mapLayer==='terrain'?(mountain.referenceMap?'参考图':'航拍图'):'地形图';drawMap();});
+$('map-layer').addEventListener('click',()=>{mapLayer=mapLayer==='terrain'?'aerial':'terrain';$('map-layer').textContent=mapLayer==='terrain'?(hasSatellite?'卫星图':mountain.referenceMap?'参考图':'航拍图'):'地形图';drawMap();});
 $('weather').addEventListener('change',event=>{const id=event.target.value;weather.set(id);event.target.blur();$('weather-status').textContent=`${WEATHER_PRESETS[id].label} · 环境过渡中`;toast(`正在转为${WEATHER_PRESETS[id].label}，天空、光照与能见度同步变化`);});
 $('sound').addEventListener('click',()=>{soundOn=!soundOn;if(soundOn)enableAudio();$('sound').textContent=soundOn?'声音开':'声音关';$('sound').setAttribute('aria-pressed',soundOn);});
 document.querySelectorAll('[data-snow]').forEach(b=>b.addEventListener('click',()=>{snow=b.dataset.snow;document.querySelectorAll('[data-snow]').forEach(el=>el.classList.toggle('selected',el===b));}));

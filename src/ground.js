@@ -1,32 +1,39 @@
 import * as THREE from 'three';
 import {createSnowMaterial} from './snow.js';
 
-// Prebuilt static LOD tiles: real 5 m export near the player, coarser samples far away.
+// Static LOD tiles preserve each source DEM near the player and coarsen far away.
 // No per-frame terrain vertex rebuild or invented trail-edge cliffs.
-export function addDetailedGround(scene,terrain,renderer,canopy,extent){
+export function addDetailedGround(scene,terrain,renderer,canopy,extent,satellite){
   const fullW=(terrain.width-1)*terrain.spacing,fullH=(terrain.height-1)*terrain.spacing;
   const material=createSnowMaterial(fullW,fullH,renderer);
+  if(satellite){satellite.colorSpace=THREE.SRGBColorSpace;satellite.anisotropy=Math.min(8,renderer.capabilities.getMaxAnisotropy());}
   if(canopy){
     const compile=material.onBeforeCompile;
     material.onBeforeCompile=shader=>{
-      compile(shader);shader.uniforms.canopyMap={value:canopy};const ce=terrain.originUTM[0]+fullW/2,cn=terrain.originUTM[1]-fullH/2;
+      compile(shader);shader.vertexShader=shader.vertexShader.replace('#include <common>','#include <common>\nvarying float groundSteep;').replace('#include <begin_vertex>','#include <begin_vertex>\ngroundSteep=1.-abs(normal.y);');shader.uniforms.canopyMap={value:canopy};shader.uniforms.groundPhoto={value:satellite||canopy};shader.uniforms.hasGroundPhoto={value:satellite?1:0};shader.uniforms.forestTint={value:new THREE.Color(terrain.sceneryProfile?.forestTint||'#344d49')};const ce=terrain.originUTM[0]+fullW/2,cn=terrain.originUTM[1]-fullH/2;
       shader.uniforms.forestBounds={value:new THREE.Vector4(extent.xmin-ce,cn-extent.ymax,extent.xmax-extent.xmin,extent.ymax-extent.ymin)};
-      shader.fragmentShader=shader.fragmentShader.replace('#include <common>','#include <common>\nuniform sampler2D canopyMap;uniform vec4 forestBounds;')
+      shader.fragmentShader=shader.fragmentShader.replace('#include <common>','#include <common>\nuniform sampler2D canopyMap,groundPhoto;uniform float hasGroundPhoto;uniform vec3 forestTint;uniform vec4 forestBounds;varying float groundSteep;')
         .replace('#include <color_fragment>',`#include <color_fragment>
           vec2 canopyUV=vec2((vSnowPosition.x-forestBounds.x)/forestBounds.z,1.-(vSnowPosition.z-forestBounds.y)/forestBounds.w);
           float forest=texture2D(canopyMap,canopyUV).r;
           float distanceFade=smoothstep(75.,420.,distance(cameraPosition.xz,vSnowPosition.xz));
-          diffuseColor.rgb=mix(diffuseColor.rgb,vec3(.12,.20,.19),forest*distanceFade*.62);
+          diffuseColor.rgb=mix(diffuseColor.rgb,forestTint,forest*distanceFade*.72);
+          vec3 photo=texture2D(groundPhoto,canopyUV).rgb;float luma=dot(photo,vec3(.2126,.7152,.0722));
+          float rock=smoothstep(.25,.60,groundSteep)*(1.-forest);
+          float water=smoothstep(1.05,1.45,photo.b/max(photo.r,.015))*(1.-smoothstep(.16,.40,luma))*(1.-smoothstep(.03,.17,groundSteep))*(1.-forest);
+          float photoFade=smoothstep(140.,1050.,distance(cameraPosition.xz,vSnowPosition.xz))*hasGroundPhoto;
+          vec3 detail=mix(photo,vec3(luma)*vec3(.86,.92,1.),rock*.4);
+          diffuseColor.rgb=mix(diffuseColor.rgb,detail,max(water*.94,max(forest*.62,rock*.42))*photoFade);
         `);
     };
-    material.customProgramCacheKey=()=> 'georeferenced-ground-canopy-v1';
+    material.customProgramCacheKey=()=> 'georeferenced-ground-canopy-photo-v2';
   }
-  const tileSize=128;
+  const tileSize=terrain.spacing>15?64:128;
   for(let z=0;z<terrain.height-1;z+=tileSize)for(let x=0;x<terrain.width-1;x+=tileSize){
     const nx=Math.min(tileSize,terrain.width-1-x),nz=Math.min(tileSize,terrain.height-1-z);
     const center=terrain.world(x+nx/2,z+nz/2),cy=terrain.sample(center.x,center.z)-1200;
     const lod=new THREE.LOD();lod.position.set(center.x,cy,center.z);
-    for(const [step,distance] of [[1,0],[2,1000],[4,2200]]){
+    for(const [step,distance] of [[1,0],[2,Math.max(1000,tileSize*terrain.spacing*.9)],[4,Math.max(2200,tileSize*terrain.spacing*1.6)]]){
       const cols=nx/step+1,rows=nz/step+1,positions=[],colors=[],uvs=[],normals=[],indices=[],grid=[];
       const white=new THREE.Color('#e8f0eb'),ice=new THREE.Color('#a9c4d1'),rock=new THREE.Color('#697879');
       function vertex(gx,gz){

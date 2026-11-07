@@ -209,3 +209,7 @@ The November 6, 2026 npm audit reported zero known vulnerabilities. Gitleaks sca
 ### Responsive linked turns / body motion
 
 179 tests pass. New tests cover initial real-path turning at 12/20m/s, rapid edge changes with retained momentum, prompt release, progressive analog steering, causal body response / settling at rest, load-driven knee flex with grounded feet, and physics-driven linked turns retaining outward elbows and palm attachments. Existing inclined-plane energy, skid stops, jump/landing and route-completion tests pass. The progressive-bank test now checks the stronger initial bite and remaining buildup rather than enforcing the old slow initial response. Production Pages-path build passes. No browser visual test performed.
+
+### Multi-resort identity and scenery
+
+184 unit tests pass. Added sequential resort-switch identity checks, pixel-edge registration / attribution for all three Canadian satellite textures, regional/background seam registration and non-overlap, bounded Coast Mountains geometry, 25m ground LOD / photographic shader integration, and per-region atmosphere shader inputs. Existing station collision / spawn tests pass with the expanded detailed lodge set. Production build with the GitHub Pages base path passes. Texture source quality was inspected locally; no browser scene / GPU visual verification was performed.

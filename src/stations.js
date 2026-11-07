@@ -3,8 +3,8 @@ import {colliderFromMesh} from './structure-collision.js';
 import {RoundedBoxGeometry} from 'three/addons/geometries/RoundedBoxGeometry.js';
 import {resortMaterials,mergeAssetGeometry} from './resort-assets.js';
 import {createTerrain,lonLatToUTM,pointAlongRoute} from './terrain.js';
-const specialNames=new Set(['Summit House','Campbell Basin Lodge','Green Valley Wheelhouse']);
-export const isDetailedLodge=f=>specialNames.has(f.properties.name);
+const specialNames=new Set(['Summit House','Campbell Basin Lodge','Green Valley Wheelhouse','Roundhouse Lodge','Rendezvous','Glacier Creek','Crystal Hut','Horstman Hut','Summit West Base Lodge','Summit Central Base Lodge','Silver Fir Lodge','Hyak Chalet','Alpental Lodge']);
+export const isDetailedLodge=f=>f.geometry.type==='Polygon'&&specialNames.has(f.properties.name);
 function project(terrain,ll){const p=lonLatToUTM(...ll);return{x:p.e-terrain.originUTM[0]-(terrain.width-1)*terrain.spacing/2,z:terrain.originUTM[1]-(terrain.height-1)*terrain.spacing/2-p.n};}
 
 // Constructed station snow aprons are authored overlays on the measured bare-earth DEM.
@@ -89,20 +89,20 @@ export function addStationStructures(scene,terrain,infrastructure,areas){
     const angle=longest.angle,c=Math.cos(angle),s=Math.sin(angle),us=points.map(p=>p.x*c+p.z*s),vs=points.map(p=>-p.x*s+p.z*c),u=(Math.min(...us)+Math.max(...us))/2,v=(Math.min(...vs)+Math.max(...vs))/2;
     const width=Math.max(...us)-Math.min(...us),depth=Math.max(...vs)-Math.min(...vs),x=u*c-v*s,z=u*s+v*c;
     const group=new THREE.Group();group.position.set(x,terrain.surface(x,z)-1200,z);group.rotation.y=-angle;group.name=f.properties.name;scene.add(group);groups.push(group);
-    const height=f.properties.name==='Summit House'?6:4.6;
+    const modern=['Roundhouse Lodge','Rendezvous','Glacier Creek'].includes(f.properties.name),height=THREE.MathUtils.clamp(Number(f.properties.height)||Number(f.properties['building:levels']||0)*3.3||(modern?7.2:f.properties.name==='Summit House'?6:4.6),4.6,16);const roofRise=modern?1:2.8;
     box(group,width,1.1,depth,0,.5,0,stone);box(group,width,height-1,depth,0,(height+1)/2,0,wood);
     for(const side of [-1,1]){
       box(group,width*.90,2,.08,0,height*.58,side*(depth/2+.06),glass);
       for(let u=-width*.44;u<width*.45;u+=2.5)box(group,.16,2.2,.14,u,height*.58,side*(depth/2+.13),wood);
-      const pitch=Math.atan2(2.8,depth/2+1),roof=box(group,width+2,.30,Math.hypot(depth/2+1,2.8),0,height+1.4,side*(depth/4+.5),snow);roof.rotation.x=side*pitch;
+      const pitch=Math.atan2(roofRise,depth/2+1),roof=box(group,width+2,.30,Math.hypot(depth/2+1,roofRise),0,height+roofRise/2,side*(depth/4+.5),snow);roof.rotation.x=side*pitch;
       box(group,width+2,.22,.20,0,height,side*(depth/2+1),wood);box(group,width,.12,.09,0,height*.58-1.05,side*(depth/2+.14),metal);
     }
     for(const side of [-1,1]){
-      const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.Float32BufferAttribute([side*width/2,height,-depth/2,side*width/2,height,depth/2,side*width/2,height+2.8,0],3));g.setAttribute('uv',new THREE.Float32BufferAttribute([0,0,depth/2,0,depth/4,1.4],2));g.setIndex(side>0?[0,2,1]:[0,1,2]);g.computeVertexNormals();group.add(new THREE.Mesh(g,wood));
+      const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.Float32BufferAttribute([side*width/2,height,-depth/2,side*width/2,height,depth/2,side*width/2,height+roofRise,0],3));g.setAttribute('uv',new THREE.Float32BufferAttribute([0,0,depth/2,0,depth/4,1.4],2));g.setIndex(side>0?[0,2,1]:[0,1,2]);g.computeVertexNormals();group.add(new THREE.Mesh(g,wood));
       for(let z=-depth*.40;z<depth*.45;z+=2.7){box(group,.08,1.7,1.6,side*(width/2+.05),height*.58,z,glass);box(group,.12,1.8,.08,side*(width/2+.12),height*.58,z,wood);}
       box(group,.16,2.2,.16,side*(width/2+1),height-1.1,depth/2+.6,metal);
     }
-    box(group,width+2,.20,.18,0,height+2.9,0,snow);box(group,.75,2.4,.7,width*.30,height+2,0,stone);box(group,1,.14,.9,width*.30,height+3.3,0,metal);
+    box(group,width+2,.20,.18,0,height+roofRise+.1,0,snow);box(group,.75,2.4,.7,width*.30,height+2,0,stone);box(group,1,.14,.9,width*.30,height+3.3,0,metal);
     box(group,1.4,2.5,.12,width*.25,1.3,depth/2+.16,glass);box(group,.08,2.6,.16,width*.25-.74,1.3,depth/2+.19,metal);box(group,.08,2.6,.16,width*.25+.74,1.3,depth/2+.19,metal);box(group,.08,.20,.08,width*.25+.5,1.3,depth/2+.27,metal);
     const front=depth/2+5;box(group,width+3,.5,9,0,.1,front,wood);
     for(let u=-width/2;u<=width/2;u+=3)box(group,.13,1.1,.13,u,.8,depth/2+9,wood);box(group,width,.12,.13,0,1.3,depth/2+9,wood);
