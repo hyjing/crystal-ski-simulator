@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import {GLTFLoader} from 'three/addons/loaders/GLTFLoader.js';
 import {SkierMotion,loadMotionClips} from './skier-motion.js';
 import {createPalmSocket,syncHandPoles} from './pole-rig.js';
-import {skiArmOffset,reachableHand,smoothHand} from './arm-pose.js';
+import {skiArmOffset,reachableHand,smoothHand,skiArmSolution} from './arm-pose.js';
 import {clone as cloneSkeleton} from 'three/addons/utils/SkeletonUtils.js';
 const modelSources=new Map();
 export function upperBodyCounterAngle(heading,fallLine,motion={}){
@@ -77,14 +77,19 @@ export function updateHumanoid(athlete,pose){
     const torsoQ=bones.spine_03.getWorldQuaternion(new THREE.Quaternion()).multiply(rest.get('spine_03').q.clone().invert()),poseRight=new THREE.Vector3(1,0,0).applyQuaternion(torsoQ),poseUp=new THREE.Vector3(0,1,0).applyQuaternion(torsoQ),poseForward=new THREE.Vector3(0,0,1).applyQuaternion(torsoQ);
     arm.poleSurface=pose.surface;arm.poleDirection=arm.target.poleAim?.clone();
     if(motionMode){
-      const hand=handBone.getWorldPosition(new THREE.Vector3());arm.poseHand=athlete.worldToLocal(hand.clone());arm.poseMetrics={reach:shoulder.distanceTo(hand),length,clip:true};continue;
+      const hand=handBone.getWorldPosition(new THREE.Vector3());
+      if(!pedestrian&&!pose.grab&&!pose.fall&&!pose.crouch){
+        const outward=bones[`lowerarm_${suffix}`].getWorldPosition(new THREE.Vector3()).sub(shoulder).dot(poseRight)*arm.sign;
+        if(outward<length*.16){const solution=skiArmSolution(shoulder,hand,{right:poseRight,up:poseUp,forward:poseForward},arm.sign,l.upper,l.lower),plane=solution.joint.clone().sub(shoulder).cross(solution.end.clone().sub(solution.joint)).normalize();aimInPlane(rig,`upperarm_${suffix}`,`lowerarm_${suffix}`,solution.joint,plane);aimInPlane(rig,`lowerarm_${suffix}`,`hand_${suffix}`,solution.end,plane);}
+      }
+      arm.poseHand=athlete.worldToLocal(hand.clone());arm.poseMetrics={reach:shoulder.distanceTo(hand),length,clip:true};continue;
     }
     let hand;
     if(pedestrian||pose.grab||((pose.fall||pose.crouch)&&!pose.shape?.brace))hand=body.localToWorld(arm.target.hand.clone());
     else hand=shoulder.clone().add(skiArmOffset({...pose,plant:arm.target.plant},arm.sign).multiplyScalar(length).applyQuaternion(torsoQ));
     hand=reachableHand(shoulder,hand,length);const localTarget=athlete.worldToLocal(hand.clone());
     arm.poseHand=smoothHand(arm.poseHand,localTarget,pose.dt||0,length/.52);hand=reachableHand(shoulder,athlete.localToWorld(arm.poseHand.clone()),length);
-    const elbow=shoulder.clone().addScaledVector(poseRight,arm.sign*.10).addScaledVector(poseUp,-.18).addScaledVector(poseForward,-.08),solution=jointSolution(shoulder,hand,elbow,l.upper,l.lower);
+    const elbow=shoulder.clone().addScaledVector(poseRight,arm.sign*.10).addScaledVector(poseUp,-.18).addScaledVector(poseForward,-.08),solution=pedestrian||pose.grab||pose.fall||pose.crouch?jointSolution(shoulder,hand,elbow,l.upper,l.lower):skiArmSolution(shoulder,hand,{right:poseRight,up:poseUp,forward:poseForward},arm.sign,l.upper,l.lower);
     const plane=solution.joint.clone().sub(shoulder).cross(solution.end.clone().sub(solution.joint)).normalize();aimInPlane(rig,`upperarm_${suffix}`,`lowerarm_${suffix}`,solution.joint,plane);aimInPlane(rig,`lowerarm_${suffix}`,`hand_${suffix}`,solution.end,plane);
     // Wrist belongs to the forearm. Never align its world quaternion to the
     // entire pole vector, which previously introduced ~90-degree local twists.

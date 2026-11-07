@@ -42,4 +42,8 @@ No browser regression testing or visual-quality approval was performed in this i
 
 ## Palm grip attachment correction
 
-Pole shafts now begin at a native hand-local palm socket between the thumb and finger bases, rather than the wrist origin. A visible rubber handle surrounds the socket. `syncHandPoles` runs after player transition blending and after every rendered NPC bone interpolation; deferred target poses do not update equipment. Snow contact projects from the final palm grip, preserves shaft length and never moves the hand to meet a pole. A per-contact identifier prevents repeated projection during NPC interpolation. Double-pole elbow bend references are closer to the torso, and tuck / stroke hand offsets keep both hands on their own sides with forward-facing fingers.
+Pole shafts now begin at a native hand-local palm socket between the thumb and finger bases, rather than the wrist origin. A visible rubber handle surrounds the socket. `syncHandPoles` runs after player transition blending and after every rendered NPC bone interpolation; deferred target poses do not update equipment. Snow contact projects from the final palm grip, preserves shaft length and never moves the hand to meet a pole. A per-contact identifier prevents repeated projection during NPC interpolation. Tuck / stroke hand offsets keep both hands on their own sides with forward-facing fingers.
+
+### Outward elbow constraint
+
+The previous loose elbow reference collapsed toward the torso during the rear half of the pole stroke. Ski arms now choose the elbow lateral coordinate directly on the exact two-bone joint circle in the moving chest frame. This retains segment lengths and hand targets while keeping a stable outward / rearward bend branch. Clips are rebuilt with the same solver; a bounded runtime check corrects inward elbows caused by clip blending. Walking, grab and fall IK retain their specialized poses. Palm attachments still run after the final rendered pose.

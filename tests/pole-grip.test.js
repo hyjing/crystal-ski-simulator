@@ -19,3 +19,18 @@ test('staggered NPC targets cannot detach poles on any intermediate rendered fra
 test('crouched aerodynamic posture keeps hands on their own sides rather than reaching inward',async()=>{
  const {a,rig}=await fresh();for(const pole of [0,.25,.5,.75,1]){updateAthletePose(a,{speed:20,tuck:1,poling:pole,polePhase:.3},0,()=>0);for(const sign of [-1,1]){const side=sign>0?'l':'r',w=rig.bones[`hand_${side}`].getWorldPosition(new THREE.Vector3()),shoulder=rig.bones[`upperarm_${side}`].getWorldPosition(new THREE.Vector3());assert.ok(sign*(w.x-shoulder.x)>.025);}assertAttached(a);}
 });
+function assertElbowsOutside(a,rig){
+ const q=rig.bones.spine_03.getWorldQuaternion(new THREE.Quaternion()).multiply(rig.rest.get('spine_03').q.clone().invert()),right=new THREE.Vector3(1,0,0).applyQuaternion(q),up=new THREE.Vector3(0,1,0).applyQuaternion(q);
+ for(const sign of [-1,1]){const side=sign>0?'l':'r',shoulder=rig.bones[`upperarm_${side}`].getWorldPosition(new THREE.Vector3()),elbow=rig.bones[`lowerarm_${side}`].getWorldPosition(new THREE.Vector3()),delta=elbow.sub(shoulder),outside=delta.dot(right)*sign;assert.ok(outside>.055,`${side} elbow collapsed inward: ${outside}`);assert.ok(delta.dot(up)<.01,'elbow must not pop above the shoulder');}
+ assertAttached(a);
+}
+test('elbows stay outside the chest through the entire pole stroke including its previously collapsed rear phase',async()=>{
+ for(const animated of [false,true]){const {a,rig}=await fresh(animated);for(let i=0;i<=240;i++){updateAthletePose(a,{speed:12,poling:1,polePhase:i/240},0,()=>0);assertElbowsOutside(a,rig);}}
+});
+test('torso-relative elbow clearance survives tuck, carve, counter-rotation and continuous clip blends',async()=>{
+ for(const animated of [false,true]){const {a,rig}=await fresh(animated);a.position.set(100,60,-200);a.rotation.set(.2,1.4,-.18);for(let i=0;i<480;i++){const bank=Math.sin(i/60)*.9;updateAthletePose(a,{speed:16,vx:0,vz:16,heading:0,downhillHeading:Math.sin(i/90)*.7,edgeRoll:bank,tuck:(1-Math.cos(i/70))*.5,poling:(1+Math.sin(i/50))*.5,polePhase:i/90%1},1/120,()=>60);assertElbowsOutside(a,rig);}}
+});
+test('interpolated NPC elbows remain outside the torso and do not flip between delayed targets',async()=>{
+ const {a,rig}=await fresh();updateAthletePose(a,{speed:10,poling:1,polePhase:0},0,()=>0);let previous;
+ for(let i=0;i<360;i++){if(i%8===0)targetNpcPose(a,()=>updateAthletePose(a,{speed:10,poling:1,polePhase:i/120%1,tuck:(1-Math.cos(i/90))*.5,edgeRoll:Math.sin(i/80)*.7},8/120,()=>0));blendNpcPose(a,1/120);assertElbowsOutside(a,rig);const q=rig.bones.lowerarm_l.getWorldQuaternion(new THREE.Quaternion());if(previous)assert.ok(q.angleTo(previous)<.25,'interpolated elbow flip');previous=q;}
+});

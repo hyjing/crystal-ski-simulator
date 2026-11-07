@@ -201,3 +201,7 @@ The November 6, 2026 npm audit reported zero known vulnerabilities. Gitleaks sca
 ### Palm / pole attachment regression
 
 170 tests pass. Added frame-by-frame shaft-to-palm equality checks for native and clip poses, full double-pole cycles, rotated / translated actors, tuck / turn blends, clip-to-grab transitions and every intermediate staggered NPC render frame. Additional anatomical assertions keep wrists outside shoulders during propulsion and finger directions forward / outward. Production build passes; no browser visual testing was performed.
+
+### Outward elbow regression
+
+173 tests pass. New checks measure actual elbow joints relative to the chest through every pole-stroke phase, particularly the previously collapsed rear phase; also exercise tuck / carve / counter-rotation blends, rotated actor roots and intermediate NPC render frames. Both elbows retain lateral clearance, stay below the shoulder, and retain palm-to-pole attachment. Existing wrist, reach and continuity tests pass. Production build passes; no browser visual test performed.
