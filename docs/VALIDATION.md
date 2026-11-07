@@ -217,3 +217,7 @@ The November 6, 2026 npm audit reported zero known vulnerabilities. Gitleaks sca
 ### Groves, automatic forward stance and faster input
 
 189 tests pass. New cases check neighboring tree density, glades / landcover boundaries, minimum separation, deterministic placement and seed cap; actual route / station clearance; automatic moving torso hinge and smooth relaxation; stable raw-sample overlays over hundreds of frames; and faster real-path response retaining momentum. Existing energy, edge-change, pole attachment and outward-elbow checks pass. The old turning test now checks path distance plus forward progress, allowing the tighter arc to cover less forward distance. Production Pages-path build passes. No browser visual test performed.
+
+### Faster pole stroke
+
+191 tests pass, including flat-ground starting acceleration / release, per-frame physical phase alignment at the new cadence and palm-to-pole attachment. Existing route-start, airborne and steering tests pass. Production Pages-path build passes; no browser visual test performed.

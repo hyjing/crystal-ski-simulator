@@ -1,6 +1,7 @@
 export const clamp = (x, a, b) => Math.max(a, Math.min(b, x));
 // Prototype SI parameters; not measured ski/snow coefficients.
 export const PHYSICS={mass:85,gravity:9.81,airDensity:1.0,uprightCdA:.65,tuckCdA:.25,packedFriction:.025,softFriction:.06,maxHorizontalSpeed:55};
+export const POLING={cadence:1.6,maxForce:480,maxPower:2400,response:16};
 export function createSkier(point, next) {
   return { x: point.x, z: point.z, vx: 0, vz: 0, heading: Math.atan2(next.x-point.x,next.z-point.z), speed: 0, distance: 0, turn: 0, steerInput:0, turnHold:0, holdSide:0, edge: 0, edgeRoll:0, edgeAngle:0, lastTurn:1, slip: 0, tuck: 0, poling:0, polePhase:0, edgeBrake:0,turnAcceleration:0 };
 }
@@ -27,10 +28,10 @@ export function stepSkier(s, input, terrain, dt, snow = 'packed') {
   if(edge<.2)s.edgeBrake=0;else if(alignment<.42||(speed>1&&s.slip/Math.max(speed,.1)>.16))s.edgeBrake=1;
 
   s.vx-=PHYSICS.gravity*g.x/norm*dt;s.vz-=PHYSICS.gravity*g.z/norm*dt;
-  s.poling+=(Number(Boolean(input.pole))-s.poling)*(1-Math.exp(-dt*12));
+  s.poling+=(Number(Boolean(input.pole))-s.poling)*(1-Math.exp(-dt*POLING.response));
   if(input.pole){
-    s.polePhase=(s.polePhase+dt*1.35)%1;const contact=Math.max(0,Math.sin(s.polePhase*Math.PI*2));
-    const force=Math.min(420,1800/Math.max(1,Math.abs(s.vx*Math.sin(s.heading)+s.vz*Math.cos(s.heading))))*contact;
+    s.polePhase=(s.polePhase+dt*POLING.cadence)%1;const contact=Math.max(0,Math.sin(s.polePhase*Math.PI*2));
+    const force=Math.min(POLING.maxForce,POLING.maxPower/Math.max(1,Math.abs(s.vx*Math.sin(s.heading)+s.vz*Math.cos(s.heading))))*contact;
     s.vx+=Math.sin(s.heading)*force/PHYSICS.mass*dt;s.vz+=Math.cos(s.heading)*force/PHYSICS.mass*dt;
   }
   const lateralMu=(edge>.5?(snow==='packed'?.40:.32):(snow==='packed'?1.65:1.40))+edge*(snow==='packed'?.70:.65)+Math.abs(s.turn)*.30;

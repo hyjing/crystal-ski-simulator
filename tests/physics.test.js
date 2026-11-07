@@ -171,3 +171,5 @@ test('USGS grid has valid dimensions, units, and consistent interpolation',()=>{
     const s=createSkier(r.points[0],r.points[1]);simulate(s,{...neutral,pole:1},5,t);assert.ok(s.distance>2,`${r.name} can leave a slow source section with pole work`);
   }
 });
+
+test('continuous pole work gives a quicker flat-ground start and stops propelling immediately after release',()=>{const s=skier();simulate(s,{pole:true},3,flat);assert.ok(s.speed>4.7&&s.speed<6);assert.ok(s.distance>7.7);const phase=s.polePhase,before=s.speed;simulate(s,{},.5,flat);assert.equal(s.polePhase,phase);assert.ok(s.speed<before);});

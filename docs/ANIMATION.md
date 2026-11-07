@@ -61,3 +61,7 @@ Ordinary grounded motion automatically adds a speed-dependent hip hinge and knee
 The mixer now restores its last **raw animation sample** before each update and captures the new sample before applying procedural overlays. Three.js PropertyMixer can skip identical key values; without this restore, repeated counter / forward overlays could accumulate on held clips. A long steady-pose regression checks that head position and chest rotation remain stable. Final palm attachments and outward elbow constraints remain enabled.
 
 Further input tuning uses a 48/s steer response, 36/s edge response, 0.48s progressive bank ramp, stronger initial bite and a 0.75 effective sidecut scale. Turn force remains bounded by snow support and trajectory rotation retains kinetic-energy constraints. At 12m/s a 0.5s full turn changes heading about 31 degrees; at 20m/s about 19 degrees. These are game-controller parameters, not measured ski coefficients.
+
+## Faster double-pole propulsion
+
+Double-pole cadence is now 1.6Hz (previously 1.35Hz), with a 480N peak force cap / 2400W power cap and quicker pose engagement. These are gameplay parameters. On flat ground a three-second start reaches about 4.78m/s / 17.2km/h, compared with about 3.89m/s / 14.0km/h before. The stroke animation remains locked to the physical pole phase and release immediately removes propulsion.
