@@ -66,7 +66,7 @@ export function updateHumanoid(athlete,pose){
     let tip=body.localToWorld(arm.target.tip.clone()),contact=arm.target.planted;
     // A planted pole and an arm must both be reachable. Release an impossible
     // contact instead of stretching the elbow or lengthening the equipment.
-    if(contact){const poleLength=2.65*.52;for(let i=0;i<12;i++){hand.copy(tip).add(hand.clone().sub(tip).normalize().multiplyScalar(poleLength));hand=reachableHand(shoulder,hand,length);}if(Math.abs(hand.distanceTo(tip)-poleLength)>.025){contact=false;athlete.userData.plant.worldPoint=null;athlete.userData.plant.contact=false;athlete.userData.poleContact=null;}}
+    if(contact){const freeHand=hand.clone(),poleLength=2.65*.52;for(let i=0;i<12;i++){hand.copy(tip).add(hand.clone().sub(tip).normalize().multiplyScalar(poleLength));hand=reachableHand(shoulder,hand,length);}if(Math.abs(hand.distanceTo(tip)-poleLength)>.025||hand.distanceTo(freeHand)>Math.max(.008,length*4*(pose.dt||0))){hand.copy(freeHand);contact=false;athlete.userData.plant.worldPoint=null;athlete.userData.plant.contact=false;athlete.userData.poleContact=null;}}
     const elbow=shoulder.clone().addScaledVector(poseRight,arm.sign*.20).addScaledVector(poseUp,-.20).addScaledVector(poseForward,-.06),solution=jointSolution(shoulder,hand,elbow,l.upper,l.lower);
     aim(rig,`upperarm_${suffix}`,`lowerarm_${suffix}`,solution.joint);aim(rig,`lowerarm_${suffix}`,`hand_${suffix}`,solution.end);
     // Wrist belongs to the forearm. Never align its world quaternion to the
