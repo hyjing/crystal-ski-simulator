@@ -259,3 +259,11 @@ The shared 3.2s player / contact fall sequence progresses through balance loss, 
 Each lift carrier stores whether its motion climbs from the lower endpoint toward the upper endpoint, derived from actual endpoint heights and cable side. Rider selection excludes descending chairs. This does not depend on the OSM way's ordering.
 
 Whistler / Blackcomb share a georeferenced local terrain and OSM landcover pack; separate curated route / infrastructure files are selected by mountain ID. Context scenery uses its own Canadian-area grid, never the US scenery or Rainier. Reference textures are explicitly non-photographic. More details are in WHISTLER.md.
+
+## Shoulder-relative arm poses and anatomical limits
+
+The current GLBs contain no authored animation clips. Body animation remains procedural; this update improves arm correctness rather than claiming a complete professional animation pipeline. The measured upper + lower arm chain is ~0.495m. Legacy neutral targets requested ~0.550m and a forward pole stroke ~0.773m, forcing nearly straight elbows. Wrist world alignment to pole direction also introduced large local twists.
+
+`arm-pose.js` defines shoulder-relative neutral, tuck and pole-stroke hand poses in units of actual chain length. They follow the solved torso frame, blend with banking / turn plants and keep reach below 94% of chain length. Target movement is rate-limited in actor-local space. Pedestrian / grab / brace targets retain their behavior but also receive the anatomical reach limit. Elbow bend references follow the torso frame. Wrist rotations inherit the forearm with small bounded local offsets, rather than tracking the whole pole in world space. Poles retain their fixed length; impossible planted contacts release instead of stretching either arm or equipment.
+
+This still lacks artist-authored full-body ski clips, full shoulder / forearm twist distribution, measured hand-to-grip contact, cloth simulation and motion-capture validation. Passing numerical tests establishes reach and continuity bounds, not production-game visual quality.

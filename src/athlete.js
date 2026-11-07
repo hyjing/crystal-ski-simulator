@@ -115,8 +115,8 @@ export function updateAthletePose(athlete,s,dt,surface){
     else tip.copy(hand).addScaledVector(poleVector,2.65);
     elbow.set(hipX*.6+sign*.67,(shoulder.y+hand.y)/2-.18,(shoulder.z+hand.z)/2-.10);
     if(!athlete.userData.humanRig)shapeLimb(arm.mesh,shoulder,elbow,hand);arm.glove.position.copy(hand);
-    arm.target={hand:hand.clone(),tip:tip.clone(),pedestrian:!!s.pedestrian};
+    arm.target={hand:hand.clone(),tip:tip.clone(),pedestrian:!!s.pedestrian,planted:!!(activePlant&&plantState.contact),plant};
     connect(arm.pole,hand,tip);arm.basket.position.copy(tip).y+=.12;arm.basket.rotation.x=Math.PI/2;
   }
-  updateHumanoid(athlete,{hipY,hipX,lean,tuck:Math.max(tuck,crouch*.8),counter,roll,grab,headLook:s.headLook||0,ride:!!s.ridePose});
+  updateHumanoid(athlete,{hipY,hipX,lean,tuck:Math.max(tuck,crouch*.8),counter,roll,grab,headLook:s.headLook||0,ride:!!s.ridePose,poling:pole,polePhase:s.polePhase||0,edgeRoll:roll,airborne:!!s.airborne,fall:fall,crouch,dt});
 }
