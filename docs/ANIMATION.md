@@ -2,11 +2,17 @@
 
 ## Current implementation
 
-The player now has seven named full-body / upper-body ski clips in `public/assets/skier-motion.json`: `ski-glide`, `ski-tuck`, `ski-carve-left`, `ski-carve-right`, `ski-pole-push`, `ski-plant-left`, `ski-plant-right`. These are authored pose curves baked onto the native skeleton by `scripts/build-skier-motion.mjs`, not skiing motion capture or a purchased animation pack. They are a first animation baseline and still require artistic review / refinement.
+The native skeleton now has **18 authored ski clips** in `public/assets/skier-motion.json`: glide, tuck, left/right carve, double-pole push, left/right transition plants, edge release, terrain absorption, jump preload, air rise/float/prepare, soft/hard landing and fall brace/down/rise. Two retargeted CC0 visitor clips bring the total to 20. These are authored pose curves baked by `scripts/build-skier-motion.mjs`, not skiing motion capture. They still require visual / artistic review against reference footage.
 
-`SkierMotion` plays the clips with Three.js AnimationMixer. Tuck, edge and pole inputs control smoothly blended weights. Stroke phase follows the physics pole cycle; the corresponding single-arm point-plant clip is additive and follows the existing linked-turn timing. Terrain / ski contact is corrected after the base animation. Falls, airborne tricks, seated / prop-holding visitors and special contact cases retain procedural behavior; this is not a complete animation replacement for every game state.
+The relaxed stance has ankle/knee flexion, forward hands and a small hip hinge. Carves shift the hips into the turn and lengthen the outside leg relative to the inside leg. Edge release briefly unloads the old stance. The existing travel-aware upper-body counter rotation remains: traverses and uphill travel do not force the shoulders toward the fall line.
 
-Elbow orientation uses an explicit bend-plane frame shared by the upper arm and forearm. A stable outside bend reference avoids the near-collinear elbow reference and independent shortest-rotation twists that produced abrupt forearm motion in the old pose generator. The bake tests reject large adjacent-frame rotations.
+`SkierMotion` uses Three.js AnimationMixer with continuous weights. Left/right point-plant clips affect one arm additively at the existing linked-turn transition timing. Double-pole strokes, visitor footsteps and landing clips follow event / physics phase rather than independent looping timers. Pole contact selects a feasible point on the fixed-length pole sphere; unreachable moving contacts release without pulling the hand.
+
+Manual jumps buffer a tap through a 100ms preload before applying the same pop impulse. Rising, floating and landing preparation blend by flight age, descent and actual snow clearance. This does not increase the jump impulse or horizontal momentum. Landing animation strength uses normal impact speed and has its own 0.55–0.75s recovery clock, separate from landing judgement and steering recovery. Existing crash phases drive brace, down, rise and return-to-glide poses for the player and skiing NPCs.
+
+A ski-length terrain curvature estimate drives bounded, damped absorption without changing the physics trajectory or creating automatic jumps. Grounded foot IK corrects at most 6.5cm toward the snow target and preserves the authored knee bend plane. It does not replace air / fall leg poses. Air / fall skis follow the final animated boots. Clip-to-procedural grab and ride transitions blend for 0.2s; their snapshots are allocated once and only copied during transitions. Seated / prop-holding visitors and grabs retain specialized procedural poses.
+
+Elbow orientation uses an explicit bend-plane frame shared by the upper arm and forearm, avoiding near-collinear references and independent shortest-rotation forearm twists. Hands remain shoulder-relative with bounded reach and wrist rotation. The bake tests reject adjacent-frame flips. Duplicate keys in held poses are removed, reducing the expanded library to about 524KiB uncompressed.
 
 ## Free assets checked
 
@@ -24,12 +30,12 @@ Download the free Standard package from the author's page and use its **non-root
 node scripts/build-skier-motion.mjs /path/to/UAL1_Standard.glb
 ```
 
-To also export the complete current skier with all nine clips for inspection / editing in Blender:
+To also export the complete current skier with all twenty clips for inspection / editing in Blender:
 
 ```sh
 node scripts/build-skier-motion.mjs /path/to/UAL1_Standard.glb --preview /path/to/skier-animated-preview.glb
 ```
 
-The preview omits runtime procedural fabric textures and is not a screenshot of the game renderer. GLB import exposes the named animation clips; further keyframe edits can be exported as glTF/GLB and retargeted back to the same native bone names. Keep root translation separate from physics motion, maintain loop seams and preserve the anatomical elbow / wrist bounds. The runtime motion JSON is ~807KiB uncompressed and is fetched / parsed once; actors share immutable clips with independent mixers.
+The preview omits runtime procedural fabric textures and is not a screenshot of the game renderer. GLB import exposes the named animation clips; further keyframe edits can be exported as glTF/GLB and retargeted back to the same native bone names. Keep root translation separate from physics motion, maintain loop seams and preserve the anatomical elbow / wrist bounds. The runtime motion JSON is ~524KiB uncompressed and is fetched / parsed once; actors share immutable clips with independent mixers.
 
 No browser regression testing or visual-quality approval was performed in this iteration. Numeric continuity / rig tests establish constraints and integration, not professional animation quality.

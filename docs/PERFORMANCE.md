@@ -112,3 +112,7 @@ The committed-avoidance update measured 0.566ms median / 0.972ms P95 / 1.888ms m
 The shoulder-relative arm revision measured 0.294ms median / 0.485ms P95 / 0.792ms maximum in the same 900-frame CPU ground-crowd fixture (24 actors, up to 12 visible). This includes the new arm targets and reach constraints, but excludes GPU rendering, live forest callbacks, lift riders and player facility collision. It is not an end-to-end frame-rate measurement.
 
 The clip-based crowd fixture now explicitly installs the shared motion library / individual mixers before timing. The current 900-frame CPU result is median 0.281ms / P95 0.474ms / max 0.949ms for 24 ground actors, up to 12 visible; it includes clip mixing, contact corrections and staggered poses, but excludes GPU rendering, live forest callbacks, lift passengers and player facility collision. The ~807KiB uncompressed motion JSON is loaded once and its immutable tracks are shared; mixers remain per-actor. No mobile FPS result is claimed.
+
+### Expanded ski animation clips — November 6, 2026
+
+Isolated traffic benchmark with 24 NPCs, 12 visible and 900 measured frames: median **0.297ms**, P95 **0.533ms**, max **1.066ms** CPU. This includes motion mixing and staggered contact / IK, and excludes GPU / forest callbacks. Clip-to-procedural transition buffers are reused and only copied during transitions. The expanded 20-clip library is **536,216 bytes** uncompressed after removing redundant held-pose keys, smaller than the previous nine-clip library. These measurements are not an end-to-end FPS guarantee.

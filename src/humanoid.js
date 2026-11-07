@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import {GLTFLoader} from 'three/addons/loaders/GLTFLoader.js';
 import {SkierMotion,loadMotionClips} from './skier-motion.js';
+import {poleSnowContact} from './ski-gesture.js';
 import {skiArmOffset,reachableHand,smoothHand} from './arm-pose.js';
 import {clone as cloneSkeleton} from 'three/addons/utils/SkeletonUtils.js';
 const modelSources=new Map();
@@ -51,27 +52,41 @@ export function updateHumanoid(athlete,pose){
   const rig=athlete.userData.humanRig;if(!rig)return;
   const {bones,rest}=rig,{body,arms,legs}=athlete.userData;athlete.updateWorldMatrix(true,true);
   const rootQ=athlete.getWorldQuaternion(new THREE.Quaternion()),forward=new THREE.Vector3(0,0,1).applyQuaternion(rootQ),up=new THREE.Vector3(0,1,0).applyQuaternion(rootQ),right=new THREE.Vector3(1,0,0).applyQuaternion(rootQ);
+  const transitioning=rig.motion&&(rig.transitionRemaining>0||(rig.previousMode!==undefined&&rig.previousMode!==rig.motion.modeFor(pose)));
+  const previous=transitioning?(rig.transitionPose??=Object.values(bones).map(b=>({b,q:b.quaternion.clone(),p:b.position.clone()}))):null;
+  if(previous)for(const state of previous){state.q.copy(state.b.quaternion);state.p.copy(state.b.position);}
   const motionMode=rig.motion?.apply(pose,pose.dt||0);
+  if(rig.previousMode!==undefined&&rig.previousMode!==motionMode)rig.transitionRemaining=.20;
+  rig.previousMode=motionMode;
   if(!motionMode){
-  const hip=body.localToWorld(new THREE.Vector3(pose.hipX,pose.hipY+.07,0));bones.pelvis.position.copy(bones.pelvis.parent.worldToLocal(hip));
+  const hip=body.localToWorld(new THREE.Vector3(pose.hipX,pose.hipY+.07,pose.shape?.hipForward||0));bones.pelvis.position.copy(bones.pelvis.parent.worldToLocal(hip));
   const attitude=(yaw,lean,bend)=>rootQ.clone().multiply(new THREE.Quaternion().setFromEuler(new THREE.Euler(bend,yaw,lean,'YXZ')));
-  worldQuaternion(bones.pelvis,attitude(pose.counter*.18,pose.lean*.10,.03).multiply(rest.get('pelvis').q));
-  for(const [name,fraction] of [['spine_01',.40],['spine_02',.72],['spine_03',1]])worldQuaternion(bones[name],attitude(pose.counter*fraction,pose.lean*.15,.08+pose.tuck*.40+(pose.grab||0)*.35).multiply(rest.get(name).q));
+  worldQuaternion(bones.pelvis,attitude(pose.counter*.18,pose.lean*.16,.05).multiply(rest.get('pelvis').q));
+  for(const [name,fraction] of [['spine_01',.40],['spine_02',.72],['spine_03',1]])worldQuaternion(bones[name],attitude(pose.counter*fraction,pose.lean*.20,(pose.shape?.bend??(.16+pose.tuck*.40))+(pose.grab||0)*.20).multiply(rest.get(name).q));
   worldQuaternion(bones.neck_01,attitude(pose.counter+(pose.headLook||0)*.5,pose.lean*.08,pose.tuck*.12).multiply(rest.get('neck_01').q));
   worldQuaternion(bones.Head,attitude(pose.counter+(pose.headLook||0),0,pose.tuck*.08).multiply(rest.get('Head').q));
   }else{
     const names=['pelvis','spine_01','spine_02','spine_03','neck_01','Head'],fractions=[.18,.40,.72,1,1,1],worlds=names.map(n=>bones[n].getWorldQuaternion(new THREE.Quaternion()));for(let i=0;i<names.length;i++){const yaw=pose.counter*fractions[i]+((i>3)?(pose.headLook||0)*.4:0),delta=new THREE.Quaternion().setFromAxisAngle(up,yaw);worldQuaternion(bones[names[i]],delta.multiply(worlds[i]));}
   }
-  if(motionMode!=='visitor')
-  for(const leg of legs){const suffix=leg.sign>0?'l':'r',l=rig.lengths[suffix],hip=bones[`thigh_${suffix}`].getWorldPosition(new THREE.Vector3()),ankle=body.localToWorld(leg.target.ankle.clone().add(new THREE.Vector3(0,-.05,0))),pole=hip.clone().addScaledVector(forward,.7).addScaledVector(right,leg.sign*.12);
+  if(motionMode!=='visitor'&&!(motionMode&&(pose.airborne||pose.crashRemaining>0)))
+  for(const leg of legs){const suffix=leg.sign>0?'l':'r',l=rig.lengths[suffix],hip=bones[`thigh_${suffix}`].getWorldPosition(new THREE.Vector3()),ankle=body.localToWorld(leg.target.ankle.clone().add(new THREE.Vector3(0,-.05,0))),pole=motionMode?bones[`calf_${suffix}`].getWorldPosition(new THREE.Vector3()):body.localToWorld(leg.target.knee.clone());
+    if(motionMode){const current=bones[`foot_${suffix}`].getWorldPosition(new THREE.Vector3()),correction=ankle.clone().sub(current);correction.clampLength(0,.065);ankle.copy(current).add(correction);}
     const solution=jointSolution(hip,ankle,pole,l.thigh,l.calf);aim(rig,`thigh_${suffix}`,`calf_${suffix}`,solution.joint);aim(rig,`calf_${suffix}`,`foot_${suffix}`,solution.end);worldQuaternion(bones[`foot_${suffix}`],rootQ.clone().multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1,0,0),pose.ride?.15:0)).multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0,0,1),(pose.roll||0)*.70)).multiply(rest.get(`foot_${suffix}`).q));
   }
   for(const arm of arms){
     const suffix=arm.sign>0?'l':'r',l=rig.lengths[suffix],length=l.upper+l.lower,shoulder=bones[`upperarm_${suffix}`].getWorldPosition(new THREE.Vector3()),handBone=bones[`hand_${suffix}`],pedestrian=arm.target.pedestrian;
     const torsoQ=bones.spine_03.getWorldQuaternion(new THREE.Quaternion()).multiply(rest.get('spine_03').q.clone().invert()),poseRight=new THREE.Vector3(1,0,0).applyQuaternion(torsoQ),poseUp=new THREE.Vector3(0,1,0).applyQuaternion(torsoQ),poseForward=new THREE.Vector3(0,0,1).applyQuaternion(torsoQ);
-    if(motionMode){const hand=handBone.getWorldPosition(new THREE.Vector3()),localHand=body.worldToLocal(hand.clone()),direction=arm.target.tip.clone().sub(localHand).normalize(),tip=localHand.clone().addScaledVector(direction,2.65);if(arm.target.planted&&Math.abs(localHand.distanceTo(arm.target.tip)-2.65)>.05){athlete.userData.plant.worldPoint=null;athlete.userData.plant.contact=false;athlete.userData.poleContact=null;}arm.pole.position.copy(localHand).add(tip).multiplyScalar(.5);arm.pole.quaternion.setFromUnitVectors(Y,direction);arm.pole.scale.y=2.65;arm.basket.position.copy(tip).y+=.12;arm.poseHand=athlete.worldToLocal(hand.clone());arm.poseMetrics={reach:shoulder.distanceTo(hand),length,clip:true};continue;}
+    if(motionMode){
+      const hand=handBone.getWorldPosition(new THREE.Vector3()),localHand=body.worldToLocal(hand.clone()),direction=arm.target.poleAim?.clone()||arm.target.tip.clone().sub(localHand).normalize();
+      if(arm.target.planted){
+        const plant=athlete.userData.plant;
+        if(plant.contactStarted&&pose.surface){const worldAim=direction.clone().transformDirection(body.matrixWorld),point=poleSnowContact(hand,worldAim,2.65*.52,pose.surface);plant.worldPoint=point;athlete.userData.poleContact=point?.clone()||null;}
+        if(plant.worldPoint){const local=body.worldToLocal(plant.worldPoint.clone());if(Math.abs(local.distanceTo(localHand)-2.65)<=.05)direction.copy(local).sub(localHand).normalize();else{plant.worldPoint=null;plant.contact=false;athlete.userData.poleContact=null;}}
+      }
+      const tip=localHand.clone().addScaledVector(direction,2.65);arm.pole.position.copy(localHand).add(tip).multiplyScalar(.5);arm.pole.quaternion.setFromUnitVectors(Y,direction);arm.pole.scale.y=2.65;arm.basket.position.copy(tip).y+=.12;arm.poseHand=athlete.worldToLocal(hand.clone());arm.poseMetrics={reach:shoulder.distanceTo(hand),length,clip:true};continue;
+    }
     let hand;
-    if(pedestrian||pose.grab||pose.fall||pose.crouch)hand=body.localToWorld(arm.target.hand.clone());
+    if(pedestrian||pose.grab||((pose.fall||pose.crouch)&&!pose.shape?.brace))hand=body.localToWorld(arm.target.hand.clone());
     else hand=shoulder.clone().add(skiArmOffset({...pose,plant:arm.target.plant},arm.sign).multiplyScalar(length).applyQuaternion(torsoQ));
     hand=reachableHand(shoulder,hand,length);const localTarget=athlete.worldToLocal(hand.clone());
     arm.poseHand=smoothHand(arm.poseHand,localTarget,pose.dt||0,length/.52);hand=reachableHand(shoulder,athlete.localToWorld(arm.poseHand.clone()),length);
@@ -89,6 +104,11 @@ export function updateHumanoid(athlete,pose){
     arm.pole.position.copy(localHand).add(tipLocal).multiplyScalar(.5);arm.pole.quaternion.setFromUnitVectors(Y,direction);arm.pole.scale.y=2.65;
     arm.basket.position.copy(tipLocal).y+=.12;arm.basket.rotation.x=Math.PI/2;
     arm.poseMetrics={reach:shoulder.distanceTo(solution.end),length,requested:shoulder.distanceTo(hand),contact};
+  }
+  if(previous&&rig.transitionRemaining>0&&pose.dt>0){const alpha=1-Math.exp(-pose.dt*18);for(const {b,q,p} of previous){b.quaternion.slerpQuaternions(q,b.quaternion,alpha);if(b.name==='pelvis')b.position.lerpVectors(p,b.position,alpha);}rig.transitionRemaining=Math.max(0,rig.transitionRemaining-pose.dt);}
+  if(pose.airborne||pose.crashRemaining>0)for(let i=0;i<legs.length;i++){
+    const side=legs[i].sign>0?'l':'r',foot=bones[`foot_${side}`],ski=athlete.userData.skis[i],frame=foot.getWorldQuaternion(new THREE.Quaternion()).multiply(rest.get(`foot_${side}`).q.clone().invert()),localQ=athlete.getWorldQuaternion(new THREE.Quaternion()).invert().multiply(frame),offset=new THREE.Vector3(legs[i].sign*.02,-.16,-.15).applyQuaternion(localQ);
+    ski.position.copy(athlete.userData.skiRig.worldToLocal(foot.getWorldPosition(new THREE.Vector3()))).add(offset);ski.quaternion.copy(localQ);
   }
   rig.model.updateMatrixWorld(true);
 }

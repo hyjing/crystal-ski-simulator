@@ -271,3 +271,7 @@ This still lacks artist-authored full-body ski clips, full shoulder / forearm tw
 ## Clip-based ski animation baseline
 
 `skier-motion.js` loads a shared clip library once and allocates an independent AnimationMixer per rig. Seven native ski clips blend by edge, tuck and pole input; left/right point-plant actions are additive upper-body overlays. Stroke / footstep clips are sampled at the physics gait phase to avoid timer drift. The two visitor clips are bind-relative retargets from the CC0 Quaternius Standard pack. Grounded ski motion starts from full-body bone clips; foot IK remains a contact correction, while unsupported special states retain procedural fallback. See ANIMATION.md for the remaining animation scope.
+
+### Ski animation refinement
+
+The native animation set now contains 18 ski clips plus 2 CC0 visitor clips. `ski-gesture.js` provides bounded presentation-only terrain absorption / edge-release state and feasible fixed-length pole contacts. Animation phases are separate from movement / landing judgement. Manual pop has a buffered 100ms preload; actual impulse and airborne momentum are unchanged. Landing animation uses impact-derived strength and its own recovery clock. Ground contact limits foot correction to 6.5cm around the authored pose; air / fall equipment follows the animated feet. See `ANIMATION.md` for authoring and fallback details.

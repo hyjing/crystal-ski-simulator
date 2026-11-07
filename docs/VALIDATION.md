@@ -193,3 +193,7 @@ The November 6, 2026 npm audit reported zero known vulnerabilities. Gitleaks sca
 ## Native animation clips and free asset integration
 
 154 local tests and the production build pass. Seven new animation tests check the nine-clip asset, no root travel, loop seams, adjacent-frame quaternion continuity, full-body blend / reach / wrist bounds, phase-locked pole playback, independent mixers and unchanged actor travel, fallback for special states, and additive single-arm point plants without wrist jumps. The editable GLB was exported and re-parsed with all nine named clips. No browser visual regression or new gameplay recording was performed for this animation iteration.
+
+### Ski animation refinement — November 6, 2026
+
+165 unit tests pass. New integration cases exercise the buffered manual pop, broad terrain absorption without flat-slope oscillation, edge-release decay, outside-leg loading, airborne ski-to-boot attachment, impact-dependent pelvis compression, event-locked landing playback, full fall phases, feasible fixed-length pole contact, grab transitions and a complete physics-driven jump/recovery sequence. Production build with the GitHub Pages base path passes. No browser testing or visual-quality approval was performed.
