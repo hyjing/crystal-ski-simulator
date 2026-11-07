@@ -15,12 +15,12 @@ export function stepSkier(s, input, terrain, dt, snow = 'packed') {
   const intent=Math.abs(steering)>.1?Math.sign(steering):0;
   if(intent){if(intent!==s.holdSide)s.turnHold=0;s.turnHold=Math.min(1.5,(s.turnHold||0)+dt*Math.abs(steering));s.holdSide=intent;s.lastTurn=intent;}
   else{s.turnHold=Math.max(0,(s.turnHold||0)-dt*4);if(!s.turnHold)s.holdSide=0;}
-  s.turn+=(steering-s.turn)*(1-Math.exp(-dt*(steering===0?40:34)));if(Math.abs(s.turn)<.001)s.turn=0;
+  s.turn+=(steering-s.turn)*(1-Math.exp(-dt*48));if(Math.abs(s.turn)<.001)s.turn=0;
   s.edge=edge;s.tuck+=(clamp(input.tuck||0,0,1)-s.tuck)*(1-Math.exp(-dt*5));
   const rollSide=Math.abs(s.turn)>.02?Math.sign(s.turn):s.lastTurn;
-  const engagement=clamp((s.turnHold||0)/.55,0,1),progressiveBank=.58+.52*engagement;
+  const engagement=clamp((s.turnHold||0)/.48,0,1),progressiveBank=.68+.42*engagement;
   const targetRoll=rollSide*Math.min(1.10,progressiveBank*Math.abs(s.turn)+edge*.82);
-  s.edgeRoll=((s.edgeRoll||0)+(targetRoll-(s.edgeRoll||0))*(1-Math.exp(-dt*26)));
+  s.edgeRoll=((s.edgeRoll||0)+(targetRoll-(s.edgeRoll||0))*(1-Math.exp(-dt*36)));
   s.edgeAngle=Math.abs(s.edgeRoll);
   const g=terrain.gradient(s.x,s.z),norm=1+g.x*g.x+g.z*g.z,sqrtNorm=Math.sqrt(norm),normalAcceleration=PHYSICS.gravity/sqrtNorm;
   const slopeMagnitude=Math.hypot(g.x,g.z),alignment=slopeMagnitude?Math.abs((Math.sin(s.heading)*g.x+Math.cos(s.heading)*g.z)/slopeMagnitude):1;
@@ -39,8 +39,8 @@ export function stepSkier(s, input, terrain, dt, snow = 'packed') {
   if(edge<.5){
     const vy=g.x*s.vx+g.z*s.vz,v=Math.hypot(s.vx,vy,s.vz),horizontal=Math.hypot(s.vx,s.vz);
     if(v>.2){
-      const radius=Math.max(6.5,(s.skiSidecut||19)*.82*Math.cos(s.edgeAngle));
-      curveAcceleration=Math.min(normalAcceleration*Math.tan(s.edgeAngle),v*v/radius,grip*.88);
+      const radius=Math.max(6,(s.skiSidecut||19)*.75*Math.cos(s.edgeAngle));
+      curveAcceleration=Math.min(normalAcceleration*Math.tan(s.edgeAngle)*1.15,v*v/radius,grip*.88);
       const pivot=Math.max(0,1-horizontal/5)*1.15*Math.abs(s.turn);
       const rate=(curveAcceleration/v+pivot)*(1-s.tuck*.12),angle=-Math.sign(s.edgeRoll)*rate*dt;
       // Rodrigues rotation in the actual slope tangent plane preserves kinetic energy.

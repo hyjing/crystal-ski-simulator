@@ -16,7 +16,7 @@ test('analog steering remains progressive instead of making light inputs act lik
 });
 test('body response follows changing load, settles at steady load and stays still at rest',()=>{
  const state={},s={speed:12,edgeRoll:.7,turnAcceleration:10};let result;
- for(let i=0;i<240;i++)result=advanceSkiGesture(state,s,step);assert.ok(result.dynamic.flex>.025&&result.dynamic.flex<.03);const settled=result.dynamic.flex;
+ for(let i=0;i<240;i++)result=advanceSkiGesture(state,s,step);assert.ok(result.dynamic.flex>.05&&result.dynamic.flex<.06);const settled=result.dynamic.flex;
  for(let i=0;i<120;i++)result=advanceSkiGesture(state,s,step);assert.ok(Math.abs(result.dynamic.flex-settled)<1e-8);assert.ok(Math.abs(result.dynamic.roll)<1e-8);
  result=advanceSkiGesture(state,{...s,edgeRoll:-.7},step);assert.ok(result.dynamic.roll>0&&result.dynamic.roll<.06);
  for(let i=0;i<240;i++)result=advanceSkiGesture(state,{speed:0,edgeRoll:0,turnAcceleration:0},step);assert.ok(Math.abs(result.dynamic.flex)<1e-8);assert.ok(Math.abs(result.dynamic.pitch)<1e-8);assert.ok(Math.abs(result.dynamic.roll)<1e-8);

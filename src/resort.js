@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import {mergeGeometries} from 'three/addons/utils/BufferGeometryUtils.js';
+import {clusterForestSeeds} from './forest-distribution.js';
 import {lonLatToUTM,pointAlongRoute} from './terrain.js';
 import {isDetailedLodge} from './stations.js';
 import {installForestIndex} from './trees.js';
@@ -37,7 +38,8 @@ export function addForest(scene,terrain,routes,landcover,texture,vegetation,stat
     const {extent,imageSize:[w,h]}=vegetation;
     return {x:extent.xmin+(u+.5)/w*(extent.xmax-extent.xmin)-ce,z:cn-extent.ymax+(v+.5)/h*(extent.ymax-extent.ymin),size};
   }):Array.from({length:14000},()=>terrain.world(8+rng()*(terrain.width-16),8+rng()*(terrain.height-16)));
-  for(const p of source){
+  const clustered=clusterForestSeeds(source,{spacing:vegetation?.minimumSpacing||8,support:landcover.values?(x,z)=>forestLikelihood(terrain,landcover,x,z):undefined});
+  for(const p of clustered){
     if(!vegetation&&rng()>forestLikelihood(terrain,landcover,p.x,p.z)*.85)continue;
     if(terrain.sample(p.x,p.z)<(terrain.treeMinElevation??1180))continue;
     if(stationAreas.some(a=>Math.hypot(((p.x-a.x)*a.fx+(p.z-a.z)*a.fz)/a.coreLength,((p.x-a.x)*a.fz-(p.z-a.z)*a.fx)/a.coreWidth)<1.04))continue;
@@ -52,7 +54,7 @@ export function addForest(scene,terrain,routes,landcover,texture,vegetation,stat
     candidates.push({...p,size:p.size||.65+rng()*.8,rotation:rng()*Math.PI});
   }
   const cards=[];
-  for(let i=0;i<3;i++){const g=new THREE.PlaneGeometry(8,21);g.translate(0,10.5,0);g.rotateY(i*Math.PI/3);cards.push(g);}
+  for(let i=0;i<3;i++){const g=new THREE.PlaneGeometry(10.5,21);g.translate(0,10.5,0);g.rotateY(i*Math.PI/3);cards.push(g);}
   texture.colorSpace=THREE.SRGBColorSpace;texture.anisotropy=4;
   const material=new THREE.MeshStandardMaterial({map:texture,alphaTest:.35,alphaToCoverage:true,side:THREE.DoubleSide,roughness:1});
   // Spatial batches let the frustum discard forest behind / beside the camera.

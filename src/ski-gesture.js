@@ -18,11 +18,13 @@ export function advanceSkiGesture(state,s,dt,surface){
  const live=grounded&&!s.poseAuthoring&&(s.speed||0)>.5,load=live?clamp((s.turnAcceleration??(9.81*Math.tan(Math.min(Math.abs(edge),1.05))))/9.81,0,1.6)*smoothstep(s.speed||0,1,5):0;
  const follow=(value,target,rate)=>dt?value+(target-value)*(1-Math.exp(-dt*rate)):target;
  state.chestBank=follow(state.chestBank??edge,edge,8);
- const flexTarget=live?load*.027-release*.018:0;
+ const athletic=live?smoothstep(s.speed||0,.8,7):0;
+ const flexTarget=live?clamp(load*.027+athletic*.025-release*.018,0,.065):0;
  state.bodyFlex=follow(state.bodyFlex||0,flexTarget,12);
  const acceleration=dt&&state.previousSpeed!==undefined?clamp(((s.speed||0)-state.previousSpeed)/dt,-4,4):0;
  state.previousSpeed=s.speed||0;state.chestPitch=follow(state.chestPitch||0,live?acceleration*.010:0,7);
- const dynamic={flex:live?state.bodyFlex:0,roll:live?clamp(state.chestBank-edge,-.4,.4)*.14:0,pitch:live?state.chestPitch:0};
+ state.forwardPitch=follow(state.forwardPitch||0,athletic*.24*(1-(s.tuck||0)*.8)*(1-(s.poling||0)*.25),12);
+ const dynamic={flex:state.bodyFlex,roll:live?clamp(state.chestBank-edge,-.4,.4)*.14:0,pitch:(live?state.chestPitch:0)+state.forwardPitch};
  const landing=s.landingAnimationRemaining>0?Math.sin(Math.PI*clamp(1-s.landingAnimationRemaining/(s.landingAnimationDuration||.55),0,1)):0;
  return {dynamic,release,absorption:state.absorption,landing,landingPhase:s.landingAnimationRemaining>0?clamp(1-s.landingAnimationRemaining/(s.landingAnimationDuration||.55),0,1):1,landingStrength:clamp(s.landingStrength||0,0,1)};
 }

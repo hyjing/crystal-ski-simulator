@@ -4,7 +4,7 @@ export function loadMotionClips(){
  return library??=fetch(`${import.meta.env.BASE_URL}assets/skier-motion.json?v=5`).then(r=>{if(!r.ok)throw Error('motion library');return r.json();}).then(data=>data.clips.map(c=>THREE.AnimationClip.parse(c))).catch(error=>{console.warn('Motion clips unavailable; retaining procedural fallback',error);return null;});
 }
 export class SkierMotion{
- constructor(model,clips){this.model=model;this.mixer=new THREE.AnimationMixer(model);this.actions=new Map();this.weights=new Map();this.mode=null;this.active=false;const reference=clips.find(c=>c.name==='ski-glide');for(let clip of clips){if(clip.name.startsWith('ski-plant-')&&reference){clip=clip.clone();const side=clip.name.endsWith('left')?'l':'r';clip.tracks=clip.tracks.filter(t=>new RegExp(`^(clavicle|upperarm|lowerarm|hand)_${side}\\.`).test(t.name));THREE.AnimationUtils.makeClipAdditive(clip,0,reference,30);}const action=this.mixer.clipAction(clip);action.play();action.setEffectiveWeight(0);this.actions.set(clip.name,action);this.weights.set(clip.name,0);}}
+ constructor(model,clips){this.model=model;this.mixer=new THREE.AnimationMixer(model);this.actions=new Map();this.weights=new Map();this.mode=null;this.active=false;this.sampledPose=[...new Set(clips.flatMap(c=>c.tracks.map(t=>t.name.split('.')[0])))].map(n=>model.getObjectByName(n)).filter(b=>b?.isBone).map(b=>({b,q:b.quaternion.clone(),p:b.position.clone()}));const reference=clips.find(c=>c.name==='ski-glide');for(let clip of clips){if(clip.name.startsWith('ski-plant-')&&reference){clip=clip.clone();const side=clip.name.endsWith('left')?'l':'r';clip.tracks=clip.tracks.filter(t=>new RegExp(`^(clavicle|upperarm|lowerarm|hand)_${side}\\.`).test(t.name));THREE.AnimationUtils.makeClipAdditive(clip,0,reference,30);}const action=this.mixer.clipAction(clip);action.play();action.setEffectiveWeight(0);this.actions.set(clip.name,action);this.weights.set(clip.name,0);}}
  modeFor(s){if(s.grab>0)return null;if(s.pedestrian)return !s.holding&&!(s.sitAmount>.01)?'visitor':null;return !s.ride?'ski':null;}
  apply(s,dt){
   const requested=this.modeFor(s),visitor=requested==='visitor',ski=requested==='ski';
@@ -33,6 +33,11 @@ export class SkierMotion{
   for(const [n] of this.actions){const w=THREE.MathUtils.lerp(this.weights.get(n),target.get(n)||0,a);this.weights.set(n,w);if(!n.startsWith('ski-plant-'))total+=w;}
   for(const [n,action] of this.actions){action.enabled=true;action.setEffectiveWeight(n.startsWith('ski-plant-')?this.weights.get(n):this.weights.get(n)/Math.max(total,1e-9));if(n.startsWith('ski-plant-'))action.time=Math.min(.999,s.plantPhase||0)*action.getClip().duration;if(n==='ski-pole-push')action.time=(s.polePhase||0)*action.getClip().duration;if(n==='visitor-walk')action.time=(((s.walkPhase||0)/(2*Math.PI))%1+1)%1*action.getClip().duration;if(n.startsWith('ski-landing-'))action.time=Math.min(.999,s.landingPhase||0)*action.getClip().duration;}
   for(const n of ['ski-pole-push','visitor-walk','ski-plant-left','ski-plant-right','ski-landing-soft','ski-landing-hard'])this.actions.get(n)?.setEffectiveTimeScale(0);
-  this.mixer.update(Math.max(0,dt));this.mode=mode;this.active=true;return mode;
+  // PropertyMixer skips identical key values. Restore the previous raw sample
+  // so post-animation body / IK overlays cannot accumulate on those skipped frames.
+  for(const state of this.sampledPose){state.b.quaternion.copy(state.q);state.b.position.copy(state.p);}
+  this.mixer.update(Math.max(0,dt));
+  for(const state of this.sampledPose){state.q.copy(state.b.quaternion);state.p.copy(state.b.position);}
+  this.mode=mode;this.active=true;return mode;
  }
 }

@@ -213,3 +213,7 @@ The November 6, 2026 npm audit reported zero known vulnerabilities. Gitleaks sca
 ### Multi-resort identity and scenery
 
 184 unit tests pass. Added sequential resort-switch identity checks, pixel-edge registration / attribution for all three Canadian satellite textures, regional/background seam registration and non-overlap, bounded Coast Mountains geometry, 25m ground LOD / photographic shader integration, and per-region atmosphere shader inputs. Existing station collision / spawn tests pass with the expanded detailed lodge set. Production build with the GitHub Pages base path passes. Texture source quality was inspected locally; no browser scene / GPU visual verification was performed.
+
+### Groves, automatic forward stance and faster input
+
+189 tests pass. New cases check neighboring tree density, glades / landcover boundaries, minimum separation, deterministic placement and seed cap; actual route / station clearance; automatic moving torso hinge and smooth relaxation; stable raw-sample overlays over hundreds of frames; and faster real-path response retaining momentum. Existing energy, edge-change, pole attachment and outward-elbow checks pass. The old turning test now checks path distance plus forward progress, allowing the tighter arc to cover less forward distance. Production Pages-path build passes. No browser visual test performed.
