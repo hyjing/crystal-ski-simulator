@@ -24,7 +24,7 @@ test('short steering presses curve the true path more promptly while preserving 
 function silhouette(r){const p=n=>r.bones[n].getWorldPosition(new THREE.Vector3());return{hip:p('pelvis').y,head:p('Head').y,span:p('hand_l').distanceTo(p('hand_r')),bend:['l','r'].map(side=>180-p(`thigh_${side}`).sub(p(`calf_${side}`)).angleTo(p(`foot_${side}`).sub(p(`calf_${side}`)))*180/Math.PI),feet:['l','r'].map(side=>p(`foot_${side}`).y)};}
 test('normal glide has leg extension and an open arm silhouette while explicit tuck remains compact',async()=>{
  const {a,rig}=await fresh();for(let i=0;i<180;i++)updateAthletePose(a,{speed:12},1/120,()=>0);const glide=silhouette(rig);assert.ok(glide.bend.every(b=>b>30&&b<55),'ordinary glide should not use a deep squat');assert.ok(glide.span>.74);assert.ok(glide.head>1.55);
- for(let i=0;i<180;i++)updateAthletePose(a,{speed:20,tuck:1},1/120,()=>0);const tuck=silhouette(rig);assert.ok(tuck.hip<glide.hip-.20);assert.ok(tuck.span<glide.span-.15);assert.ok(tuck.bend.every(b=>b>80));
+ for(let i=0;i<180;i++)updateAthletePose(a,{speed:20,tuck:1},1/120,()=>0);const tuck=silhouette(rig);assert.ok(tuck.hip<glide.hip-.20);assert.ok(tuck.span>.72,'tucking the torso must not fold the hands into the chest');assert.ok(tuck.bend.every(b=>b>80));
 });
 test('release, preload and airborne balance have distinct extended / compressed silhouettes without losing foot contact',async()=>{
  const {a,rig}=await fresh();for(let i=0;i<180;i++){a.userData.gesture={side:1,edge:.7,releaseAge:0};updateAthletePose(a,{speed:12},1/120,()=>0);}const release=silhouette(rig);assert.ok(release.bend.every(b=>b>5&&b<30));assert.ok(release.feet.every(y=>Math.abs(y-.208)<.012));

@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import {GLTFLoader} from 'three/addons/loaders/GLTFLoader.js';
 import {SkierMotion,loadMotionClips} from './skier-motion.js';
 import {createPalmSocket,syncHandPoles} from './pole-rig.js';
-import {skiArmOffset,reachableHand,smoothHand,skiArmSolution} from './arm-pose.js';
+import {skiArmOffset,reachableHand,smoothHand,skiArmSolution,openSkiHand} from './arm-pose.js';
 import {clone as cloneSkeleton} from 'three/addons/utils/SkeletonUtils.js';
 const modelSources=new Map();
 export function upperBodyCounterAngle(heading,fallLine,motion={}){
@@ -80,8 +80,8 @@ export function updateHumanoid(athlete,pose){
     if(motionMode){
       const hand=handBone.getWorldPosition(new THREE.Vector3());
       if(!pedestrian&&!pose.grab&&!pose.fall&&!pose.crouch){
-        const outward=bones[`lowerarm_${suffix}`].getWorldPosition(new THREE.Vector3()).sub(shoulder).dot(poseRight)*arm.sign;
-        if(outward<length*.16){const solution=skiArmSolution(shoulder,hand,{right:poseRight,up:poseUp,forward:poseForward},arm.sign,l.upper,l.lower),plane=solution.joint.clone().sub(shoulder).cross(solution.end.clone().sub(solution.joint)).normalize();aimInPlane(rig,`upperarm_${suffix}`,`lowerarm_${suffix}`,solution.joint,plane);aimInPlane(rig,`lowerarm_${suffix}`,`hand_${suffix}`,solution.end,plane);}
+        const outward=bones[`lowerarm_${suffix}`].getWorldPosition(new THREE.Vector3()).sub(shoulder).dot(poseRight)*arm.sign,corrected=!pose.airborne&&!(pose.crashRemaining>0)?openSkiHand(shoulder,hand,poseRight,arm.sign,length):hand.clone();
+        if(outward<length*.16||corrected.distanceToSquared(hand)>1e-10){const solution=skiArmSolution(shoulder,corrected,{right:poseRight,up:poseUp,forward:poseForward},arm.sign,l.upper,l.lower),plane=solution.joint.clone().sub(shoulder).cross(solution.end.clone().sub(solution.joint)).normalize();aimInPlane(rig,`upperarm_${suffix}`,`lowerarm_${suffix}`,solution.joint,plane);aimInPlane(rig,`lowerarm_${suffix}`,`hand_${suffix}`,solution.end,plane);hand.copy(solution.end);}
       }
       arm.poseHand=athlete.worldToLocal(hand.clone());arm.poseMetrics={reach:shoulder.distanceTo(hand),length,clip:true};continue;
     }
@@ -90,6 +90,7 @@ export function updateHumanoid(athlete,pose){
     else hand=shoulder.clone().add(skiArmOffset({...pose,plant:arm.target.plant},arm.sign).multiplyScalar(length).applyQuaternion(torsoQ));
     hand=reachableHand(shoulder,hand,length);const localTarget=athlete.worldToLocal(hand.clone());
     arm.poseHand=smoothHand(arm.poseHand,localTarget,pose.dt||0,length/.52);hand=reachableHand(shoulder,athlete.localToWorld(arm.poseHand.clone()),length);
+    if(!pedestrian&&!pose.grab&&!pose.fall&&!pose.crouch&&!pose.airborne&&!pose.crashRemaining)hand=openSkiHand(shoulder,hand,poseRight,arm.sign,length);
     const elbow=shoulder.clone().addScaledVector(poseRight,arm.sign*.10).addScaledVector(poseUp,-.18).addScaledVector(poseForward,-.08),solution=pedestrian||pose.grab||pose.fall||pose.crouch?jointSolution(shoulder,hand,elbow,l.upper,l.lower):skiArmSolution(shoulder,hand,{right:poseRight,up:poseUp,forward:poseForward},arm.sign,l.upper,l.lower);
     const plane=solution.joint.clone().sub(shoulder).cross(solution.end.clone().sub(solution.joint)).normalize();aimInPlane(rig,`upperarm_${suffix}`,`lowerarm_${suffix}`,solution.joint,plane);aimInPlane(rig,`lowerarm_${suffix}`,`hand_${suffix}`,solution.end,plane);
     // Wrist belongs to the forearm. Never align its world quaternion to the

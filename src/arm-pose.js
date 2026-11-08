@@ -4,11 +4,17 @@ const clamp=THREE.MathUtils.clamp;
 // legacy character units. IK corrects these poses instead of inventing the pose.
 export function skiArmOffset(motion,sign){
  const tuck=clamp(motion.tuck||0,0,1),pole=clamp(motion.poling||0,0,1),phase=(motion.polePhase||0)*Math.PI*2,bank=motion.edgeRoll||0,plant=clamp(motion.plant||0,0,1);
- const neutral=new THREE.Vector3(sign*.34,-.40,.64),tucked=new THREE.Vector3(sign*.08,-.20,.56),pushing=new THREE.Vector3(sign*.34,-.46-.12*Math.sin(phase),.35+.36*Math.cos(phase));
+ const neutral=new THREE.Vector3(sign*.42,-.46,.52),tucked=new THREE.Vector3(sign*.43,-.50,.48),pushing=new THREE.Vector3(sign*.34,-.46-.12*Math.sin(phase),.35+.36*Math.cos(phase));
  neutral.lerp(tucked,tuck).lerp(pushing,pole);neutral.x+=sign*Math.abs(bank)*.05;neutral.y+=sign*bank*.08;
  neutral.lerp(new THREE.Vector3(sign*.36,-.42,.70),plant);
  const shape=motion.shape||{};neutral.y+=shape.armLift||0;neutral.x+=sign*(shape.armSpread||0);
  return neutral.lerp(new THREE.Vector3(sign*.38,-.58,.42),clamp(shape.brace||0,0,1));
+}
+// Preserve lateral hand clearance in the moving chest frame after animation
+// mixing. A compact torso does not imply folding both forearms into the chest.
+export function openSkiHand(shoulder,hand,right,sign,length){
+ const outward=hand.clone().sub(shoulder).dot(right)*sign,min=length*.28;
+ return reachableHand(shoulder,hand.clone().addScaledVector(right,sign*Math.max(0,min-outward)),length);
 }
 export function reachableHand(shoulder,target,length,maxReach=.94){
  const delta=target.clone().sub(shoulder),distance=delta.length();

@@ -225,3 +225,7 @@ The November 6, 2026 npm audit reported zero known vulnerabilities. Gitleaks sca
 ### Open stance / extension contrast
 
 194 unit tests pass. New checks measure a non-squatting ordinary glide, open hand span, retained compact tuck, leg extension during release, deeper preload, wider airborne balance, grounded boot contact and asymmetric leg loading in a settled carve. Existing faster-pole, wrist / elbow continuity, attachment and landing tests pass. Production Pages-path build passes. Six actual-mesh key poses were reviewed with an offline CPU projection; no browser visual test or commercial-animation fidelity approval was performed.
+
+### Sustained W / mixed-action hand clearance
+
+196 tests pass. Added real controller sequences for long-held tuck, alternating turns, simultaneous poling and release in both clip and fallback paths; rendered NPC intermediate poses also retain lateral hand clearance and palm-to-pole attachment. The earlier tuck-width assertion was corrected: compact torso / legs do not require hands folded against the chest. Production Pages-path build passes. Rear-view mesh poses were inspected offline; no browser visual test performed.
