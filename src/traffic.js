@@ -3,7 +3,7 @@ import {createAthleteRig,updateAthletePose} from './athlete.js';
 import {loadHumanoid} from './humanoid.js';
 import {applyGear,GEAR_PRESETS} from './wardrobe.js';
 import {nearestOnRoute,clamp} from './physics.js';
-import {trafficPoint,sweptContact,planAvoidance} from './traffic-brain.js';
+import {trafficPoint,sweptContact,planAvoidance,yieldToSkier} from './traffic-brain.js';
 import {crowdRoutes,lodgeAnchors,insideFootprint,poseInterval,SKIER_COUNT,CROWD_LIMIT,VISIBLE_CROWD_LIMIT} from './crowd-activities.js';
 import {makeVisitorSite,siteLocal,sitePoint,beginVisitor,advanceVisitor,visitorSurface,advanceSkierRoutine,fallAnimation} from './npc-routines.js';
 import {createRestArea,setVisitorProp,updateVisitorProp} from './rest-area.js';
@@ -18,7 +18,7 @@ export class SkiTraffic{
   const closest=p=>[...anchors].sort((a,b)=>Math.hypot(a.x-p.x,a.z-p.z)-Math.hypot(b.x-p.x,b.z-p.z))[0];
   const upper=closest(top),lower=closest(bottom),ordered=[upper,lower,...anchors.filter(a=>a!==upper&&a!==lower)].filter(Boolean),unique=[];for(const a of ordered)if(unique.every(b=>Math.hypot(a.x-b.x,a.z-b.z)>18))unique.push(a);
   for(const area of this.restAreas)area.dispose();this.sites=Array.from({length:3},(_,i)=>makeVisitorSite(unique[i]||{x:(i===1?bottom:top).x+(i===2?-28:28),z:(i===1?bottom:top).z+8},this.terrain,i));this.restAreas=this.sites.map(site=>createRestArea(this.scene,this.terrain,site));this.onStructuresChanged?.();
-  this.states.forEach((s,i)=>{const actor=this.actors[i];actor.userData.plant={};actor.userData.lean=0;actor.userData.counterYaw=undefined;for(const arm of actor.userData.arms||[])arm.npcHand=null;s.speed=0;s.time=i*1.7;s.poseAge=1;s.avoid=0;s.avoidSide=0;s.avoidClear=0;s.fall=0;s.cooldown=0;s.decisionAge=1;s.roll=0;s.tuck=0;s.walkPhase=0;s.phase=0;s.walkAmount=0;s.activity='ski';s.routineClock=i<6?0:(i*3)%40;s.nextPause=undefined;s.nextFall=undefined;
+  this.states.forEach((s,i)=>{const actor=this.actors[i];actor.userData.plant={};actor.userData.lean=0;actor.userData.counterYaw=undefined;for(const arm of actor.userData.arms||[])arm.npcHand=null;s.speed=0;s.time=i*1.7;s.poseAge=1;s.avoid=0;s.avoidSide=0;s.avoidClear=0;s.fall=0;s.cooldown=0;s.decisionAge=1;s.roll=0;s.tuck=0;s.walkPhase=0;s.phase=0;s.walkAmount=0;s.activity='ski';s.routineClock=i<6?0:(i*3)%40;s.nextPause=undefined;s.nextFall=undefined;s.yielding=false;s.yieldClear=0;
    if(s.kind==='ski'){s.route=plans[i];const start=nearestOnRoute(player,s.route.points).progress;s.progress=i<6?Math.min(s.route.length-25,start+25+i*32):s.route.length*(.15+.70*((i*.381966)%1));s.point=trafficPoint(s.route,s.progress,s.time,i);}
    else{const j=i-SKIER_COUNT;beginVisitor(s,this.sites[Math.floor(j/2)],j);s.seatGround=this.terrain.surface(s.point.x,s.point.z);setVisitorProp(actor,s.prop);}
    s.heading=s.point.heading;s.previousHeading=s.heading;
@@ -35,12 +35,13 @@ export class SkiTraffic{
     const neighbors=distance<350?[player,...this.states.filter(n=>n!==s&&n.point&&!n.indoor).map(n=>n.point),...obstacles(old.x,old.z)]:[];
     const plan=planAvoidance(s,neighbors,path.heading,i,decisionDt);s.brake=plan.brake;s.avoidTarget=plan.avoid;s.target=clamp((3.2+s.slope*16)*profile.speed,2.2,18)*plan.brake;
    }
-   if(s.activity==='pull-over'||s.activity==='pause'){s.avoidTarget=s.parkingSide*12;s.target=s.activity==='pause'?0:1.8;}
+   const yielding=yieldToSkier(s,player,dt);if(yielding){s.target=0;s.brake=0;s.avoidTarget=s.avoid;}
+   if(!yielding&&(s.activity==='pull-over'||s.activity==='pause')){s.avoidTarget=s.parkingSide*12;s.target=s.activity==='pause'?0:1.8;}
    const lateralLimit=(.25+s.speed*.30)*dt;s.avoid+=clamp((s.avoidTarget-s.avoid)*(1-Math.exp(-dt*1.5)),-lateralLimit,lateralLimit);const remaining=s.route.length-22-s.progress,target=remaining<10?0:s.target;
    s.speed+=(target-s.speed)*(1-Math.exp(-dt*(s.brake<.7?4:1.2)));s.progress=Math.min(s.route.length-22,s.progress+s.speed*dt);s.point=trafficPoint(s.route,s.progress,s.time,i,s.avoid);
    const stepLength=Math.hypot(s.point.x-old.x,s.point.z-old.z),maxStep=s.speed*dt*1.3;if(stepLength>maxStep&&stepLength>0){s.point.x=old.x+(s.point.x-old.x)*maxStep/stepLength;s.point.z=old.z+(s.point.z-old.z)*maxStep/stepLength;}
    const dx=s.point.x-old.x,dz=s.point.z-old.z;if(Math.hypot(dx,dz)>.00001)s.point.heading=Math.atan2(dx,dz);
-   if(s.activity==='pause'&&s.speed<.15){s.point={...old};}else if(Math.hypot(dx,dz)<.001)s.point.heading=s.heading;
+   if((s.activity==='pause'||yielding)&&s.speed<.15){s.point={...old};}else if(Math.hypot(dx,dz)<.001)s.point.heading=s.heading;
    const yaw=Math.atan2(Math.sin(s.point.heading-s.heading),Math.cos(s.point.heading-s.heading));s.heading+=clamp(yaw*(1-Math.exp(-dt*6)),-dt*1.8,dt*1.8);const rate=Math.atan2(Math.sin(s.heading-s.previousHeading),Math.cos(s.heading-s.previousHeading))/Math.max(dt,.001);s.previousHeading=s.heading;
    s.roll+=(clamp(-Math.atan(rate*s.speed/9.81),-.55,.55)-s.roll)*(1-Math.exp(-dt*6));s.tuck+=((s.speed>8.5&&Math.abs(s.roll)<.12?.5:.08)-s.tuck)*(1-Math.exp(-dt*2));s.poling=s.activity==='ski'&&s.speed<3&&s.slope<.10?.65:0;s.phase=(s.phase+dt*1.15)%1;
   }

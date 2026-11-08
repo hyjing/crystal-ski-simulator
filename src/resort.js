@@ -132,11 +132,12 @@ export function addResort(scene,terrain,data){
   const animate=time=>{animate.time=time;
     const update=(vehicles,meshes)=>vehicles.forEach((chair,i)=>{
       const distance=((chair.offset+time*2.5*chair.side)%chair.total+chair.total)%chair.total;
+      chair.travelProgress=chair.side>0?distance:chair.total-distance;
       const seg=chair.segments.find(s=>distance<=s.start+s.l)||chair.segments.at(-1),t=(distance-seg.start)/seg.l;
       dummy.position.set(THREE.MathUtils.lerp(seg.a.x,seg.b.x,t)+seg.rx,THREE.MathUtils.lerp(seg.a.y,seg.b.y,t)-Math.sin(Math.PI*t)*1.1-2.8,THREE.MathUtils.lerp(seg.a.z,seg.b.z,t)+seg.rz);
       dummy.rotation.set(0,Math.atan2(seg.b.x-seg.a.x,seg.b.z-seg.a.z)+(chair.side<0?Math.PI:0),0);dummy.updateMatrix();chair.collider.position.copy(dummy.position);chair.collider.quaternion.copy(dummy.quaternion);if(chair.riderMatrix)chair.riderMatrix.copy(dummy.matrix);meshes.forEach(mesh=>mesh.setMatrixAt(i,dummy.matrix));
     });update(openChairs,seats);update(closedCabins,cabins);for(const mesh of [...seats,...cabins])mesh.instanceMatrix.needsUpdate=true;
-  };animate.carriers=openChairs;animate.time=0;animate(0);return animate;
+  };animate.allCarriers=chairs;animate.carriers=openChairs;animate.time=0;animate(0);return animate;
 }
 
 

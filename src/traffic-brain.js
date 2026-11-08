@@ -33,3 +33,11 @@ export function safeRecovery(route,player,terrain,blocked=()=>false){
  }
  const p=pointAlongRoute(route,Math.max(0,along-12));return{...p,heading};
 }
+
+// A slow skier waits for a nearby crossing skier to clear; hysteresis prevents stop/go flutter.
+export function yieldToSkier(state,player,dt){
+ const p=state.point,dx=player.x-p.x,dz=player.z-p.z,d=Math.hypot(dx,dz),ahead=dx*Math.sin(state.heading)+dz*Math.cos(state.heading);
+ if(!state.yielding&&d<6&&ahead>-.5&&state.speed<4){state.yielding=true;state.yieldClear=0;}
+ if(state.yielding){state.yieldClear=d>9?(state.yieldClear||0)+dt:0;if(state.yieldClear>.8){state.yielding=false;state.yieldClear=0;}}
+ return !!state.yielding;
+}

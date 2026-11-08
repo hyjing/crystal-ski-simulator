@@ -41,7 +41,7 @@ export class PowderSurface {
     this.demTexture=new THREE.DataTexture(groundData,terrain.width,terrain.height,THREE.RGBAFormat,THREE.FloatType);
     this.demTexture.minFilter=this.demTexture.magFilter=THREE.NearestFilter;this.demTexture.generateMipmaps=false;this.demTexture.needsUpdate=true;
     const original=material.onBeforeCompile;
-    this.uniforms={powderDepth:{value:this.texture},powderOrigin:{value:new THREE.Vector2()},powderCenter:{value:new THREE.Vector2()},powderExtent:{value:TEXTURE_SIZE*CELL},groundDEM:{value:this.demTexture},groundSize:{value:new THREE.Vector2(terrain.width,terrain.height)},groundSpacing:{value:terrain.spacing},powderWhite:{value:new THREE.Color('#e8f0eb')},powderIce:{value:new THREE.Color('#b7ced4')},powderRock:{value:new THREE.Color('#899e9f')},powderFresh:{value:new THREE.Color('#f1f4f8')}};
+    this.uniforms={practiceFeatures:{value:Array.from({length:3},()=>new THREE.Vector4())},practiceCount:{value:0},powderDepth:{value:this.texture},powderOrigin:{value:new THREE.Vector2()},powderCenter:{value:new THREE.Vector2()},powderExtent:{value:TEXTURE_SIZE*CELL},groundDEM:{value:this.demTexture},groundSize:{value:new THREE.Vector2(terrain.width,terrain.height)},groundSpacing:{value:terrain.spacing},powderWhite:{value:new THREE.Color('#e8f0eb')},powderIce:{value:new THREE.Color('#b7ced4')},powderRock:{value:new THREE.Color('#899e9f')},powderFresh:{value:new THREE.Color('#f1f4f8')}};
     material.onBeforeCompile=shader=>{
       original(shader);Object.assign(shader.uniforms,this.uniforms);
       shader.fragmentShader=shader.fragmentShader.replace('#include <common>','#include <common>\nuniform vec2 powderCenter;varying float vPowderSlope;uniform vec3 powderWhite;uniform vec3 powderIce;uniform vec3 powderRock;uniform vec3 powderFresh;').replace('#include <color_fragment>',`#include <color_fragment>
@@ -56,12 +56,15 @@ export class PowderSurface {
         uniform sampler2D powderDepth;uniform vec2 powderOrigin;uniform vec2 powderCenter;uniform float powderExtent;
         uniform sampler2D groundDEM;uniform vec2 groundSize;uniform float groundSpacing;
         varying float vPowderSlope;
+        uniform vec4 practiceFeatures[3];uniform int practiceCount;
+        float practiceAt(vec2 p){float h=0.;for(int k=0;k<3;k++){if(k>=practiceCount)break;vec4 f=practiceFeatures[k];vec2 d=p-f.xy;float u=d.x*sin(f.z)+d.y*cos(f.z),v=d.x*cos(f.z)-d.y*sin(f.z);if(u< -7.||u>5.||abs(v)>=4.5)continue;float profile=u<0.?smoothstep(-7.,0.,u):1.-smoothstep(0.,5.,u);float acrossProfile=pow(1.-pow(v/4.5,2.),2.);h=max(h,f.w*profile*acrossProfile);}return h;}
         vec3 groundAt(vec2 p){
           vec2 grid=clamp(p/groundSpacing+(groundSize-1.)*.5,vec2(0.),groundSize-1.001),i=floor(grid),f=fract(grid);
           vec3 a=texture2D(groundDEM,(i+.5)/groundSize).rgb,b=texture2D(groundDEM,(i+vec2(1.5,.5))/groundSize).rgb;
           vec3 c=texture2D(groundDEM,(i+vec2(.5,1.5))/groundSize).rgb,d=texture2D(groundDEM,(i+1.5)/groundSize).rgb;
           vec2 slope=mix(mix(a.gb,b.gb,f.x),mix(c.gb,d.gb,f.x),f.y);
           float h=f.x+f.y<=1.?a.r*(1.-f.x-f.y)+b.r*f.x+c.r*f.y:d.r*(f.x+f.y-1.)+b.r*(1.-f.y)+c.r*(1.-f.x);
+          h+=practiceAt(p);slope+=vec2(practiceAt(p+vec2(.5,0.))-practiceAt(p-vec2(.5,0.)),practiceAt(p+vec2(0.,.5))-practiceAt(p-vec2(0.,.5)));
           return vec3(h,slope);
         }
         float powderOffset(vec2 p){vec2 uv=(p-powderOrigin)/powderExtent;float pressed=(texture2D(powderDepth,uv).r-.5)*.8;float mound=.32+.055*sin(p.x*.31+sin(p.y*.12))+.035*sin(p.y*.57+p.x*.08);vec2 edge=vec2(24.)-abs(p-powderCenter);return (mound+pressed)*smoothstep(0.,4.,min(edge.x,edge.y));}
@@ -75,9 +78,10 @@ export class PowderSurface {
         .replace('vSnowPosition = (modelMatrix * vec4(position,1.)).xyz;','vSnowPosition = vec3(powderWorld.x,ground.x-1200.,powderWorld.y);')
         .replace('#include <uv_vertex>','#include <uv_vertex>\nvMapUv=vec2(position.x+powderCenter.x+(groundSize.x-1.)*groundSpacing*.5,(groundSize.y-1.)*groundSpacing*.5-position.z-powderCenter.y)/5.;vNormalMapUv=vMapUv;vRoughnessMapUv=vMapUv;');
     };
-    material.customProgramCacheKey=()=>'deformable-powder-gpu-v2';
+    material.customProgramCacheKey=()=>'deformable-powder-gpu-v3';
     this.mesh=new THREE.Mesh(this.geometry,material);this.mesh.receiveShadow=true;this.mesh.frustumCulled=false;scene.add(this.mesh);
   }
+  setPractice(features){this.uniforms.practiceCount.value=Math.min(3,features.length);for(let i=0;i<3;i++){const f=features[i];this.uniforms.practiceFeatures.value[i].set(f?.x||0,f?.z||0,f?.heading||0,f?.height||0);}}
   reset(){this.field.clear();this.previous=null;this.center=null;this.textureOrigin=null;}
   breakTrail(){this.previous=null;}
   surface(x,z){

@@ -54,7 +54,7 @@ function label(text,width=512){
 }
 
 export function addStationStructures(scene,terrain,infrastructure,areas){
-  const groups=[];
+  const groups=[];scene.userData.liftTerminals=[];
   const {metal,wood,snow,glass,stone,dark,paint}=resortMaterials();
   const box=(group,w,h,d,x,y,z,mat)=>{const g=new THREE.BoxGeometry(w,h,d),uv=g.attributes.uv;for(let f=0;f<6;f++){const [u,v]=f<2?[d,h]:f<4?[w,d]:[w,h];for(let k=0;k<4;k++){const i=f*4+k;uv.setXY(i,uv.getX(i)*u/2,uv.getY(i)*v/2);}}const mesh=new THREE.Mesh(g,mat);mesh.position.set(x,y,z);mesh.castShadow=mesh.receiveShadow=true;mesh.userData.structureCollider=h>.4||(h>.08&&Math.min(w,d)<.3);group.add(mesh);return mesh;};
   const terminals=infrastructure.features.filter(f=>f.geometry.type==='LineString'&&(areas.some(a=>a.liftId===String(f.id))||f.properties.name==='Mt. Rainier Gondola'));
@@ -64,6 +64,14 @@ export function addStationStructures(scene,terrain,infrastructure,areas){
     const p=pts.at(-1),prev=pts.at(-2),heading=Math.atan2(p.x-prev.x,p.z-prev.z),group=new THREE.Group();
     group.position.set(p.x,terrain.surface(p.x,p.z)-1200,p.z);group.rotation.y=heading;scene.add(group);groups.push(group);
     group.name=`${lift.properties.name} ${role} terminal`;
+    scene.userData.liftTerminals.push({id:`${lift.id}:${role}`,liftId:String(lift.id),name:lift.properties.name,role,x:p.x,z:p.z,heading});
+    // Separate queue lane beside the open snow exit; no gate across the piste.
+    if(role==='lower'){
+      for(const x of [-14,-9])for(const z of [16,23,30]){box(group,.10,1.05,.10,x,.52,z,paint);if(z<30)box(group,.065,.08,7,x,.86,z+3.5,metal);}
+      const sign=new THREE.Mesh(new THREE.PlaneGeometry(3.8,1.05),label('QUEUE  /  排队上车'));sign.position.set(-11.5,2,31);group.add(sign);
+      for(const x of [-17,-16,-15]){box(group,.10,1.4,.10,x,.7,24,wood);const rack=box(group,.15,1.8,.06,x,1,24.1,paint);rack.rotation.z=.15;}
+    }
+    const operation=new THREE.Mesh(new THREE.PlaneGeometry(2.3,.65),label(role==='upper'?'UNLOAD  →':'LIFT OPEN'));operation.position.set(4.5,2.6,8);group.add(operation);
     for(const side of [-1,1])for(const z of [-5,5])box(group,.42,5.2,.48,side*3,2.6,z,metal);
     const housing=new THREE.Mesh(new RoundedBoxGeometry(7.5,1.4,15,4,.45),paint);housing.position.set(0,5.6,0);group.add(housing);const cover=new THREE.Mesh(new RoundedBoxGeometry(8,.30,16,3,.14),snow);cover.position.set(0,6.46,0);group.add(cover);
     for(const side of [-1,1]){box(group,.05,.14,12,side*3.76,5.34,0,dark);for(let z=-5.8;z<5.9;z+=.55)box(group,.08,.43,.08,side*3.78,5.69,z,dark);}

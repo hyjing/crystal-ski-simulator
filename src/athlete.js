@@ -76,7 +76,7 @@ export function updateAthletePose(athlete,s,dt,surface){
   const roll=s.edgeRoll??turn*edge,weight=Math.abs(roll),flex=shape.flex+pole*(.06+.07*Math.max(0,drive))+gesture.absorption*.25+gesture.landing*.20,extension=.18*(1-Math.max(tuck*.8,sit,fall,crouch,shape.brace)),hipY=THREE.MathUtils.lerp(1.86+extension-flex+walk*.025*Math.cos(walkPhase*2),1.22,sit)-fall*.25-crouch*.60-(s.landingRecover||0)*.20-gesture.dynamic.flex/.52;
   const counterTarget=(s.airborne||s.crashRemaining>0?0:upperBodyCounterAngle(s.heading||0,s.downhillHeading??s.heading??0,s))+(s.idleShift||0)*.12;
   const counter=athlete.userData.counterYaw===undefined||dt===0?counterTarget:THREE.MathUtils.lerp(athlete.userData.counterYaw,counterTarget,1-Math.exp(-dt*8));athlete.userData.counterYaw=counter;
-  const targetLean=roll,rate=dt>0?1-Math.exp(-dt*20):1;
+  const balance=s.poseAuthoring?1:THREE.MathUtils.smoothstep(s.speed||0,.4,4),targetLean=roll*balance,rate=dt>0?1-Math.exp(-dt*20):1;
   athlete.userData.lean=THREE.MathUtils.lerp(athlete.userData.lean||0,targetLean,rate);const lean=athlete.userData.lean,hipX=-lean*.62+(s.idleShift||0)*.08;
   body.rotation.z=0;body.position.y=-pole*.035*Math.sin(phase);pelvis.position.set(hipX,hipY-.06,shape.hipForward);
   skiRig.position.set(0,grab,grab*.9);skiRig.rotation.x=s.ridePose?.15:0;if(s.ridePose)skiRig.position.set(0,-.42,.65);
@@ -95,8 +95,12 @@ export function updateAthletePose(athlete,s,dt,surface){
     if(s.pedestrian){
       hand.set(hipX+sign*.60,hipY-.10+walk*.025*Math.cos(walkPhase),.12-walk*.28*Math.sin(walkPhase+(sign>0?0:Math.PI)));
       if(sit)hand.lerp(new THREE.Vector3(hipX+sign*.40,hipY+.02,1.02),sit);
-      if(s.holding&&sign<0)hand.set(hipX-.40,hipY+.38+(s.consumeAmount||0)*.85,.48-(s.consumeAmount||0)*.14);
+      if(s.staffGesture==='wave'&&sign>0)hand.set(hipX+.88,hipY+1.15,.38+.16*Math.sin((s.staffPhase||0)*Math.PI*6));
+      if(s.staffGesture==='guide'&&sign>0)hand.set(hipX+1.05,hipY+.48,.74);
+      if(s.staffGesture==='shovel')hand.set(hipX+(sign>0?.12:-.08),hipY+(sign>0?.10:.70),.80+(sign>0?.03:0)+.12*Math.sin((s.staffPhase||0)*Math.PI*2));
+      if(s.holding&&!['staff','ride'].includes(s.holding)&&sign<0)hand.set(hipX-.40,hipY+.38+(s.consumeAmount||0)*.85,.48-(s.consumeAmount||0)*.14);
     }
+    if(s.staffGesture){if(arm.staffHand&&dt>0)hand.lerpVectors(arm.staffHand,hand,1-Math.exp(-dt*8));arm.staffHand=hand.clone();}
     if(fall||crouch)hand.lerp(new THREE.Vector3(hipX+sign*(.55+(s.fallImpact||0)*.15),.35,.65),Math.max(fall*.6,s.fallBrace||0));
     if(s.idleGesture==='goggles'&&sign>0)hand.set(hipX+.32,hipY+1.28,.42);
     if(s.idleGesture==='stretch')hand.set(hipX+sign*.65,hipY+1.55,.1);
@@ -121,5 +125,5 @@ export function updateAthletePose(athlete,s,dt,surface){
     arm.target={hand:hand.clone(),tip:tip.clone(),pedestrian:!!s.pedestrian,planted:!!(activePlant&&plantState.contact),plant,poleAim:new THREE.Vector3(sign*.08,-1,-.65-pole*.35*Math.sin(phase)+plant*.95).normalize()};
     connect(arm.pole,hand,tip);arm.basket.position.copy(tip).y+=.12;arm.basket.rotation.x=Math.PI/2;
   }
-  updateHumanoid(athlete,{hipY,hipX,lean,tuck:Math.max(tuck,crouch*.8),counter,roll,grab,headLook:s.headLook||0,ride:!!s.ridePose,poling:pole,polePhase:s.polePhase||0,edgeRoll:roll,airborne:!!s.airborne,pedestrian:!!s.pedestrian,walkAmount:walk,walkPhase,sitAmount:sit,holding:s.holding,surface,shape,dynamic:gesture.dynamic,release:gesture.release,absorption:gesture.absorption,landing:gesture.landing,landingPhase:gesture.landingPhase,landingStrength:gesture.landingStrength,jumpPreparation:s.jumpPreparation||0,flightTime:s.flightTime||0,airVy:s.airVy||0,airClearance:s.airClearance??10,landingRecover:s.landingRecover||0,fallPhase:s.fallPhase,crashRemaining:s.crashRemaining||0,plantActive:plantState.active,plantSide:plantState.plantSide,plantPhase:plantState.phase,fall:fall,crouch,dt});
+  updateHumanoid(athlete,{hipY,hipX,lean,tuck:Math.max(tuck,crouch*.8),counter,roll,grab,headLook:s.headLook||0,ride:!!s.ridePose,poling:pole,polePhase:s.polePhase||0,edgeRoll:roll*balance,airborne:!!s.airborne,pedestrian:!!s.pedestrian,walkAmount:walk,walkPhase,sitAmount:sit,holding:s.holding,surface,shape,dynamic:gesture.dynamic,release:gesture.release,absorption:gesture.absorption,landing:gesture.landing,landingPhase:gesture.landingPhase,landingStrength:gesture.landingStrength,jumpPreparation:s.jumpPreparation||0,flightTime:s.flightTime||0,airVy:s.airVy||0,airClearance:s.airClearance??10,landingRecover:s.landingRecover||0,fallPhase:s.fallPhase,crashRemaining:s.crashRemaining||0,plantActive:plantState.active,plantSide:plantState.plantSide,plantPhase:plantState.phase,fall:fall,crouch,dt});
 }
