@@ -65,3 +65,11 @@ Further input tuning uses a 48/s steer response, 36/s edge response, 0.48s progr
 ## Faster double-pole propulsion
 
 Double-pole cadence is now 1.6Hz (previously 1.35Hz), with a 480N peak force cap / 2400W power cap and quicker pose engagement. These are gameplay parameters. On flat ground a three-second start reaches about 4.78m/s / 17.2km/h, compared with about 3.89m/s / 14.0km/h before. The stroke animation remains locked to the physical pole phase and release immediately removes propulsion.
+
+## More open skiing silhouettes
+
+Ordinary ski poses previously started with roughly 69 degrees of knee flexion; automatic forward lean / load response made that neutral stance read as a continuous squat. The revised glide raises the hips about 9cm and opens the hands / elbows, while preserving a forward hip hinge. In a settled flat-ground sample at 12m/s, knee flexion is about 43 degrees and hand span about 0.76m. Explicit tuck stays compact.
+
+Release straightens the legs briefly without hyperextension, preload / impact compress, and the float / landing-preparation clips use wider balancing arms. A loaded carve retains a longer outside leg than inside leg. Normal glide / release / preload stay attached to their ski contact targets; palm attachments and outward elbow constraints remain active. A six-pose offline projection of the actual skinned mesh was reviewed for silhouette differences; it omits game lighting / fabric maps and is not an in-game capture.
+
+Movement reference direction: [Steep's official skiing gameplay](https://www.youtube.com/watch?v=KlGANYlucls) and [Riders Republic's ski / freestyle disciplines](https://www.ubisoft.com/en-us/game/riders-republic/news-updates/1QCx9T0ufDxT7sTn8SsoWV/riders-republic-everything-you-need-to-know). The selected design emphasis is an extended glide / release, clear loading and open air balance. Shredders is a snowboard reference only; its board stance is not applied to this two-ski rig. These are our own authored curves, not extracted game animation or skiing motion capture.

@@ -73,7 +73,7 @@ export function updateAthletePose(athlete,s,dt,surface){
   const plantState=advanceTurnPlant(athlete.userData.plant,s,dt);athlete.userData.poleContact=null;
   const gesture=advanceSkiGesture(athlete.userData.gesture??={},s,dt,surface),shape=skiShape(s);
   const drive=Math.sin(phase),reach=Math.cos(phase),edge=s.edgeAngle||0;
-  const roll=s.edgeRoll??turn*edge,weight=Math.abs(roll),flex=shape.flex+pole*(.06+.07*Math.max(0,drive))+gesture.absorption*.25+gesture.landing*.20,hipY=THREE.MathUtils.lerp(1.86-flex+walk*.025*Math.cos(walkPhase*2),1.22,sit)-fall*.25-crouch*.60-(s.landingRecover||0)*.20-gesture.dynamic.flex/.52;
+  const roll=s.edgeRoll??turn*edge,weight=Math.abs(roll),flex=shape.flex+pole*(.06+.07*Math.max(0,drive))+gesture.absorption*.25+gesture.landing*.20,extension=.18*(1-Math.max(tuck*.8,sit,fall,crouch,shape.brace)),hipY=THREE.MathUtils.lerp(1.86+extension-flex+walk*.025*Math.cos(walkPhase*2),1.22,sit)-fall*.25-crouch*.60-(s.landingRecover||0)*.20-gesture.dynamic.flex/.52;
   const counterTarget=(s.airborne||s.crashRemaining>0?0:upperBodyCounterAngle(s.heading||0,s.downhillHeading??s.heading??0,s))+(s.idleShift||0)*.12;
   const counter=athlete.userData.counterYaw===undefined||dt===0?counterTarget:THREE.MathUtils.lerp(athlete.userData.counterYaw,counterTarget,1-Math.exp(-dt*8));athlete.userData.counterYaw=counter;
   const targetLean=roll,rate=dt>0?1-Math.exp(-dt*20):1;

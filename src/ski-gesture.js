@@ -31,7 +31,7 @@ export function advanceSkiGesture(state,s,dt,surface){
 // Normalized authoring controls used by the offline native-skeleton baker.
 export function skiShape(s){
  const p=s.poseShape||{},bank=clamp(Math.abs(s.edgeRoll||0),0,1.1),tuck=s.tuck||0;
- return {flex:.12+bank*.16+tuck*.35+(p.flex||0),bend:.16+tuck*.45+bank*.045+(p.bend||0),hipForward:.07+tuck*.10+(p.hipForward||0),knee:.40+tuck*.20+(p.knee||0),fold:p.fold||0,stance:p.stance??1,brace:p.brace||0,armLift:p.armLift||0,release:p.release||0};
+ return {flex:.12+bank*.16+tuck*.35+(p.flex||0),bend:.16+tuck*.45+bank*.045+(p.bend||0),hipForward:.07+tuck*.10+(p.hipForward||0),knee:.40+tuck*.20+(p.knee||0),fold:p.fold||0,stance:p.stance??1,brace:p.brace||0,armLift:p.armLift||0,armSpread:p.armSpread||0,release:p.release||0};
 }
 
 // Pick a feasible snow point on the fixed-length pole sphere. Hands never snap

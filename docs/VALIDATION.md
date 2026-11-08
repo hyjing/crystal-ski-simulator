@@ -221,3 +221,7 @@ The November 6, 2026 npm audit reported zero known vulnerabilities. Gitleaks sca
 ### Faster pole stroke
 
 191 tests pass, including flat-ground starting acceleration / release, per-frame physical phase alignment at the new cadence and palm-to-pole attachment. Existing route-start, airborne and steering tests pass. Production Pages-path build passes; no browser visual test performed.
+
+### Open stance / extension contrast
+
+194 unit tests pass. New checks measure a non-squatting ordinary glide, open hand span, retained compact tuck, leg extension during release, deeper preload, wider airborne balance, grounded boot contact and asymmetric leg loading in a settled carve. Existing faster-pole, wrist / elbow continuity, attachment and landing tests pass. Production Pages-path build passes. Six actual-mesh key poses were reviewed with an offline CPU projection; no browser visual test or commercial-animation fidelity approval was performed.
