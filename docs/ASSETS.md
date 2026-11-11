@@ -167,3 +167,7 @@ See [WHISTLER.md](WHISTLER.md) for tile sources, licenses, rebuilding and route 
 `public/data/whistler/shared/satellite.jpg`, `public/data/whistler/context/satellite.jpg` and `public/data/scenery/whistler/aerial.jpg` are derived from **EOxCloudless 2016** by EOX IT Services GmbH (Contains modified Copernicus Sentinel data 2016), [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). Source: [EOxCloudless](https://cloudless.eox.at), `https://tiles.maps.eox.at/wms`, layer `s2cloudless_3857`. They are cropped / reprojected into the game's existing EPSG:32610 footprints and JPEG-compressed; winter cover / shading is authored. Each image has an adjacent JSON with exact footprint, pixel dimensions and source. Persistent game credits and the development video exporter include attribution. No game screenshot or asset from the visual-reference titles is bundled. See `SCENERY.md` and `public/data/scenery/whistler/ATTRIBUTION.txt`.
 
 The regional Canadian DEM uses higher-zoom Mapzen Terrain Tiles with the same source / Canada OGL attribution as the original Whistler pack. It is registered to the original background mesh and edge-stitched at runtime. Export spacing does not establish underlying survey resolution.
+
+## Original soundtrack
+
+The four instrumental loops in `public/assets/music/` were composed and synthesized for this game using `scripts/build-soundtrack.py` (NumPy and FFmpeg). The score and synthesized sounds use no external recordings or sample packs.

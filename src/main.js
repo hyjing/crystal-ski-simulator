@@ -10,6 +10,7 @@ import {StructureWorld} from './structure-collision.js';
 import {LiftJourney} from './lift-journey.js';
 import {createStationLife} from './station-life.js';
 import {StationAudio} from './station-audio.js';
+import {assignTrailMusic,Soundtrack} from './soundtrack.js';
 import {RunChallenge,practiceTerrain,practiceBumps,recordRun} from './run-challenges.js';
 import {ChallengeRenderer} from './challenge-renderer.js';
 import {createLiftPassengers} from './lift-passengers.js';
@@ -39,6 +40,8 @@ import {addAlpineDetails} from './alpine-details.js';
 
 const $ = id => document.getElementById(id);
 const keys = new HeldControls();
+const soundtrack = new Soundtrack($('soundtrack'), $('music'), import.meta.env.BASE_URL, toast);
+let trailMusic;
 let terrain, routes, route, skier, renderer, scene, camera, athlete, routeGroup, snow='soft';
 let mode='intro', view='follow', elapsed=0, peakSpeed=0, checkpoint=0, totalDistance=0, uiClock=0;
 let lastTime=0, accumulator=0, pausedFrom='running', soundOn=false, audio, noiseGain, toastTimeout;
@@ -90,6 +93,7 @@ async function init(){
   terrain=preparePisteTerrain(terrain,network);
   const stationGround=prepareStationTerrain(terrain,routes,infrastructure);terrain=practiceTerrain(stationGround.terrain);stationAreas=stationGround.areas;
   routes=getLiftRuns(terrain,runs);route=routes[0];
+  trailMusic=assignTrailMusic(mountainId,routes.map(r=>r.id));
   $('terrain-resolution').textContent=`真实 ${mountain.elevationLabel||'USGS'} 高程 · 约 ${Math.round(terrain.spacing)}m 导出采样`;
   scene=new THREE.Scene();scene.userData.sceneryProfile=sceneryProfile(mountainId); scene.background=new THREE.Color('#cbdce9'); scene.fog=new THREE.Fog('#cbdce9',12000,65000);
   camera=new THREE.PerspectiveCamera(58,innerWidth/innerHeight,1,65000);
@@ -221,7 +225,7 @@ $('route-filters').addEventListener('click',event=>{
 });
 
 function selectRoute(id){
-  liftJourney.cancel();route=routes.find(r=>r.id===id);liftPassengers?.select(route.liftId); checkpoint=0;
+  liftJourney.cancel();route=routes.find(r=>r.id===id);soundtrack.select(trailMusic.get(id));liftPassengers?.select(route.liftId); checkpoint=0;
   document.querySelectorAll('[data-route]').forEach(b=>{const active=b.dataset.route===id;b.classList.toggle('active',active);b.setAttribute('aria-pressed',active);});
   $('route-selection').textContent=`已选：${route.name} · ${route.lift} 上站 → ${route.returnLift&&route.returnLift!==route.lift?route.returnLift+' ':''}下站`;
   $('map-label').textContent=route.name.toUpperCase();$('session-name').textContent=route.name.toUpperCase();
@@ -255,6 +259,7 @@ function startRun(reset=true){
   document.body.classList.remove('mobile-menu-open');$('mobile-menu').setAttribute('aria-expanded','false');
   toast(touchDevice?'长按左侧转弯 · 右侧撑杖起步 · 拖动场景环视':'上站缓坡出发 · 按住 Shift 撑杖 · 沿雪道滑到下站光圈');
   if(soundOn) enableAudio();
+  soundtrack.refresh();
 }
 
 function goIntro(){
