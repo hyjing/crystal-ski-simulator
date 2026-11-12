@@ -107,3 +107,26 @@ test('nearby NPCs leave connected tracks without drawing bridges across respawns
   assert.equal(effects.recordCrowd(.1, [npc], observer).length, 0);
   assert.equal(written, 1);
 });
+
+test('NPCs use a pole stroke to leave a full stop on flat snow and stay still while yielding', () => {
+  const flat = {surface: () => 1600, gradient: () => ({x: 0, z: 0})};
+  const route = {id: 'flat', length: 500, points: [{x: 0, z: 0}, {x: 0, z: 500}]};
+  const traffic = new SkiTraffic(new Scene(), flat, [new Group()]);
+  traffic.reset(route, route.points[0]);
+  const skier = traffic.states[0];
+  const start = skier.progress;
+  const clear = {x: -1000, z: 0};
+  assert.equal(skier.speed, 0);
+  for (let i = 0; i < 24; i++) traffic.step(1 / 120, clear);
+  assert.ok(skier.poling > .5 && skier.phase > 0);
+  assert.ok(skier.speed > .4 && skier.progress > start);
+  skier.speed = 0;
+  skier.yielding = true;
+  const blocked = {...skier.point};
+  const held = skier.progress;
+  for (let i = 0; i < 60; i++) traffic.step(1 / 120, blocked);
+  assert.equal(skier.progress, held);
+  assert.ok(skier.poling < .01);
+  for (let i = 0; i < 144; i++) traffic.step(1 / 120, clear);
+  assert.ok(skier.poling > .5 && skier.speed > .4 && skier.progress > held);
+});

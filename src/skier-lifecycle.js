@@ -1,12 +1,16 @@
+import {advanceNpcPoling} from './npc-routines.js';
 import {trafficPoint} from './traffic-brain.js';
 
 function moveAcrossSnow(skier, target, dt, clear) {
   const dx = target.x - skier.point.x, dz = target.z - skier.point.z;
   const distance = Math.hypot(dx, dz);
   if (distance < .18) return true;
-  const step = Math.min(distance, 1.4 * dt);
+  const step = Math.min(distance, skier.speed * dt);
   const next = {x: skier.point.x + dx * step / distance, z: skier.point.z + dz * step / distance};
-  if (!clear(next)) return false;
+  if (!clear(next)) {
+    skier.speed = 0;
+    return false;
+  }
   const desired = Math.atan2(dx, dz);
   const turn = Math.atan2(Math.sin(desired - skier.heading), Math.cos(desired - skier.heading));
   skier.heading += turn * (1 - Math.exp(-dt * 6));
@@ -36,8 +40,7 @@ export function stageSkier(skier, route, index, clear, occupied) {
 
 export function stepLiftExit(skier, index, dt, seen, observer, clear, pathClear, entryVisible) {
   skier.roll = 0;
-  skier.poling = 0;
-  skier.speed = 0;
+
   const endpoint = skier.route.length - 8;
   if (!skier.exit) {
     const center = trafficPoint(skier.route, endpoint, 0, index);
@@ -61,6 +64,8 @@ export function stepLiftExit(skier, index, dt, seen, observer, clear, pathClear,
   skier.offscreen = seen || distance < 28 ? 0 : skier.offscreen + dt;
   if (skier.offscreen > 2.5) {
     skier.indoor = true;
+    skier.speed = 0;
+    advanceNpcPoling(skier, false, dt);
     skier.entryWait -= dt;
     if (skier.entryWait > 0) return;
     skier.entryWait = .65;
@@ -81,6 +86,10 @@ export function stepLiftExit(skier, index, dt, seen, observer, clear, pathClear,
     return;
   }
 
+  const moving = Math.hypot(skier.point.x - skier.exit.x, skier.point.z - skier.exit.z) >= .18;
+  const push = advanceNpcPoling(skier, moving, dt);
+  const target = moving ? 1.4 : 0;
+  skier.speed = moving ? Math.min(target, skier.speed + (push + .35) * dt) : 0;
   if (moveAcrossSnow(skier, skier.exit, dt, pathClear)) {
     skier.exitWait += dt;
     skier.activity = 'lift-line';
@@ -92,8 +101,6 @@ export function stepLiftExit(skier, index, dt, seen, observer, clear, pathClear,
     }
   } else {
     skier.activity = 'exit';
-    skier.poling = skier.speed > .4 ? .35 : 0;
-    skier.phase = (skier.phase + dt * 1.3) % 1;
     skier.gesture = '';
   }
 }

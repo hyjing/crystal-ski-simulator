@@ -1,4 +1,4 @@
-import {clamp} from './physics.js';
+import {clamp, POLING, poleAcceleration} from './physics.js';
 const smooth=t=>{t=clamp(t,0,1);return t*t*(3-2*t);};
 export function sitePoint(site,x,z){const sn=Math.sin(site.heading),cs=Math.cos(site.heading);return{x:site.x+cs*x+sn*z,z:site.z-sn*x+cs*z};}
 export function siteLocal(site,p){const sn=Math.sin(site.heading),cs=Math.cos(site.heading),x=p.x-site.x,z=p.z-site.z;return{x:cs*x-sn*z,z:sn*x+cs*z};}
@@ -51,6 +51,25 @@ export function advanceVisitor(s,dt,canMove){
  s.point.heading=s.heading;s.walkAmount+=(clamp(s.speed/.7,0,1)-s.walkAmount)*(1-Math.exp(-dt*9));s.walkPhase+=s.speed*dt*6;
  if(done){s.sequenceIndex=(s.sequenceIndex+1)%s.sequence.length;s.actionTime=0;}
 }
+// Start a stroke while stationary, then use its planted phase to advance the skier.
+export function advanceNpcPoling(skier, wantsMove, dt) {
+ const cadence = POLING.cadence * .82;
+ if (!wantsMove) skier.poleLaunch = 0;
+ else if (skier.speed < .6 && !skier.poleLaunch && !skier.poleActive) {
+  skier.phase = 0;
+  skier.poleLaunch = 1 / cadence;
+ }
+ const active = wantsMove && (skier.poleLaunch > 0 || (skier.speed < 2.7 && skier.slope < .10));
+ if (active) {
+  if (!skier.poleActive) skier.phase = 0;
+  skier.phase = (skier.phase + dt * cadence) % 1;
+ }
+ skier.poleActive = active;
+ skier.poling += ((active ? .85 : 0) - skier.poling) * (1 - Math.exp(-dt * POLING.response));
+ skier.poleLaunch = Math.max(0, skier.poleLaunch - dt);
+ return active ? .52 * poleAcceleration(skier.speed, skier.phase) : 0;
+}
+
 export const SKIER_PROFILES=[{name:'careful',speed:.65},{name:'cruiser',speed:1},{name:'fast',speed:1.5},{name:'rest-stop',speed:.85,pause:true},{name:'sport',speed:1.25},{name:'occasional-fall',speed:.80,fall:true}];
 export function advanceSkierRoutine(s,index,dt){
  const profile=SKIER_PROFILES[index%SKIER_PROFILES.length];s.routineClock=(s.routineClock||0)+dt;s.activity??='ski';s.nextPause??=18+index%4*3;s.nextFall??=26+index%5*5;
