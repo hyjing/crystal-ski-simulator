@@ -49,7 +49,7 @@ function field(x,y,z){
  for(const sign of [-1,1]){
   const yy=THREE.MathUtils.clamp(y,.205,.87),[w,d]=profile(yy,legSections),cx=sign*(.140-.006*band(yy-.28,.15)),cz=-.037-.035*(1-THREE.MathUtils.smoothstep(yy,.22,.46));
   const angle=Math.atan2(z-cz,x-cx),section=(Math.pow(Math.pow(Math.abs(x-cx)/w,2.25)+Math.pow(Math.abs(z-cz)/d,2.25),1/2.25)-1)*Math.min(w,d);
-  let leg=Math.max(section,.198+.004*Math.sin(angle*3+sign)-y,y-.91);
+  let leg=Math.max(section,.176+.004*Math.sin(angle*3+sign)-y,y-.91);
   const fold=.0025*band(y-.49,.13)*Math.sin(y*82+angle*2.1+sign*.7)+.0017*band(y-.28,.07)*Math.sin(y*113-angle*3.4+sign);
   leg-=fold;pants=smoothMin(pants,leg,.012);
  }
@@ -74,6 +74,14 @@ function nativeWeights(x,y,z){
  if(y<.80)for(const bone of influence.keys())if(body.skeleton.bones[bone].name.endsWith(x>0?'_r':'_l'))influence.delete(bone);
  // Torso panels should not follow the elbows or be pulled outward by arm weights.
  if(y>.90&&y<1.43&&Math.abs(x)<.22)for(const bone of influence.keys())if(/arm|hand|index|middle|ring|pinky|thumb/.test(body.skeleton.bones[bone].name))influence.delete(bone);
+ // The lower trouser hem follows the boot so an edged ankle cannot open a gap.
+ if(y<.34){
+  const foot=body.skeleton.bones.findIndex(b=>b.name===`foot_${x>0?'l':'r'}`);
+  const sum=[...influence.values()].reduce((a,b)=>a+b,0);
+  const footWeight=1-THREE.MathUtils.smoothstep(y,.214,.34);
+  for(const [bone,weight] of influence)influence.set(bone,weight*(1-footWeight));
+  influence.set(foot,(influence.get(foot)||0)+sum*footWeight);
+ }
  const top=[...influence].sort((a,b)=>b[1]-a[1]).slice(0,4),sum=top.reduce((a,b)=>a+b[1],0);return{joints:Array.from({length:4},(_,c)=>top[c]?.[0]??0),weights:Array.from({length:4},(_,c)=>(top[c]?.[1]??0)/sum)};
 }
 const blue=new THREE.Color('#4088b4'),navy=new THREE.Color('#2a3945'),panel=new THREE.Color('#347698');

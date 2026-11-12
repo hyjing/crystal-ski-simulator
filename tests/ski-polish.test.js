@@ -63,3 +63,39 @@ test('physical jump runs through preload, flight, impact absorption and return t
  for(let i=0;i<480;i++){stepAirborne(s,{jump:i===0},flat,1/120);a.position.set(s.x,(s.airborne?s.airY:1500)-1500,s.z);updateAthletePose(a,s,1/120,()=>0);seen.add(rig.motion.stage);const head=position(rig,'Head');if(previous)assert.ok(head.distanceTo(previous)<.18,`jump head step at ${i}`);previous=head;}
  assert.ok(['preload','air','landing','ski'].every(s=>seen.has(s)));assert.ok(!s.airborne);assert.ok(!s.crashRemaining);
 });
+
+
+test('ski bindings stay with boots through linked turns, tuck, and sitting down',async()=>{
+ const {a,rig}=await fresh();
+ const suit=rig.model.getObjectByName('Unified_ski_suit');
+ const {position:cloth,skinIndex,skinWeight}=suit.geometry.attributes;
+ let anchoredCuffs=0;
+ for(let i=0;i<cloth.count;i++){
+  if(cloth.getY(i)>.205)continue;
+  const foot=rig.bones[cloth.getX(i)>0?'foot_l':'foot_r'];
+  assert.equal(suit.skeleton.bones[skinIndex.getX(i)],foot);
+  assert.ok(skinWeight.getX(i)>.999);
+  anchoredCuffs++;
+ }
+ assert.ok(anchoredCuffs>60);
+ const hipPositions=[],kneePositions=[];
+ for(const edgeRoll of [-.85,.85]){
+  for(let i=0;i<45;i++)updateAthletePose(a,{speed:14,tuck:.92,edgeRoll,turnAcceleration:8},1/60,()=>0);
+  hipPositions.push(position(rig,'pelvis').x);
+  kneePositions.push(position(rig,'calf_l').x);
+  for(const {ski,boot,soleY} of rig.bindings){
+   const contact=boot.worldToLocal(ski.getWorldPosition(new THREE.Vector3()));
+   assert.ok(contact.distanceTo(new THREE.Vector3(0,soleY-.004,-.114))<1e-6);
+  }
+ }
+ assert.ok(hipPositions[0]-hipPositions[1]>.25);
+ assert.ok(kneePositions[0]-kneePositions[1]>.13);
+ for(let i=0;i<=60;i++){
+  const sit=i/60;
+  updateAthletePose(a,{pedestrian:true,holding:'ride',sitAmount:sit,ridePose:sit},1/60,()=>0);
+  for(const {ski,boot,soleY} of rig.bindings){
+   const contact=boot.worldToLocal(ski.getWorldPosition(new THREE.Vector3()));
+   assert.ok(contact.distanceTo(new THREE.Vector3(0,soleY-.004,-.114))<1e-6);
+  }
+ }
+});

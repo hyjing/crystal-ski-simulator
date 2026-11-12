@@ -1,3 +1,4 @@
+import {syncBootBindings} from './humanoid.js';
 import {syncHandPoles} from './pole-rig.js';
 // Keep cheap, staggered IK updates while interpolating the rendered bones every frame.
 export function targetNpcPose(actor,apply){
@@ -10,5 +11,6 @@ export function targetNpcPose(actor,apply){
 export function blendNpcPose(actor,dt,snap=false){
  const a=snap?1:1-Math.exp(-Math.max(0,dt)*20);
  for(const s of actor.userData.poseBlend||[]){s.b.quaternion.slerp(s.q,a);s.b.position.lerp(s.p,a);}
+ syncBootBindings(actor);
  syncHandPoles(actor);
 }

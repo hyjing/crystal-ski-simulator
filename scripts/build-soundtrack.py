@@ -1,4 +1,4 @@
-"""Render the game's original instrumental loops (NumPy and FFmpeg required)."""
+"""Render four original soft-jazz loops with NumPy and FFmpeg."""
 from pathlib import Path
 import subprocess
 
@@ -8,23 +8,34 @@ RATE = 44100
 OUTPUT = Path(__file__).resolve().parents[1] / "public" / "assets" / "music"
 OUTPUT.mkdir(parents=True, exist_ok=True)
 
-# Root pitches and chord intervals, one chord per bar.
+# Two-handed, rootless piano voicings over independent bass roots.
+PROGRESSIONS = [
+    [(41,[57,60,64,67]),(38,[53,57,60,64]),(43,[53,57,58,62]),(36,[52,57,58,62]),
+     (45,[55,59,60,64]),(38,[54,57,60,65]),(43,[53,57,58,65]),(36,[52,57,58,62])],
+    [(48,[52,55,59,62]),(45,[55,59,60,64]),(38,[53,57,60,64]),(43,[53,57,59,64]),
+     (40,[55,59,62,66]),(45,[55,58,61,65]),(38,[53,57,60,64]),(43,[53,57,59,64])],
+    [(46,[57,60,62,65]),(43,[53,57,58,62]),(36,[52,55,58,62]),(41,[51,57,62,67]),
+     (39,[53,55,58,62]),(44,[54,60,62,65]),(36,[51,55,58,62]),(41,[51,55,57,62])],
+    [(43,[54,57,59,62]),(40,[55,59,62,66]),(45,[55,59,60,64]),(38,[54,59,60,64]),
+     (47,[57,61,62,66]),(40,[56,59,62,67]),(45,[55,59,60,64]),(38,[54,57,60,64])],
+]
 TRACKS = [
-    ("first-chair", 108, 19, [(45, [0, 3, 7, 10]), (41, [0, 4, 7, 11]), (48, [0, 4, 7, 11]), (43, [0, 4, 7, 9])], .65),
-    ("bluebird", 122, 28, [(42, [0, 3, 7, 10]), (38, [0, 4, 7, 11]), (45, [0, 4, 7, 11]), (40, [0, 4, 7, 9])], .85),
-    ("tree-line", 94, 37, [(50, [0, 3, 7, 10]), (46, [0, 4, 7, 11]), (41, [0, 4, 7, 11]), (48, [0, 4, 7, 9])], .48),
-    ("last-light", 84, 46, [(43, [0, 3, 7, 10]), (46, [0, 4, 7, 11]), (50, [0, 3, 7, 10]), (48, [0, 3, 7, 10])], .35),
+    ("first-chair-jazz", 86, 19, 0, True),
+    ("bluebird-jazz", 98, 28, 1, False),
+    ("tree-line-jazz", 76, 37, 2, True),
+    ("last-light-jazz", 69, 46, 3, True),
 ]
 
 
-def render(name, bpm, seed, chords, drums):
+def render(name, bpm, seed, progression, swing):
     rng = np.random.default_rng(seed)
+    chords = PROGRESSIONS[progression]
     beat = 60 / bpm
     length = round(RATE * beat * 128)
     stereo = np.zeros((length, 2), dtype=np.float32)
 
-    def time(duration):
-        return np.arange(round(duration * RATE)) / RATE
+    def time(seconds):
+        return np.arange(max(2, round(seconds * RATE))) / RATE
 
     def add(position, signal, level, pan=0):
         start = round(position * beat * RATE) % length
@@ -33,66 +44,68 @@ def render(name, bpm, seed, chords, drums):
         stereo[start:start + head] += signal[:head]
         stereo[:len(signal) - head] += signal[head:]
 
-    def note(position, midi, duration, kind, level, pan=0):
-        t = time(duration * beat)
+    def note(position, midi, beats, voice, level, pan=0):
+        t = time(beats * beat + .14)
         phase = 2 * np.pi * 440 * 2 ** ((midi - 69) / 12) * t
-        if kind == "pad":
-            env = np.sin(np.pi * t / (duration * beat)) ** 1.7
-            signal = (np.sin(phase) + .32 * np.sin(phase * 1.003) + .26 * np.sin(phase * 2.001)) * env
-        elif kind == "bass":
-            env = np.minimum(t / .018, 1) * np.clip((t[-1] - t) / .09, 0, 1) * np.exp(-t * 1.4)
-            signal = (np.sin(phase) + .3 * np.sin(phase * 2) + .12 * np.sin(phase * 3)) * env
+        release = np.exp(-16 * np.maximum(0, t - beats * beat)) * np.clip((t[-1] - t) / .035, 0, 1)
+        if voice == "bass":
+            signal = (np.sin(phase) + .31*np.sin(2*phase) + .12*np.sin(3*phase)*np.exp(-6*t)) * np.exp(-1.45*t)
+            attack = .014
         else:
-            env = np.minimum(t / .008, 1) * np.exp(-t * (3.8 if seed == 46 else 5.8))
-            env *= np.clip((t[-1] - t) / .08, 0, 1)
-            signal = np.sin(phase + np.sin(phase * 2) * .65 * np.exp(-9 * t)) * env
-            for delay, wet in [(0.75, .26), (1.5, .12), (2.25, .07)]:
-                add(position + delay, signal, level * wet, -pan if delay != 1.5 else pan)
-        add(position, signal, level, pan)
+            signal = np.zeros_like(t)
+            for harmonic, amplitude in enumerate([1, .30, .18, .10, .045, .026], 1):
+                partial = phase * harmonic * (1 + .00009 * harmonic**2)
+                signal += amplitude * np.sin(partial) * np.exp(-(1.05 + harmonic * .57) * t)
+            signal += .14*np.sin(phase*1.0018)*np.exp(-1.55*t)
+            add(position + .036 / beat, signal * release * np.minimum(t / .013, 1), level * .13, -pan)
+            add(position + .081 / beat, signal * release * np.minimum(t / .013, 1), level * .062, pan)
+            attack = .009
+        add(position, signal * release * np.minimum(t / attack, 1), level, pan)
 
-    kick_time = time(.26)
-    kick = np.sin(2 * np.pi * (48 * kick_time + 2 * (1 - np.exp(-35 * kick_time)))) * np.exp(-18 * kick_time)
-    kick *= np.minimum(kick_time / .003, 1)
-    snare_time = time(.19)
-    snare = (np.diff(rng.normal(size=len(snare_time) + 1)) * .33 + .4 * np.sin(2 * np.pi * 178 * snare_time)) * np.exp(-23 * snare_time)
-    hat_time = time(.09)
-    hat = np.diff(rng.normal(size=len(hat_time) + 1)) * np.exp(-50 * hat_time)
-    patterns = {
-        19: [(0, 0), (.75, 2), (1.5, 1), (2.5, 3), (3.25, 2)],
-        28: [(0, 0), (.5, 1), (1.25, 2), (2, 1), (2.75, 3), (3.5, 2)],
-        37: [(.25, 2), (1.5, 1), (2.75, 3)],
-        46: [(0, 1), (1.75, 3), (3, 2)],
-    }
+    brush_t = time(.42)
+    brush = rng.normal(size=len(brush_t))
+    brush = np.diff(brush, prepend=0) * np.sin(np.pi * brush_t / .42)**1.6 * np.exp(-2*brush_t)
+    tap_t = time(.19)
+    tap = rng.normal(size=len(tap_t))
+    tap = np.diff(tap, prepend=0) * np.exp(-24*tap_t) + .45*np.sin(2*np.pi*165*tap_t)*np.exp(-32*tap_t)
+    tap *= np.minimum(tap_t / .004, 1)
+    bass_t = time(.22)
+    soft_kick = np.sin(2*np.pi*(51*bass_t + .8*(1-np.exp(-23*bass_t))))*np.exp(-20*bass_t)
+    soft_kick *= np.minimum(bass_t / .006, 1)
+    phrases = [[(0,2),(1.5,1),(2.5,3)],[(.5,3),(1.5,2),(3,1)],
+               [(0,1),(1,2),(2.5,3),(3.5,2)],[(.5,2),(2,1),(3,0)]]
     for bar in range(32):
-        root, intervals = chords[bar % 4]
-        start = bar * 4
-        open_section = bar // 8 in (1, 3)
-        for i, interval in enumerate(intervals):
-            note(start - .35, root + 12 + interval, 4.9, "pad", .04, (i - 1.5) * .43)
-        for position, octave in [(0, 0), (1.5, 0), (2.5, 0), (3.5, 7)]:
-            if seed == 46 and position in (1.5, 3.5):
-                continue
-            note(start + position, root - 12 + octave, .95, "bass", .14)
-        for i, (position, degree) in enumerate(patterns[seed]):
-            octave = 24 if open_section or i == 0 else 12
-            pitch = root + octave + intervals[(degree + (bar // 4 % 2)) % 4]
-            note(start + position, pitch, 2.4, "keys", .066 + .015 * open_section, (-1) ** i * .35)
-        if open_section and bar % 2 == 0:
-            note(start + 2, root + 24 + intervals[2], 3.2, "keys", .048, -.52)
-        for offset in ([0, 1.5, 2, 3.5] if seed == 28 else [0, 2.5] if seed != 46 else [0]):
-            add(start + offset, kick, .29 * drums)
-        for offset in ([1, 3] if seed != 46 else [3]):
-            add(start + offset + .012, snare, .16 * drums, .09)
-        for i in range(8 if open_section else 4):
-            position = i * .5 if open_section else i + .5
-            add(start + position + (i % 2) * .025, hat, .027 * drums * rng.uniform(.65, 1.25), (-1) ** i * .46)
+        root, voicing = chords[bar % 8]
+        next_root = chords[(bar+1) % 8][0]
+        start = bar*4
+        off = .66 if swing else .5
+        bass_notes = [(0,root),(2,root+7)] if progression == 3 else [(0,root),(1,root+12),(2,root+7),(3,next_root+(1 if next_root < root else -1))]
+        for position, pitch in bass_notes:
+            note(start+position+.013, pitch, 1.35 if progression==3 else .83, "bass", .16, -.17)
+        chords_at = [(.0,1.75),(2+off,1.10)] if bar%2==0 else [(.66,1.15),(2,1.7)]
+        for position, duration in chords_at:
+            for j, pitch in enumerate(voicing):
+                note(start+position+j*.021, pitch, duration, "piano", .040 if j==0 else .034, -.25+j*.15)
+        if bar%8!=7 or bar>=16:
+            phrase = phrases[(bar + progression + bar//8) % len(phrases)]
+            for index, (position, tone) in enumerate(phrase):
+                if position%1:
+                    position = int(position)+off
+                melody = voicing[tone] + (12 if tone<3 else 0)
+                duration = .7 if index < len(phrase)-1 else 1.2
+                note(start+position+.035, melody, duration, "piano", .075 + rng.uniform(-.015,.009), .22)
+        for position in [0, 2 if swing else 2.5]:
+            add(start+position, soft_kick, .065)
+        for position in [1, 3]:
+            add(start+position-.13, brush, .021, -.32)
+            add(start+position+.012, tap, .032, -.22)
+            add(start+position+off, brush, .014, .28)
 
-    stereo = np.tanh(stereo * 1.7)
-    subprocess.run([
-        "ffmpeg", "-y", "-hide_banner", "-loglevel", "error", "-f", "f32le",
-        "-ar", str(RATE), "-ac", "2", "-i", "pipe:0", "-c:a", "libmp3lame",
-        "-b:a", "96k", str(OUTPUT / f"{name}.mp3"),
-    ], input=stereo.astype("<f4").tobytes(), check=True)
+    rms = np.sqrt(np.mean(stereo**2))
+    stereo = np.tanh(stereo * (.080 / rms))
+    subprocess.run(["ffmpeg","-y","-hide_banner","-loglevel","error","-f","f32le","-ar",str(RATE),"-ac","2",
+                    "-i","pipe:0","-c:a","libmp3lame","-b:a","96k",str(OUTPUT / f"{name}.mp3")],
+                   input=stereo.astype("<f4").tobytes(), check=True)
 
 
 if __name__ == "__main__":

@@ -13,3 +13,15 @@ export function clearCameraSight(terrain,eye,target){
  for(let i=1;i<=16;i++){const t=i/18,x=eye.x+(target.x-eye.x)*t,z=eye.z+(target.z-eye.z)*t,h=terrain.surface(x,z)-1200+.8;required=Math.max(required,(h-target.y*t)/(1-t));}
  return required;
 }
+
+export function liftOrbit(position, heading, yaw, pitch, zoom) {
+ const angle = heading + yaw;
+ const tilt = Math.max(-.36, Math.min(.76, .25 - pitch));
+ const distance = Math.max(4.5, Math.min(21, 11 + zoom));
+ const horizontal = Math.cos(tilt) * distance;
+ const focusY = position.y + 1 + pitch * 1.4;
+ return {
+  eye: {x: position.x - Math.sin(angle) * horizontal, y: focusY + Math.sin(tilt) * distance, z: position.z - Math.cos(angle) * horizontal},
+  target: {x: position.x, y: focusY, z: position.z},
+ };
+}

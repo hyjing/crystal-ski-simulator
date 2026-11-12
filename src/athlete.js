@@ -79,14 +79,16 @@ export function updateAthletePose(athlete,s,dt,surface){
   const balance=s.poseAuthoring?1:THREE.MathUtils.smoothstep(s.speed||0,.4,4),targetLean=roll*balance,rate=dt>0?1-Math.exp(-dt*20):1;
   athlete.userData.lean=THREE.MathUtils.lerp(athlete.userData.lean||0,targetLean,rate);const lean=athlete.userData.lean,hipX=-lean*.62+(s.idleShift||0)*.08;
   body.rotation.z=0;body.position.y=-pole*.035*Math.sin(phase);pelvis.position.set(hipX,hipY-.06,shape.hipForward);
-  skiRig.position.set(0,grab,grab*.9);skiRig.rotation.x=s.ridePose?.15:0;if(s.ridePose)skiRig.position.set(0,-.42,.65);
+  const ride=THREE.MathUtils.clamp(Number(s.ridePose)||0,0,1);
+  skiRig.position.set(0,THREE.MathUtils.lerp(grab,-.42,ride),THREE.MathUtils.lerp(grab*.9,.65,ride));
+  skiRig.rotation.x=ride*.15;
   skiRig.rotation.z=0;for(let i=0;i<skis.length;i++){const ski=skis[i];ski.position.set((i?1:-1)*.32,.24,0);ski.position.z=Math.max(0,-(i?1:-1)*Math.sign(roll))*weight*.12;ski.rotation.set(0,0,roll*.70);}
   torso.position.set(hipX,hipY+.55,.05+tuck*.16);torso.rotation.x=.12+tuck*.7+weight*.08+pole*(.12+.16*Math.max(0,drive));
   torso.rotation.y=counter;torso.rotation.z=lean*.38;
   for(const leg of legs){
     const inside=Math.max(0,-leg.sign*Math.sign(roll)),hip=new THREE.Vector3(hipX+leg.sign*.23,hipY,shape.hipForward),knee=new THREE.Vector3(hipX*.55+leg.sign*(.29+weight*.12),.94-tuck*.18-inside*weight*.12,shape.knee+inside*weight*.18),ankle=new THREE.Vector3(leg.sign*.30,.45+grab,.15+grab*.9);
     const gait=walkingFoot(walkPhase+(leg.sign>0?0:Math.PI));ankle.z+=walk*gait.stride;ankle.y+=walk*gait.lift;ankle.z+=sit*.95+inside*weight*.12;ankle.x*=shape.stance;ankle.y+=shape.fold*.55;ankle.z-=shape.fold*.28;knee.z+=shape.fold*.35;knee.y-=shape.fold*.18;knee.z+=walk*.25*gait.stride+sit*.6+crouch*.35;ankle.x+=leg.sign*crouch*.14;
-    if(s.ridePose){ankle.y=.02;ankle.z=.80;}
+    ankle.y=THREE.MathUtils.lerp(ankle.y,.02,ride);ankle.z=THREE.MathUtils.lerp(ankle.z,.80,ride);
     leg.target={hip,knee,ankle};if(!athlete.userData.humanRig)shapeLimb(leg.mesh,hip,knee,ankle);
   }
   for(const arm of arms){
@@ -125,5 +127,5 @@ export function updateAthletePose(athlete,s,dt,surface){
     arm.target={hand:hand.clone(),tip:tip.clone(),pedestrian:!!s.pedestrian,planted:!!(activePlant&&plantState.contact),plant,poleAim:new THREE.Vector3(sign*.08,-1,-.65-pole*.35*Math.sin(phase)+plant*.95).normalize()};
     connect(arm.pole,hand,tip);arm.basket.position.copy(tip).y+=.12;arm.basket.rotation.x=Math.PI/2;
   }
-  updateHumanoid(athlete,{hipY,hipX,lean,tuck:Math.max(tuck,crouch*.8),counter,roll,grab,headLook:s.headLook||0,ride:!!s.ridePose,poling:pole,polePhase:s.polePhase||0,edgeRoll:roll*balance,airborne:!!s.airborne,pedestrian:!!s.pedestrian,walkAmount:walk,walkPhase,sitAmount:sit,holding:s.holding,surface,shape,dynamic:gesture.dynamic,release:gesture.release,absorption:gesture.absorption,landing:gesture.landing,landingPhase:gesture.landingPhase,landingStrength:gesture.landingStrength,jumpPreparation:s.jumpPreparation||0,flightTime:s.flightTime||0,airVy:s.airVy||0,airClearance:s.airClearance??10,landingRecover:s.landingRecover||0,fallPhase:s.fallPhase,crashRemaining:s.crashRemaining||0,plantActive:plantState.active,plantSide:plantState.plantSide,plantPhase:plantState.phase,fall:fall,crouch,dt});
+  updateHumanoid(athlete,{hipY,hipX,lean,tuck:Math.max(tuck,crouch*.8),counter,roll,grab,headLook:s.headLook||0,ride,poling:pole,polePhase:s.polePhase||0,edgeRoll:roll*balance,airborne:!!s.airborne,pedestrian:!!s.pedestrian,walkAmount:walk,walkPhase,sitAmount:sit,holding:s.holding,surface,shape,dynamic:gesture.dynamic,release:gesture.release,absorption:gesture.absorption,landing:gesture.landing,landingPhase:gesture.landingPhase,landingStrength:gesture.landingStrength,jumpPreparation:s.jumpPreparation||0,flightTime:s.flightTime||0,airVy:s.airVy||0,airClearance:s.airClearance??10,landingRecover:s.landingRecover||0,fallPhase:s.fallPhase,crashRemaining:s.crashRemaining||0,plantActive:plantState.active,plantSide:plantState.plantSide,plantPhase:plantState.phase,fall:fall,crouch,dt});
 }

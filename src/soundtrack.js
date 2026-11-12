@@ -1,8 +1,8 @@
 const tracks = [
-  { file: 'first-chair.mp3', title: 'First Chair' },
-  { file: 'bluebird.mp3', title: 'Bluebird' },
-  { file: 'tree-line.mp3', title: 'Tree Line' },
-  { file: 'last-light.mp3', title: 'Last Light' },
+  { file: 'first-chair-jazz.mp3', title: 'First Chair' },
+  { file: 'bluebird-jazz.mp3', title: 'Bluebird' },
+  { file: 'tree-line-jazz.mp3', title: 'Tree Line' },
+  { file: 'last-light-jazz.mp3', title: 'Last Light' },
 ];
 
 function hash(text) {
