@@ -1,15 +1,68 @@
 import test from 'node:test';import assert from 'node:assert/strict';import * as THREE from 'three';import fs from 'node:fs';
+import {CHAIR_CUSHION_Y,CHAIR_RIDER_Y,CABIN_FLOOR_Y,liftServiceStops,sampleCarrierPose} from '../src/lift-geometry.js';
 import {liftOrbit} from '../src/camera-look.js';
 import {LiftJourney,carrierSeat} from '../src/lift-journey.js';import {stationPoint,staffActivity} from '../src/lift-station-layout.js';import {RunChallenge,routeGates,practiceTerrain,practiceHeight,recordRun} from '../src/run-challenges.js';import {ChallengeRenderer} from '../src/challenge-renderer.js';import {StationLife,STATION_ACTORS} from '../src/station-life.js';import {createAthleteRig,updateAthletePose} from '../src/athlete.js';import {createTerrain,getLiftRuns} from '../src/terrain.js';import {addResort,liftExitSpawn} from '../src/resort.js';import {prepareStationTerrain,addStationStructures} from '../src/stations.js';import {MOUNTAINS,mountainAsset} from '../src/mountains.js';import {StructureWorld} from '../src/structure-collision.js';import {yieldToSkier} from '../src/traffic-brain.js';import {createSkier,stepSkier} from '../src/physics.js';import {PowderSurface} from '../src/powder.js';
 const lower={id:'L:lower',liftId:'L',role:'lower',x:0,z:0,heading:Math.PI},upper={...lower,id:'L:upper',role:'upper',z:100,heading:0},surface=()=>1500,route={id:'test',name:'test',length:1000,spawn:{x:0,z:130,heading:0,distance:30},points:[{x:0,z:0},{x:0,z:1000}]};
 const chair=(ascending=true)=>({liftId:'L',ascending,travelProgress:0,total:100,collider:{position:new THREE.Vector3(0,302,0),quaternion:new THREE.Quaternion()}});
 const waiting=j=>{for(let i=0;i<400&&j.phase!=='waiting';i++)j.update(.1,[],surface);assert.equal(j.phase,'waiting');};
-test('queue waits for actual ascending chair, reserves it, follows its seat and unloads at the upper exit',()=>{
- const j=new LiftJourney(),c=chair(),down=chair(false);j.begin(lower,upper,route,{x:0,z:-20});waiting(j);j.update(.1,[down],surface);assert.equal(j.phase,'waiting');j.update(.1,[down,c],surface);assert.equal(j.phase,'boarding');assert.equal(c.playerReserved,true);
- for(let i=0;i<18;i++)j.update(.1,[c],surface);assert.equal(j.phase,'riding');c.collider.position.set(3,330,65);c.travelProgress=65;j.update(.1,[c],surface);assert.equal(j.frame.x,carrierSeat(c).x);assert.equal(j.frame.y,329.65);
- c.travelProgress=97;j.update(.1,[c],surface);assert.equal(j.phase,'unloading');assert.equal(c.playerReserved,false);for(let i=0;i<110&&j.active;i++)j.update(.1,[c],surface);assert.equal(j.phase,'complete');assert.equal(j.frame.x,route.spawn.x);assert.equal(j.frame.z,route.spawn.z);assert.ok(Math.abs(j.frame.y-299.93)<1e-6);
+test('the rider waits on the load mark until the chair arrives, then stands before releasing it at the upper mark',()=>{
+ const j=new LiftJourney(),c=chair(),down=chair(false);
+ j.begin(lower,upper,route,{x:0,z:-20});waiting(j);
+ const mark={...j.frame};
+ j.update(.1,[down],surface);assert.equal(j.phase,'waiting');
+ j.update(.1,[down,c],surface);assert.equal(j.phase,'boarding');assert.equal(c.playerReserved,true);
+ for(let i=0;i<10;i++)j.update(.1,[c],surface);
+ assert.deepEqual({x:j.frame.x,z:j.frame.z,sit:j.frame.sit},{x:mark.x,z:mark.z,sit:0});
+ c.travelProgress=3.2;
+ for(let i=0;i<9;i++)j.update(.1,[c],surface);
+ assert.equal(j.phase,'riding');
+ c.collider.position.set(3,330,65);c.travelProgress=65;
+ j.update(.1,[c],surface);
+ assert.equal(j.frame.x,carrierSeat(c).x);
+ assert.equal(j.frame.y,330+CHAIR_RIDER_Y);
+ c.travelProgress=97;
+ j.update(.1,[c],surface);
+ assert.equal(j.phase,'dismounting');
+ assert.equal(c.playerReserved,true);
+ assert.equal(j.frame.sit,1);
+ for(let i=0;i<9;i++)j.update(.1,[c],surface);
+ assert.equal(j.phase,'unloading');
+ assert.equal(j.frame.sit,0);
+ assert.equal(c.playerReserved,false);
+ for(let i=0;i<130&&j.active;i++)j.update(.1,[c],surface);
+ assert.equal(j.phase,'complete');
+ assert.equal(j.frame.x,route.spawn.x);
+ assert.equal(j.frame.z,route.spawn.z);
+ assert.ok(Math.abs(j.frame.y-299.885)<1e-6);
 });
-test('skip lands near upper snow rather than carrying valley height to the summit; cancellation releases reservations',()=>{const j=new LiftJourney(),c=chair();j.begin(lower,upper,route,{x:0,z:0});waiting(j);j.update(.1,[c],surface);j.cancel();assert.equal(c.playerReserved,false);j.begin(lower,upper,route,{x:0,z:0});j.skip(()=>1900);assert.equal(j.unloadStart.y,700.4);assert.equal(j.unloadStart.z,100);j.cancel();assert.equal(j.active,false);});
+test('skip starts at the upper platform and cancellation releases a reserved carrier',()=>{
+ const j=new LiftJourney(),c=chair();
+ j.begin(lower,upper,route,{x:0,z:0});waiting(j);
+ j.update(.1,[c],surface);j.cancel();
+ assert.equal(c.playerReserved,false);
+ j.begin(lower,upper,route,{x:0,z:0});
+ j.skip(()=>1900);
+ assert.equal(j.frame.y,699.885);
+ assert.equal(j.frame.z,100);
+ j.cancel();assert.equal(j.active,false);
+});
+
+test('service marks are sampled from the same lane and height as the animated chair and cabin',()=>{
+ const fixture={side:1,total:100,ground:()=>300,segments:[
+  {a:{x:0,y:305,z:0},b:{x:0,y:305,z:100},l:100,start:0,rx:2.5,rz:0},
+ ]};
+ for(const cabin of [false,true]){
+  const c={...fixture,cabin},stops=liftServiceStops(c);
+  for(const stop of Object.values(stops)){
+   const pose=sampleCarrierPose(c,stop.progress);
+   assert.equal(pose.open,1);
+   assert.equal(stop.z,cabin?pose.z:pose.z-.09);
+   assert.ok(Math.abs(stop.x-(pose.x+(cabin?1.52:-.31)))<1e-9);
+   assert.ok(Math.abs(pose.y+(cabin?CABIN_FLOOR_Y:CHAIR_CUSHION_Y)-(cabin?300.04:300.565))<1e-9);
+  }
+  assert.equal(sampleCarrierPose(c,50).open,0);
+ }
+});
 test('terminal frame and guide gestures follow real ascending chair proximity, with a separate maintenance cycle',()=>{assert.deepEqual(stationPoint({...lower,heading:Math.PI/2},2,3),{x:3,z:-1.9999999999999998});const c=chair();assert.equal(staffActivity(lower,[c],1).gesture,'guide');assert.equal(staffActivity(lower,[chair(false)],1,0,{x:0,z:0}).gesture,'wave');assert.equal(staffActivity(lower,[],1,1).gesture,'shovel');assert.equal(staffActivity(lower,[],9,1).gesture,'inspect');});
 test('station crowd stays within six actors, obeys toggle and only selects nearby stations',()=>{const scene=new THREE.Scene(),actors=Array.from({length:STATION_ACTORS},()=>{const a=createAthleteRig(scene);a.userData.shovel=new THREE.Group();return a;}),life=new StationLife([lower,upper,{...lower,id:'far',x:1000}],actors,surface);life.update(1,{x:0,z:0},[],true);assert.equal(actors.filter(a=>a.visible).length,6);assert.ok(life.selected.every(s=>s.id!=='far'));life.update(1.1,{x:0,z:0},[],false);assert.ok(actors.every(a=>!a.visible));life.update(3,{x:3000,z:0},[],true);assert.ok(actors.every(a=>!a.visible));});
 test('ordered timing gates support swept fast crossings and charge crashes once per incident',()=>{const c=new RunChallenge(route,'time');for(const gate of c.gates){const s={x:gate.x,z:gate.z+20};assert.equal(c.step({x:gate.x,z:gate.z-20},s,.1),true);}assert.equal(c.result().complete,true);c.step({x:0,z:0},{x:0,z:0,crashRemaining:3},.1);c.step({x:0,z:0},{x:0,z:0,crashRemaining:2},.1);assert.equal(c.penalty,5);assert.ok(c.result().time>5);});
@@ -39,6 +92,7 @@ test('lift queue rounds corners without stopping and pause preserves the reserve
  }
  assert.ok(crossed);
  journey.update(.1,[c],surface);
+ c.travelProgress=3.2;
  for(let i=0;i<5;i++)journey.update(.1,[c],surface);
  assert.ok(journey.frame.sit>0&&journey.frame.sit<1);
  const frozen={...journey.frame},age=journey.age;
@@ -70,4 +124,37 @@ test('automatic lift queue routes around a solid fence between the skier and the
   assert.ok(clear(frame),`blocked at ${frame.x}, ${frame.z}`);
  }
  assert.equal(journey.phase,'waiting');
+});
+
+test('gondola riders board through the open side and step back onto the upper platform',()=>{
+ const c={...chair(),cabin:true,side:1,ground:()=>300,segments:[
+  {a:{x:0,y:305,z:0},b:{x:0,y:305,z:100},l:100,start:0,rx:2.5,rz:0},
+ ]};
+ const stops=liftServiceStops(c);
+ const j=new LiftJourney(),from={...lower,service:stops.lower},to={...upper,service:stops.upper};
+ const place=progress=>{
+  const pose=sampleCarrierPose(c,progress);
+  c.collider.position.set(pose.x,pose.y,pose.z);
+  c.collider.quaternion.setFromAxisAngle(new THREE.Vector3(0,1,0),pose.heading);
+  c.travelProgress=progress;
+ };
+ j.begin(from,to,route,{x:0,z:-20});waiting(j);
+ assert.equal(j.frame.x,stops.lower.x);
+ assert.ok(Math.abs(j.frame.z-stops.lower.z)<1e-9);
+ place(0);
+ j.update(.1,[c],surface);
+ assert.equal(j.phase,'boarding');
+ assert.equal(j.frame.x,stops.lower.x);
+ place(stops.lower.progress);
+ for(let i=0;i<12;i++)j.update(.1,[c],surface);
+ assert.equal(j.phase,'riding');
+ assert.equal(j.frame.x,2.5);
+ assert.equal(j.frame.sit,0);
+ place(stops.upper.progress);
+ j.update(.1,[c],surface);
+ assert.equal(j.phase,'dismounting');
+ for(let i=0;i<12;i++)j.update(.1,[c],surface);
+ assert.equal(j.phase,'unloading');
+ assert.ok(Math.abs(j.frame.x-stops.upper.x)<.04);
+ assert.equal(c.playerReserved,false);
 });

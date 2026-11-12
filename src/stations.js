@@ -1,4 +1,8 @@
 import * as THREE from 'three';
+import {insideFootprint} from './crowd-activities.js';
+import {liftLocal,liftServiceStop,riderAnchor,sampleCarrierPose} from './lift-geometry.js';
+import {stationPoint} from './lift-station-layout.js';
+import {clearStationLine,stationWalkPath} from './station-walk.js';
 import {colliderFromMesh} from './structure-collision.js';
 import {RoundedBoxGeometry} from 'three/addons/geometries/RoundedBoxGeometry.js';
 import {resortMaterials,mergeAssetGeometry} from './resort-assets.js';
@@ -6,6 +10,21 @@ import {createTerrain,lonLatToUTM,pointAlongRoute} from './terrain.js';
 const specialNames=new Set(['Summit House','Campbell Basin Lodge','Green Valley Wheelhouse','Roundhouse Lodge','Rendezvous','Glacier Creek','Crystal Hut','Horstman Hut','Summit West Base Lodge','Summit Central Base Lodge','Silver Fir Lodge','Hyak Chalet','Alpental Lodge']);
 export const isDetailedLodge=f=>f.geometry.type==='Polygon'&&specialNames.has(f.properties.name);
 function project(terrain,ll){const p=lonLatToUTM(...ll);return{x:p.e-terrain.originUTM[0]-(terrain.width-1)*terrain.spacing/2,z:terrain.originUTM[1]-(terrain.height-1)*terrain.spacing/2-p.n};}
+
+// A mapped terminal footprint is represented by the open terminal model, including its loading lane.
+export function coveredLiftTerminal(feature,polygon,stops){
+  const {name='',aerialway}=feature.properties;
+  const station=aerialway==='station'||/wheelhouse|^(ski lift)$|(?:chairlift|gondola).* (?:base|station|terminal)/i.test(name);
+  if(name&&!station)return false;
+  for(const lift of stops.values())for(const stop of [lift.lower,lift.upper]){
+    const onLane=insideFootprint(stop,polygon),overEndpoint=insideFootprint(stop.terminal,polygon);
+    if(station&&(onLane||overEndpoint))return true;
+    if(!name&&onLane&&(overEndpoint||[-2.7,2.7].some(z=>insideFootprint(liftLocal(stop,0,z),polygon))))return true;
+    if(/wheelhouse/i.test(name)&&polygon.some(point=>Math.hypot(point.x-stop.terminal.x,point.z-stop.terminal.z)<12))return true;
+  }
+  return false;
+}
+
 
 // Constructed station snow aprons are authored overlays on the measured bare-earth DEM.
 // The same modified heights feed rendering, powder, collision and ski physics.
@@ -53,7 +72,7 @@ function label(text,width=512){
   return new THREE.MeshStandardMaterial({map:texture,side:THREE.DoubleSide,roughness:.8});
 }
 
-export function addStationStructures(scene,terrain,infrastructure,areas){
+export function addStationStructures(scene,terrain,infrastructure,areas,serviceStops=new Map()){
   const groups=[];scene.userData.liftTerminals=[];
   const {metal,wood,snow,glass,stone,dark,paint}=resortMaterials();
   const box=(group,w,h,d,x,y,z,mat)=>{const g=new THREE.BoxGeometry(w,h,d),uv=g.attributes.uv;for(let f=0;f<6;f++){const [u,v]=f<2?[d,h]:f<4?[w,d]:[w,h];for(let k=0;k<4;k++){const i=f*4+k;uv.setXY(i,uv.getX(i)*u/2,uv.getY(i)*v/2);}}const mesh=new THREE.Mesh(g,mat);mesh.position.set(x,y,z);mesh.castShadow=mesh.receiveShadow=true;mesh.userData.structureCollider=h>.4||(h>.08&&Math.min(w,d)<.3);group.add(mesh);return mesh;};
@@ -64,7 +83,8 @@ export function addStationStructures(scene,terrain,infrastructure,areas){
     const p=pts.at(-1),prev=pts.at(-2),heading=Math.atan2(p.x-prev.x,p.z-prev.z),group=new THREE.Group();
     group.position.set(p.x,terrain.surface(p.x,p.z)-1200,p.z);group.rotation.y=heading;scene.add(group);groups.push(group);
     group.name=`${lift.properties.name} ${role} terminal`;
-    scene.userData.liftTerminals.push({id:`${lift.id}:${role}`,liftId:String(lift.id),name:lift.properties.name,role,x:p.x,z:p.z,heading});
+    const service=serviceStops.get(String(lift.id))?.[role];
+    scene.userData.liftTerminals.push({id:`${lift.id}:${role}`,liftId:String(lift.id),name:lift.properties.name,role,x:p.x,z:p.z,heading,service});
     // Separate queue lane beside the open snow exit; no gate across the piste.
     if(role==='lower'){
       for(const x of [-14,-9])for(const z of [16,23,30]){box(group,.10,1.05,.10,x,.52,z,paint);if(z<30)box(group,.065,.08,7,x,.86,z+3.5,metal);}
@@ -92,7 +112,9 @@ export function addStationStructures(scene,terrain,infrastructure,areas){
 
   }
   for(const f of infrastructure.features.filter(isDetailedLodge)){
-    const points=f.geometry.coordinates[0].map(ll=>project(terrain,ll));let longest={length:0,angle:0};
+    const points=f.geometry.coordinates[0].map(ll=>project(terrain,ll));
+    if(coveredLiftTerminal(f,points,serviceStops))continue;
+    let longest={length:0,angle:0};
     for(let i=1;i<points.length;i++){const a=points[i-1],b=points[i],length=Math.hypot(b.x-a.x,b.z-a.z);if(length>longest.length)longest={length,angle:Math.atan2(b.z-a.z,b.x-a.x)};}
     const angle=longest.angle,c=Math.cos(angle),s=Math.sin(angle),us=points.map(p=>p.x*c+p.z*s),vs=points.map(p=>-p.x*s+p.z*c),u=(Math.min(...us)+Math.max(...us))/2,v=(Math.min(...vs)+Math.max(...vs))/2;
     const width=Math.max(...us)-Math.min(...us),depth=Math.max(...vs)-Math.min(...vs),x=u*c-v*s,z=u*s+v*c;
@@ -123,4 +145,59 @@ export function addStationStructures(scene,terrain,infrastructure,areas){
   for(const group of groups){group.traverse(object=>{if(!object.isMesh)return;const key=object.material.uuid;if(!batches.has(key))batches.set(key,{material:object.material,geometries:[]});batches.get(key).geometries.push(object.geometry.clone().applyMatrix4(object.matrixWorld));});scene.remove(group);group.traverse(o=>o.geometry?.dispose());}
   for(const {material,geometries} of batches.values()){const geometry=mergeAssetGeometry(geometries),mesh=new THREE.Mesh(geometry,material);mesh.castShadow=mesh.receiveShadow=true;scene.add(mesh);geometries.forEach(g=>g.dispose());}
 
+}
+
+
+// Some mapped buildings and supports leave the playable loading lane a few meters beyond
+// the nominal endpoint. Move the mark along the actual carrier lane, never across it.
+export function alignLiftServiceStops(terminals,carriers,routes,clear){
+  const ascending=new Map();
+  for(const carrier of carriers)if(carrier.ascending)ascending.set(carrier.liftId,carrier);
+  for(const terminal of terminals){
+    const carrier=ascending.get(terminal.liftId);
+    if(!carrier)continue;
+    const exit=routes.find(r=>String(r.liftId)===terminal.liftId)?.spawn;
+    for(const offset of [3.2,1.8,4.6,6,7.5,9,10.5,12,13.5,15]){
+      const stop=liftServiceStop(carrier,terminal.role,offset);
+      if(!clear(stop))continue;
+      if(terminal.role==='lower'){
+        const queue=stationPoint(terminal,-11,17);
+        if(!stationWalkPath([queue,stop],clear))continue;
+      }else{
+        const pose=sampleCarrierPose(carrier,stop.progress+.75);
+        const seat=riderAnchor(pose,carrier.cabin);
+        const step=liftLocal(seat,carrier.cabin?1.55:0,carrier.cabin?0:1.35);
+        if(!clearStationLine(stop,step,clear)||exit&&!stationWalkPath([step,exit],clear))continue;
+      }
+      terminal.service=stop;
+      break;
+    }
+  }
+}
+
+export function addLiftServiceMarkers(scene,terrain,terminals){
+  for(const role of ['lower','upper']){
+    const stripes=[];
+    for(const terminal of terminals){
+      const service=terminal.service;
+      if(terminal.role!==role||!service)continue;
+      for(const [x,z,width,length] of [[0,0,1.6,.13],[-.75,.42,.12,.92],[.75,.42,.12,.92]]){
+        const geometry=new THREE.PlaneGeometry(width,length,4,2);
+        geometry.rotateX(-Math.PI/2);
+        const positions=geometry.attributes.position;
+        for(let i=0;i<positions.count;i++){
+          const point=liftLocal(service,x+positions.getX(i),z+positions.getZ(i));
+          positions.setXYZ(i,point.x,terrain.surface(point.x,point.z)-1200+.028,point.z);
+        }
+        geometry.computeVertexNormals();
+        stripes.push(geometry);
+      }
+    }
+    if(!stripes.length)continue;
+    const material=new THREE.MeshStandardMaterial({color:role==='lower'?'#d3a54c':'#507e9a',roughness:.94});
+    const marker=new THREE.Mesh(mergeAssetGeometry(stripes),material);
+    stripes.forEach(stripe=>stripe.dispose());
+    marker.receiveShadow=true;
+    scene.add(marker);
+  }
 }

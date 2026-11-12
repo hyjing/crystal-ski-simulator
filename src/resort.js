@@ -2,11 +2,12 @@ import * as THREE from 'three';
 import {mergeGeometries} from 'three/addons/utils/BufferGeometryUtils.js';
 import {clusterForestSeeds} from './forest-distribution.js';
 import {lonLatToUTM,pointAlongRoute} from './terrain.js';
-import {isDetailedLodge} from './stations.js';
+import {isDetailedLodge,coveredLiftTerminal} from './stations.js';
 import {installForestIndex} from './trees.js';
 import {pisteHalfWidth} from './pistes.js';
 import {stableTreeShadowGeometry,createStableShadowBatch} from './render-stability.js';
-import {resortMaterials,detailedChair,detailedCabin,towerAccessories} from './resort-assets.js';
+import {sampleCarrierPose,liftServiceStops} from './lift-geometry.js';
+import {resortMaterials,detailedChair,detailedCabin,chairSafetyBar,cabinDoor,towerAccessories} from './resort-assets.js';
 
 export function geographicPoint(terrain,[lon,lat]){
   const p=lonLatToUTM(lon,lat);
@@ -70,30 +71,54 @@ export function addForest(scene,terrain,routes,landcover,texture,vegetation,stat
   cards.forEach(g=>g.dispose());installForestIndex(candidates);return candidates;
 }
 
-export function addResort(scene,terrain,data){
+export function addResort(scene,terrain,data,areas=[]){
   scene.userData.structureStatics??=[];scene.userData.structureDynamics??=[];
+  const serviceStops=new Map(),modeledTerminals=new Map();
+  const stationIds=new Set(areas.map(area=>String(area.liftId)));
   const towers=[],chairs=[],cables=[],walls=[],roofs=[],windows=[],facadeFrames=[],buildingMaterials=resortMaterials();
   const height=(x,z)=>terrain.surface(x,z)-1200;
   const inside=p=>Math.abs(p.x)<(terrain.width-2)*terrain.spacing/2&&Math.abs(p.z)<(terrain.height-2)*terrain.spacing/2;
-  for(const feature of data.features){
+  const lines=data.features.filter(feature=>feature.geometry.type==='LineString');
+  const polygons=data.features.filter(feature=>feature.geometry.type==='Polygon');
+  for(const feature of [...lines,...polygons]){
     if(feature.geometry.type==='LineString'){
       const points=feature.geometry.coordinates.map(p=>geographicPoint(terrain,p));if(points.some(p=>!inside(p)))continue;
       const path=points.map((p,i)=>new THREE.Vector3(p.x,height(p.x,p.z)+(i===0||i===points.length-1?4.8:16),p.z));
       path.forEach((p,i)=>{if(i===0||i===path.length-1)return;const a=path[Math.max(0,i-1)],b=path[Math.min(path.length-1,i+1)];towers.push({x:p.x,y:p.y-8,z:p.z,heading:Math.atan2(b.x-a.x,b.z-a.z)});});
       for(const side of [-1,1]){
-        const cable=[];let total=0,segments=[];
+        let total=0,segments=[];
         for(let i=0;i<path.length-1;i++){
-          const a=path[i],b=path[i+1],dx=b.x-a.x,dz=b.z-a.z,l=Math.hypot(dx,dz),rx=dz/l*side*2.5,rz=-dx/l*side*2.5;
+          const a=path[i],b=path[i+1],dx=b.x-a.x,dz=b.z-a.z,l=Math.hypot(dx,dz);
+          if(l<.01)continue;
+          const rx=dz/l*side*2.5,rz=-dx/l*side*2.5;
           segments.push({a,b,l,start:total,rx,rz});total+=l;
-          for(let j=0;j<8;j++){const t=j/7;cable.push(new THREE.Vector3(a.x+dx*t+rx,a.y+(b.y-a.y)*t-Math.sin(Math.PI*t)*1.1,a.z+dz*t+rz));}
         }
+        if(total<1)continue;
+        const liftId=String(feature.id),cabin=feature.properties.aerialway==='gondola';
+        const ascending=side===(path.at(-1).y>=path[0].y?1:-1);
+        const carrier={liftId,segments,total,side,ascending,cabin,ground:height};
+        if(ascending){
+          const stops=liftServiceStops(carrier);
+          serviceStops.set(liftId,stops);
+          if(stationIds.has(liftId)||feature.properties.name==='Mt. Rainier Gondola')modeledTerminals.set(liftId,stops);
+        }
+        const distances=new Set([0,total]);
+        for(const segment of segments)for(let j=0;j<=7;j++){
+          const along=segment.start+segment.l*j/7;
+          distances.add(side>0?along:total-along);
+        }
+        for(const d of [3.2,7,11,16,20,24,30])if(d<total){distances.add(d);distances.add(total-d);}
+        const cable=[...distances].sort((a,b)=>a-b).map(d=>{
+          const p=sampleCarrierPose(carrier,d);
+          return new THREE.Vector3(p.x,p.y+2.8,p.z);
+        });
         cables.push(new THREE.BufferGeometry().setFromPoints(cable));
-        const count=Math.floor(total/38);
-        for(let i=0;i<count;i++)chairs.push({liftId:String(feature.id),seatIndex:i,segments,total,offset:i/count*total,side,ascending:side===(path.at(-1).y>=path[0].y?1:-1),cabin:feature.properties.aerialway==='gondola'});
+        const count=Math.max(1,Math.floor(total/38));
+        for(let i=0;i<count;i++)chairs.push({...carrier,seatIndex:i,offset:i/count*total});
       }
     }else if(feature.geometry.type==='Polygon'){
       if(isDetailedLodge(feature))continue;
-      const points=feature.geometry.coordinates[0].map(p=>geographicPoint(terrain,p));if(points.length<4||points.some(p=>!inside(p)))continue;
+      const points=feature.geometry.coordinates[0].map(p=>geographicPoint(terrain,p));if(points.length<4||points.some(p=>!inside(p))||coveredLiftTerminal(feature,points,modeledTerminals))continue;
       const shape=new THREE.Shape(points.map(p=>new THREE.Vector2(p.x,-p.z)));
       const y=Math.min(...points.map(p=>height(p.x,p.z)))-.5;
       const h=Number(feature.properties.height)||Number(feature.properties['building:levels']||2)*3;scene.userData.structureStatics.push({kind:'polygon',polygon:points.map(p=>({x:p.x,z:p.z})),minY:y,maxY:y+h,label:feature.properties.name||'房屋'});
@@ -126,18 +151,38 @@ export function addResort(scene,terrain,data){
   towers.forEach((p,i)=>{dummy.position.set(p.x,p.y,p.z);dummy.rotation.set(0,p.heading,0);dummy.updateMatrix();detail.setMatrixAt(i,dummy.matrix);});scene.add(detail);
   const materials=buildingMaterials,openChairs=chairs.filter(c=>!c.cabin),closedCabins=chairs.filter(c=>c.cabin);
   const instances=(geometries,mats,count)=>geometries.map((geometry,i)=>{const mesh=new THREE.InstancedMesh(geometry,mats[i],count);mesh.castShadow=mesh.receiveShadow=true;scene.add(mesh);return mesh;});
-  const seats=instances(detailedChair(),[materials.metal,materials.seat,materials.paint],openChairs.length),cabins=instances(detailedCabin(),[materials.paint,materials.glass,materials.dark],closedCabins.length);
+  const glass=materials.glass.clone();glass.transparent=true;glass.opacity=.54;glass.depthWrite=false;
+  const seats=instances(detailedChair(),[materials.metal,materials.seat,materials.paint],openChairs.length),cabins=instances(detailedCabin(),[materials.paint,glass,materials.dark],closedCabins.length);
 
+  const [bars]=instances([chairSafetyBar()],[materials.metal],openChairs.length);
+  const doors=instances([cabinDoor(),cabinDoor()],[materials.paint,materials.paint],closedCabins.length);
+  const attachment=new THREE.Object3D(),matrix=new THREE.Matrix4();
   for(const c of chairs){c.collider={kind:'box',position:new THREE.Vector3(),half:new THREE.Vector3(c.cabin?1.3:1.3,c.cabin?1.6:.7,c.cabin?1:.7),quaternion:new THREE.Quaternion(),label:c.cabin?'吊厢':'吊椅'};scene.userData.structureDynamics.push(c.collider);}
   const animate=time=>{animate.time=time;
     const update=(vehicles,meshes)=>vehicles.forEach((chair,i)=>{
       const distance=((chair.offset+time*2.5*chair.side)%chair.total+chair.total)%chair.total;
       chair.travelProgress=chair.side>0?distance:chair.total-distance;
-      const seg=chair.segments.find(s=>distance<=s.start+s.l)||chair.segments.at(-1),t=(distance-seg.start)/seg.l;
-      dummy.position.set(THREE.MathUtils.lerp(seg.a.x,seg.b.x,t)+seg.rx,THREE.MathUtils.lerp(seg.a.y,seg.b.y,t)-Math.sin(Math.PI*t)*1.1-2.8,THREE.MathUtils.lerp(seg.a.z,seg.b.z,t)+seg.rz);
-      dummy.rotation.set(0,Math.atan2(seg.b.x-seg.a.x,seg.b.z-seg.a.z)+(chair.side<0?Math.PI:0),0);dummy.updateMatrix();chair.collider.position.copy(dummy.position);chair.collider.quaternion.copy(dummy.quaternion);if(chair.riderMatrix)chair.riderMatrix.copy(dummy.matrix);meshes.forEach(mesh=>mesh.setMatrixAt(i,dummy.matrix));
-    });update(openChairs,seats);update(closedCabins,cabins);for(const mesh of [...seats,...cabins])mesh.instanceMatrix.needsUpdate=true;
-  };animate.allCarriers=chairs;animate.carriers=openChairs;animate.time=0;animate(0);return animate;
+      const pose=sampleCarrierPose(chair,chair.travelProgress);
+      dummy.position.set(pose.x,pose.y,pose.z);
+      dummy.rotation.set(0,pose.heading,0);
+      dummy.updateMatrix();
+      chair.collider.position.copy(dummy.position);chair.collider.quaternion.copy(dummy.quaternion);
+      if(chair.riderMatrix)chair.riderMatrix.copy(dummy.matrix);
+      meshes.forEach(mesh=>mesh.setMatrixAt(i,dummy.matrix));
+      if(chair.cabin){
+        doors.forEach((door,j)=>{
+          attachment.position.set(1.18,.50,(j?1:-1)*(.29+pose.open*.57));
+          attachment.rotation.set(0,0,0);attachment.updateMatrix();
+          door.setMatrixAt(i,matrix.multiplyMatrices(dummy.matrix,attachment.matrix));
+        });
+      }else{
+        attachment.position.set(0,.55,-.27);attachment.rotation.set(-pose.open*1.42,0,0);attachment.updateMatrix();
+        bars.setMatrixAt(i,matrix.multiplyMatrices(dummy.matrix,attachment.matrix));
+      }
+    });
+    update(openChairs,seats);update(closedCabins,cabins);
+    for(const mesh of [...seats,...cabins,bars,...doors])mesh.instanceMatrix.needsUpdate=true;
+  };animate.serviceStops=serviceStops;animate.allCarriers=chairs;animate.carriers=openChairs;animate.time=0;animate(0);return animate;
 }
 
 

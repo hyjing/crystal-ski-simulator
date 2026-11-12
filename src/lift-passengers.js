@@ -1,6 +1,7 @@
+import {CHAIR_SEATS,CHAIR_RIDER_Y,CHAIR_RIDER_Z} from './lift-geometry.js';
 import * as THREE from 'three';import {createAthleteRig,updateAthletePose} from './athlete.js';import {loadHumanoid} from './humanoid.js';import {applyGear,GEAR_PRESETS} from './wardrobe.js';
 export const LIFT_RIDER_COUNT=8,LIFT_RIDER_VISIBLE=4;
-export function riderSeat(matrix,seat){return new THREE.Vector3(seat===0?-.30:.30,-.35,-.10).applyMatrix4(matrix);}
+export function riderSeat(matrix,seat){return new THREE.Vector3(CHAIR_SEATS[seat+1],CHAIR_RIDER_Y,CHAIR_RIDER_Z).applyMatrix4(matrix);}
 export class LiftPassengers{
  constructor(controller,actors){this.controller=controller;this.actors=actors;this.carriers=[];this.nextSelection=0;this.lastVisibleCount=0;this.frustum=new THREE.Frustum();this.projection=new THREE.Matrix4();this.sphere=new THREE.Sphere(new THREE.Vector3(),1.3);}
  select(liftId){this.liftId=liftId;this.nextSelection=0;for(const c of this.carriers)if(c)c.riderMatrix=null;const all=(this.controller.carriers||[]).filter(c=>c.ascending!==false),focus=all.filter(c=>c.liftId===liftId),choices=focus.length>=4?focus:all;this.carriers=Array.from({length:Math.min(4,choices.length)},(_,i)=>choices[Math.min(choices.length-1,Math.floor((i+.35)*choices.length/4))]);for(const c of this.carriers)c.riderMatrix=new THREE.Matrix4();this.controller(this.controller.time||0);}

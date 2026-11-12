@@ -35,7 +35,7 @@ export class PowderField {
 const drift=(x,z)=>.32+.055*Math.sin(x*.31+Math.sin(z*.12))+.035*Math.sin(z*.57+x*.08);
 export class PowderSurface {
   constructor(scene,terrain,renderer){
-    this.terrain=terrain;this.field=new PowderField();this.previous=null;this.center=null;this.enabled=true;
+    this.terrain=terrain;this.stationStops=[];this.nearStations=[];this.field=new PowderField();this.previous=null;this.center=null;this.enabled=true;
     this.bytes=new Uint8Array(TEXTURE_SIZE*TEXTURE_SIZE*4);
     this.texture=new THREE.DataTexture(this.bytes,TEXTURE_SIZE,TEXTURE_SIZE,THREE.RGBAFormat);this.texture.minFilter=this.texture.magFilter=THREE.LinearFilter;this.texture.generateMipmaps=false;
     this.geometry=new THREE.PlaneGeometry(PATCH_SIZE,PATCH_SIZE,SEGMENTS,SEGMENTS);this.geometry.rotateX(-Math.PI/2);
@@ -48,7 +48,7 @@ export class PowderSurface {
     this.demTexture=new THREE.DataTexture(groundData,terrain.width,terrain.height,THREE.RGBAFormat,THREE.FloatType);
     this.demTexture.minFilter=this.demTexture.magFilter=THREE.NearestFilter;this.demTexture.generateMipmaps=false;this.demTexture.needsUpdate=true;
     const original=material.onBeforeCompile;
-    this.uniforms={powderBurial:{value:0},practiceFeatures:{value:Array.from({length:3},()=>new THREE.Vector4())},practiceCount:{value:0},powderDepth:{value:this.texture},powderOrigin:{value:new THREE.Vector2()},powderCenter:{value:new THREE.Vector2()},powderExtent:{value:TEXTURE_SIZE*CELL},groundDEM:{value:this.demTexture},groundSize:{value:new THREE.Vector2(terrain.width,terrain.height)},groundSpacing:{value:terrain.spacing},powderWhite:{value:new THREE.Color('#e8f0eb')},powderIce:{value:new THREE.Color('#b7ced4')},powderRock:{value:new THREE.Color('#899e9f')},powderFresh:{value:new THREE.Color('#f1f4f8')}};
+    this.uniforms={stationCount:{value:0},stationStops:{value:Array.from({length:4},()=>new THREE.Vector2())},powderBurial:{value:0},practiceFeatures:{value:Array.from({length:3},()=>new THREE.Vector4())},practiceCount:{value:0},powderDepth:{value:this.texture},powderOrigin:{value:new THREE.Vector2()},powderCenter:{value:new THREE.Vector2()},powderExtent:{value:TEXTURE_SIZE*CELL},groundDEM:{value:this.demTexture},groundSize:{value:new THREE.Vector2(terrain.width,terrain.height)},groundSpacing:{value:terrain.spacing},powderWhite:{value:new THREE.Color('#e8f0eb')},powderIce:{value:new THREE.Color('#b7ced4')},powderRock:{value:new THREE.Color('#899e9f')},powderFresh:{value:new THREE.Color('#f1f4f8')}};
     material.onBeforeCompile=shader=>{
       original(shader);Object.assign(shader.uniforms,this.uniforms);
       shader.fragmentShader=shader.fragmentShader.replace('#include <common>','#include <common>\nuniform vec2 powderCenter;varying float vPowderSlope;uniform vec3 powderWhite;uniform vec3 powderIce;uniform vec3 powderRock;uniform vec3 powderFresh;').replace('#include <color_fragment>',`#include <color_fragment>
@@ -60,7 +60,7 @@ export class PowderSurface {
         diffuseColor.a*=smoothstep(0.,6.,min(powderEdge.x,powderEdge.y));
       `);
       shader.vertexShader=shader.vertexShader.replace('#include <common>',`#include <common>
-        uniform sampler2D powderDepth;uniform float powderBurial;uniform vec2 powderOrigin;uniform vec2 powderCenter;uniform float powderExtent;
+        uniform sampler2D powderDepth;uniform float powderBurial;uniform int stationCount;uniform vec2 stationStops[4];uniform vec2 powderOrigin;uniform vec2 powderCenter;uniform float powderExtent;
         uniform sampler2D groundDEM;uniform vec2 groundSize;uniform float groundSpacing;
         varying float vPowderSlope;
         uniform vec4 practiceFeatures[3];uniform int practiceCount;
@@ -74,7 +74,8 @@ export class PowderSurface {
           h+=practiceAt(p);slope+=vec2(practiceAt(p+vec2(.5,0.))-practiceAt(p-vec2(.5,0.)),practiceAt(p+vec2(0.,.5))-practiceAt(p-vec2(0.,.5)));
           return vec3(h,slope);
         }
-        float powderOffset(vec2 p){vec2 uv=(p-powderOrigin)/powderExtent;vec3 stamp=texture2D(powderDepth,uv).rgb;float age=max(0.,powderBurial-dot(stamp.gb,vec2(63.75,16320.)));float pressed=(stamp.r-.5)*.8*exp(-age*.028);float mound=.32+.055*sin(p.x*.31+sin(p.y*.12))+.035*sin(p.y*.57+p.x*.08);vec2 edge=vec2(24.)-abs(p-powderCenter);return (mound+pressed)*smoothstep(0.,4.,min(edge.x,edge.y));}
+        float stationSnow(vec2 p){float mask=1.;for(int i=0;i<4;i++){if(i>=stationCount)break;mask=min(mask,smoothstep(3.4,5.8,distance(p,stationStops[i])));}return mask;}
+        float powderOffset(vec2 p){vec2 uv=(p-powderOrigin)/powderExtent;vec3 stamp=texture2D(powderDepth,uv).rgb;float age=max(0.,powderBurial-dot(stamp.gb,vec2(63.75,16320.)));float pressed=(stamp.r-.5)*.8*exp(-age*.028);float mound=.32+.055*sin(p.x*.31+sin(p.y*.12))+.035*sin(p.y*.57+p.x*.08);vec2 edge=vec2(24.)-abs(p-powderCenter);return (mound+pressed)*smoothstep(0.,4.,min(edge.x,edge.y))*stationSnow(p);}
       `).replace('#include <beginnormal_vertex>',`#include <beginnormal_vertex>
         vec2 powderWorld=position.xz+powderCenter;vec3 ground=groundAt(powderWorld);
         vPowderSlope=length(ground.yz);
@@ -85,8 +86,15 @@ export class PowderSurface {
         .replace('vSnowPosition = (modelMatrix * vec4(position,1.)).xyz;','vSnowPosition = vec3(powderWorld.x,ground.x-1200.,powderWorld.y);')
         .replace('#include <uv_vertex>','#include <uv_vertex>\nvMapUv=vec2(position.x+powderCenter.x+(groundSize.x-1.)*groundSpacing*.5,(groundSize.y-1.)*groundSpacing*.5-position.z-powderCenter.y)/5.;vNormalMapUv=vMapUv;vRoughnessMapUv=vMapUv;');
     };
-    material.customProgramCacheKey=()=>'deformable-powder-gpu-v4';
+    material.customProgramCacheKey=()=>'deformable-powder-gpu-v5';
     this.mesh=new THREE.Mesh(this.geometry,material);this.mesh.receiveShadow=true;this.mesh.frustumCulled=false;scene.add(this.mesh);
+  }
+  setStationStops(stops){this.stationStops=stops;this.center=null;}
+  refreshStations(center){
+    this.nearStations=this.stationStops.map(p=>({p,d:Math.hypot(p.x-center.x,p.z-center.z)}))
+      .filter(v=>v.d<42).sort((a,b)=>a.d-b.d).slice(0,4).map(v=>v.p);
+    this.uniforms.stationCount.value=this.nearStations.length;
+    this.nearStations.forEach((p,i)=>this.uniforms.stationStops.value[i].set(p.x,p.z));
   }
   setPractice(features){this.uniforms.practiceCount.value=Math.min(3,features.length);for(let i=0;i<3;i++){const f=features[i];this.uniforms.practiceFeatures.value[i].set(f?.x||0,f?.z||0,f?.heading||0,f?.height||0);}}
   cover(seconds){this.field.cover(seconds);this.uniforms.powderBurial.value=this.field.burial;}
@@ -95,14 +103,16 @@ export class PowderSurface {
   surface(x,z){
     if(!this.enabled||!this.center)return this.terrain.surface(x,z);
     const distance=Math.min(24-Math.abs(x-this.center.x),24-Math.abs(z-this.center.z));if(distance<=0)return this.terrain.surface(x,z);const t=THREE.MathUtils.clamp(distance/4,0,1),fade=t*t*(3-2*t);
-    return this.terrain.surface(x,z)+(drift(x,z)+this.field.get(x,z))*fade;
+    let stationMask=1;
+    for(const p of this.nearStations)stationMask=Math.min(stationMask,THREE.MathUtils.smoothstep(Math.hypot(x-p.x,z-p.z),3.4,5.8));
+    return this.terrain.surface(x,z)+(drift(x,z)+this.field.get(x,z))*fade*stationMask;
   }
   update(skier,running,snow,crowdSegments=[]){
     this.enabled=snow==='soft';this.mesh.visible=this.enabled;
     if(!this.enabled)return;
     const center={x:Math.round(skier.x/12)*12,z:Math.round(skier.z/12)*12};let moved=false;
     if(!this.center||center.x!==this.center.x||center.z!==this.center.z){
-      this.center=center;moved=true;this.mesh.position.set(center.x,0,center.z);
+      this.center=center;this.refreshStations(center);moved=true;this.mesh.position.set(center.x,0,center.z);
       this.uniforms.powderCenter.value.set(center.x,center.z);this.uniforms.powderOrigin.value.set(center.x-32-CELL/2,center.z-32-CELL/2);
     }
     let stamped=false;

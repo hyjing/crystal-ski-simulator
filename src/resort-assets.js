@@ -1,3 +1,4 @@
+import {CHAIR_SEATS,CHAIR_CUSHION_Y,CABIN_FLOOR_Y} from './lift-geometry.js';
 import * as THREE from 'three';
 import {RoundedBoxGeometry} from 'three/addons/geometries/RoundedBoxGeometry.js';
 import {mergeGeometries} from 'three/addons/utils/BufferGeometryUtils.js';
@@ -23,24 +24,43 @@ export function detailedChair(){
   const box=(g,w,h,d,x,y,z)=>{const m=new THREE.BoxGeometry(w,h,d);m.translate(x,y,z);parts[g].push(m);};
   function pipe(g,points,r=.035){const geometry=new THREE.TubeGeometry(new THREE.CatmullRomCurve3(points.map(p=>new THREE.Vector3(...p))),16,r,6,false);parts[g].push(geometry);}
   pipe(0,[[0,2.85,0],[0,1.8,0],[-.3,.75,-.4],[-1.15,.15,-.4]],.065);
-  for(const s of [-1,1]){pipe(0,[[s*1.20,.7,-.42],[s*1.20,.1,-.45],[s*1.20,-.1,.36],[s*1.20,.25,.5]],.045);pipe(0,[[s*1.12,.55,.65],[s*1.12,.12,.8],[s*.9,-.65,.8]],.032);}
-  pipe(0,[[-1.18,.55,.65],[0,.55,.65],[1.18,.55,.65]],.036);
-  box(0,2.5,.08,1.02,0,-.08,0);box(0,2,.05,.20,0,-.65,.8);box(0,.38,.16,.26,0,2.80,0);
-  for(let i=0;i<4;i++){const x=-.91+i*.60;const seat=new RoundedBoxGeometry(.56,.13,.78,2,.045);seat.translate(x,.03,.01);parts[1].push(seat);const back=new RoundedBoxGeometry(.56,.57,.13,2,.04);back.translate(x,.35,-.40);parts[1].push(back);}
+  for(const s of [-1,1]){pipe(0,[[s*1.20,.7,-.42],[s*1.20,.1,-.45],[s*1.20,-.1,.36],[s*1.20,.25,.5]],.045);}
+  box(0,2.5,.08,1.02,0,-.08,0);box(0,.38,.16,.26,0,2.80,0);
+  for(const x of CHAIR_SEATS){const seat=new RoundedBoxGeometry(.56,.13,.78,2,.045);seat.translate(x,CHAIR_CUSHION_Y-.065,.01);parts[1].push(seat);const back=new RoundedBoxGeometry(.56,.57,.13,2,.04);back.translate(x,.35,-.40);parts[1].push(back);}
   // Recessed cushion seams, back grab rail and a bolted cable grip.
-  for(let i=0;i<4;i++){const x=-.91+i*.60;for(const dx of [-.18,.18])box(0,.012,.008,.58,x+dx,.099,.02);}
+  for(const x of CHAIR_SEATS){for(const dx of [-.18,.18])box(0,.012,.008,.58,x+dx,.099,.02);}
   pipe(0,[[-1.12,.64,-.43],[0,.68,-.46],[1.12,.64,-.43]],.025);
   for(const x of [-.15,.15]){const bolt=new THREE.CylinderGeometry(.035,.035,.18,6);bolt.rotateX(Math.PI/2);bolt.translate(x,2.8,0);parts[0].push(bolt);}
   box(2,.32,.18,.04,0,.70,-.44);
   return parts.map(list=>{const g=mergeAssetGeometry(list);list.forEach(x=>x.dispose());return g;});
 }
+export function chairSafetyBar(){
+  const parts=[];
+  const pipe=(points,radius)=>parts.push(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(
+    points.map(([x,y,z])=>new THREE.Vector3(x,y-.55,z+.27))),12,radius,6,false));
+  pipe([[-1.13,.55,-.27],[-1.13,.55,.65],[0,.55,.65],[1.13,.55,.65],[1.13,.55,-.27]],.036);
+  for(const side of [-1,1])pipe([[side*.9,.55,.65],[side*.9,-.65,.80]],.032);
+  parts.push(new THREE.BoxGeometry(1.9,.05,.20).translate(0,-1.20,1.07));
+  const bar=mergeAssetGeometry(parts);parts.forEach(p=>p.dispose());return bar;
+}
+export function cabinDoor(){
+  return new RoundedBoxGeometry(.055,1.53,.56,2,.02);
+}
 export function detailedCabin(){
   const parts=[[],[],[]],box=(group,w,h,d,x,y,z)=>{const g=new THREE.BoxGeometry(w,h,d);g.translate(x,y,z);parts[group].push(g);};
-  const shell=new RoundedBoxGeometry(2.35,1.75,1.95,4,.26);shell.translate(0,.52,0);parts[0].push(shell);
+  const floor=new RoundedBoxGeometry(2.35,.16,1.95,3,.065);floor.translate(0,CABIN_FLOOR_Y-.08,0);parts[0].push(floor);
   const roof=new RoundedBoxGeometry(2.6,.20,2.16,3,.09);roof.translate(0,1.48,0);parts[0].push(roof);
-  for(const side of [-1,1]){box(1,2.0,.94,.04,0,.80,side*.985);box(1,.04,.94,1.5,side*1.18,.80,0);for(const x of [-.60,0,.60])box(0,.035,1.1,.065,x,.80,side*1.015);box(0,2.1,.045,.075,0,.30,side*1.01);box(2,.09,.25,.09,side*.12,.64,1.05);for(const x of [-.75,-.35,.35,.75])box(2,.18,.35,.28,x,-.24,-1.12);}
+  for(const side of [-1,1]){
+    box(1,2.22,1.43,.065,0,.48,side*.94);
+    for(const x of [-1.13,1.13])box(0,.08,1.7,.10,x,.55,side*.92);
+    box(1,.05,1.43,.40,1.14,.48,side*.75);
+  }
+  box(1,.055,1.43,1.8,-1.14,.48,0);
+  for(const x of [-1.14,1.14]){
+    box(0,.09,.12,1.93,x,-.22,0);box(0,.09,.13,1.93,x,1.30,0);
+  }
   box(2,.16,1.1,.16,0,2.05,0);box(2,.44,.14,.29,0,2.62,0);
-  return parts.map(list=>{const g=mergeAssetGeometry(list);list.forEach(x=>x.dispose());return g;});
+  return parts.map(list=>{const g=mergeAssetGeometry(list);list.forEach(p=>p.dispose());return g;});
 }
 export function towerAccessories(){
   const parts=[];const box=(w,h,d,x,y,z)=>{const g=new THREE.BoxGeometry(w,h,d);g.translate(x,y,z);parts.push(g);};

@@ -34,7 +34,7 @@ import {PowderSurface} from './powder.js';
 import {SpeedRenderer} from './postprocessing.js';
 import {addForest,addResort,liftExitSpawn} from './resort.js';
 import {addDetailedGround} from './ground.js';
-import {prepareStationTerrain,addStationStructures} from './stations.js';
+import {prepareStationTerrain,addStationStructures,alignLiftServiceStops,addLiftServiceMarkers} from './stations.js';
 import {preparePisteTerrain,addBoundaryPosts,createArrivalZone} from './pistes.js';
 import {hitsTreeTrunk} from './trees.js';
 import {createAthleteRig,updateAthletePose} from './athlete.js';
@@ -129,7 +129,13 @@ async function init(){
     fetch(asset('vegetation.json')).then(r=>{if(!r.ok)throw new Error('林冠数据载入失败');return r.json();})
   ]);
   routes.forEach(r=>{r.spawn=liftExitSpawn(terrain,r,infrastructure);});
-  treePositions=addForest(scene,terrain,[...mappedRoutes,...routes],landcover,firTexture,vegetation,stationAreas);resortUpdate=addResort(scene,terrain,infrastructure);addStationStructures(scene,terrain,infrastructure,stationAreas);structures=new StructureWorld(scene);challengeRenderer=new ChallengeRenderer(scene,terrain);
+  treePositions=addForest(scene,terrain,[...mappedRoutes,...routes],landcover,firTexture,vegetation,stationAreas);resortUpdate=addResort(scene,terrain,infrastructure,stationAreas);addStationStructures(scene,terrain,infrastructure,stationAreas,resortUpdate.serviceStops);
+  structures=new StructureWorld(scene);
+  const terminals=scene.userData.liftTerminals||[];
+  alignLiftServiceStops(terminals,resortUpdate.allCarriers,routes,liftWalkClear);
+  addLiftServiceMarkers(scene,terrain,terminals);
+  powder.setStationStops(terminals.flatMap(terminal=>terminal.service?[terminal.service]:[]));
+  challengeRenderer=new ChallengeRenderer(scene,terrain);
   addAlpineDetails(scene,terrain,mappedRoutes,stationAreas);
   await createAthlete();snowEffects=new SnowEffects(scene,isCrystal?terrain:{...terrain,surface:(x,z)=>powder.surface(x,z)});
   if(isCrystal)snowEffects.spraySurface=(x,z)=>powder.surface(x,z);
@@ -350,13 +356,15 @@ function updatePhysics(dt){
 
 function boardingTarget(){
   const terminals=scene?.userData.liftTerminals||[],id=String(route.returnLiftId||route.liftId),lower=terminals.find(s=>s.role==='lower'&&s.liftId===id),upper=terminals.find(s=>s.role==='upper'&&s.liftId===id),destination=routes.find(r=>String(r.liftId)===id&&r.id===route.id)||routes.find(r=>String(r.liftId)===id);
-  return lower&&upper&&destination&&Math.hypot(skier.x-lower.x,skier.z-lower.z)<75?{lower,upper,destination}:null;
+  return lower?.service&&upper?.service&&destination&&Math.hypot(skier.x-lower.x,skier.z-lower.z)<75?{lower,upper,destination}:null;
+}
+function liftWalkClear(point){
+  return !structures.blocked(point.x,point.z,terrain.surface(point.x,point.z),false,.14)&&
+    !(treePositions.nearby?.(point.x,point.z)||[]).some(tree=>Math.hypot(tree.x-point.x,tree.z-point.z)<(tree.trunkRadius||.25)+.5);
 }
 function boardLift(){
   const target=boardingTarget();if(!target||!['running','finished'].includes(mode)||skier.speed>3.5||skier.airborne||skier.crashRemaining){toast('请在下站登乘区停稳后乘车');return;}
-  const clear=p=>!structures.blocked(p.x,p.z,terrain.surface(p.x,p.z),false,.14)&&
-    !(treePositions.nearby?.(p.x,p.z)||[]).some(tree=>Math.hypot(tree.x-p.x,tree.z-p.z)<(tree.trunkRadius||.25)+.5);
-  if(!liftJourney.begin(target.lower,target.upper,target.destination,{...skier,y:athlete.position.y},clear)){
+  if(!liftJourney.begin(target.lower,target.upper,target.destination,{...skier,y:athlete.position.y},liftWalkClear)){
     toast('这里无法进入排队区，请靠近站台入口');return;
   }
   for(const d of document.querySelectorAll('dialog[open]'))d.close();
@@ -473,7 +481,7 @@ function updateUI(){
   const g=terrain.gradient(skier.x,skier.z);$('slope').textContent=Math.round(Math.atan(Math.hypot(g.x,g.z))*180/Math.PI);
   $('challenge-status').textContent=challenge?.label||'';
   const boarding=mode==='running'&&boardingTarget()&&skier.speed<3.5;$('board-lift').hidden=!boarding;$('lift-controls').hidden=!liftView();
-  $('lift-status').textContent=({queue:'前往候车位置',approaching:'按指引进入上车位',waiting:'候车 · 请勿越过栏杆',boarding:'椅子靠站 · 正在上车',riding:'乘缆车上山 · 拖动环视',unloading:'到站 · 离开下车区'})[liftJourney.phase]||'';
+  $('lift-status').textContent=({queue:'前往候车位置',approaching:'按指引进入上车位',waiting:'候车 · 请勿越过栏杆',boarding:liftJourney.transferAge?'正在上车':'载具正在靠站 · 请在标线等候',riding:'乘缆车上山 · 拖动环视',dismounting:'到站 · 起身下车',unloading:'正在滑离下车区'})[liftJourney.phase]||'';
   $('timer').textContent=clockFormat(elapsed);$('distance').textContent=`${Math.round(totalDistance)} m`;
   $('stance').textContent=skier.crashRemaining>0?(skier.crashReason==='traffic'?'碰撞倒地':skier.crashReason==='structure'?'撞到设施':'落地失衡'):skier.airborne?`腾空${skier.grab>.3?' · 抓板':''}`:skier.poling>.2?'双杖蹬撑':skier.edge>.5&&skier.speed<.35?'立刃停稳':skier.edge>.5?`${skier.slip>.5||skier.edgeBrake?'横板搓雪':'加强立刃'} · ${Math.round(skier.edgeAngle*180/Math.PI)}°`:skier.tuck>.5?'收身 · 低风阻':skier.slip>1.5?'侧滑控速':Math.abs(skier.turn)>.15?'沿弧转弯':'直滑';
   if(frameSamples.length>10){const sorted=[...frameSamples].sort((a,b)=>a-b);frameP95=sorted[Math.floor(sorted.length*.95)];frameMax=sorted.at(-1);slowFrames=sorted.filter(x=>x>25).length;}

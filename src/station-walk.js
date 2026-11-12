@@ -24,8 +24,8 @@ function openPoint(point,clear) {
 
 function searchStationPath(start,goal,clear) {
   if (clearStationLine(start,goal,clear)) return [start,goal];
-  const limits = {left:Math.min(start.x,goal.x)-12,right:Math.max(start.x,goal.x)+12,
-    top:Math.min(start.z,goal.z)-12,bottom:Math.max(start.z,goal.z)+12};
+  const limits = {left:Math.min(start.x,goal.x)-20,right:Math.max(start.x,goal.x)+20,
+    top:Math.min(start.z,goal.z)-20,bottom:Math.max(start.z,goal.z)+20};
   const cached = new Map();
   const isClear = p => {
     const key=`${Math.round(p.x*20)}:${Math.round(p.z*20)}`;
@@ -35,7 +35,7 @@ function searchStationPath(start,goal,clear) {
   const first={...start,u:0,v:0,cost:0,priority:distance(start,goal),parent:null};
   const frontier=[first],costs=new Map([['0:0',0]]);
   const directions=[[0,1],[0,-1],[1,0],[-1,0],[1,1],[1,-1],[-1,1],[-1,-1]];
-  for(let explored=0;frontier.length&&explored<2200;explored++){
+  for(let explored=0;frontier.length&&explored<3800;explored++){
     frontier.sort((a,b)=>b.priority-a.priority);
     const current=frontier.pop();
     if(current.cost>costs.get(`${current.u}:${current.v}`))continue;
