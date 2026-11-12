@@ -9,6 +9,12 @@ export function createRestArea(scene,terrain,site){
  for(const side of [-1,1]){const roof=box(root,2.95,.18,4.8,side*1.34,3.22,-4.5,shared.wood);roof.rotation.z=-side*.22;const snow=box(root,3.02,.14,4.9,side*1.34,3.39,-4.5,shared.snow);snow.rotation.z=-side*.22;}for(const side of [-1,1]){box(root,.10,2.6,.13,side*2.5,1.35,-2.27,shared.dark);box(root,1.3,1.0,.08,side*1.65,1.65,-2.34,shared.glass);box(root,.05,1.05,.12,side*1.65,1.65,-2.25,shared.paint);box(root,1.35,.05,.12,side*1.65,1.65,-2.25,shared.paint);}for(const sign of [-1,1])box(root,.09,2.3,.23,sign*.73,1.15,-2.34,shared.dark);
  const door=new THREE.Group();door.name='Working rest cabin door';door.position.set(-.69,0,-2.34);root.add(door);box(door,1.36,2.22,.07,.68,1.11,0,shared.paint);box(door,.85,.85,.08,.68,1.55,.01,shared.glass);box(door,.08,.28,.12,1.20,1.03,.09,shared.metal);
  box(root,4.7,.65,.55,0,.38,-6.0,shared.wood);box(root,1.2,.9,.65,1.8,.48,-5.6,shared.paint);
+ if(site.coffee){
+  box(root,.82,.71,.11,1.60,2.30,-2.25,shared.dark);
+  box(root,.38,.28,.10,1.57,2.29,-2.16,shared.snow);
+  box(root,.12,.19,.09,1.80,2.30,-2.16,shared.snow);
+  box(root,.46,.035,.13,1.57,2.10,-2.16,shared.snow);
+ }
  const a=sitePoint(site,0,.5),b=sitePoint(site,0,-2.45),low=terrain.surface(a.x,a.z)-site.floor+.02,positions=[-.8,low,.5,.8,low,.5,-.8,0,-2.45,.8,0,-2.45];const ramp=new THREE.BufferGeometry();ramp.setAttribute('position',new THREE.Float32BufferAttribute(positions,3));ramp.setIndex([0,2,1,1,2,3]);ramp.computeVertexNormals();root.add(new THREE.Mesh(ramp,rampMaterial));
  for(const x of [-3.5,-4.8]){const p=sitePoint(site,x,-.4),y=terrain.surface(p.x,p.z)-site.floor;box(root,1.1,.11,.55,x,y+.48,-.4,shared.wood);box(root,1.1,.55,.10,x,y+.80,-.70,shared.wood);for(const side of [-1,1])box(root,.08,.48,.42,x+side*.4,y+.24,-.4,shared.metal);}
  return{root,door,update:()=>{door.rotation.y=-Math.PI*.5*site.doorOpen;},dispose:()=>{scene.remove(root);root.traverse(o=>o.geometry?.dispose());}};

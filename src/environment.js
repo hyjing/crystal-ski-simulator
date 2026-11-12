@@ -10,7 +10,7 @@ export const WEATHER_PRESETS={
   snow:{label:'风雪',zenith:'#8c9caa',horizon:'#bac8d2',cloud:'#ccd6df',shadow:'#8495a6',sun:'#e1e9f0',ground:'#7e8f9f',elevation:28,azimuth:235,cover:1,density:.0024,direct:.20,ambient:1.85,exposure:1.0,snow:1,wind:5.5},
   sunset:{label:'夕阳',zenith:'#4c5891',horizon:'#ecac9d',cloud:'#edbbc2',shadow:'#665d93',sun:'#ffb171',ground:'#666080',elevation:7,azimuth:258,cover:.36,density:.000024,direct:2.5,ambient:.95,exposure:.93,snow:0,wind:1.8}
 };
-export const snowLighting={sunDirection:{value:new THREE.Vector3(-.6,.65,-.4)},cloudCover:{value:.22}};
+export const snowLighting={sunDirection:{value:new THREE.Vector3(-.6,.65,-.4)},cloudCover:{value:.22},slopeShade:{value:0},slopeFocus:{value:new THREE.Vector2()}};
 const flakeWhite=new THREE.Color(1,1,1);
 const colorKeys=['zenith','horizon','cloud','shadow','sun','ground'];
 export function weatherState(id){const p=WEATHER_PRESETS[id];if(!p)throw new Error(`Unknown weather: ${id}`);return Object.fromEntries(Object.entries(p).map(([k,v])=>[k,colorKeys.includes(k)?new THREE.Color(v):v]));}
@@ -79,13 +79,16 @@ export class MountainWeather{
   }
   prepareMaterials(scene=this.scene){prepareAtmosphere(scene,this.fogClock);}
   set(id){if(!WEATHER_PRESETS[id])return;this.id=id;this.from=blendWeather(this.state,this.state,1);this.to=weatherState(id);this.progress=0;}
-  update(dt,camera,focus){
+  update(dt,camera,focus,local){
     this.elapsed+=dt;this.fogClock.value=this.elapsed;this.progress=Math.min(1,this.progress+dt/5);const t=this.progress*this.progress*(3-2*this.progress);this.state=this.progress===1?this.to:blendWeather(this.from,this.to,t);const s=this.state;
     for(const [uniform,key] of [['zenith','zenith'],['horizon','horizon'],['cloudColor','cloud'],['cloudShadow','shadow'],['sunColor','sun']])this.uniforms[uniform].value.copy(s[key]);
     snowLighting.sunDirection.value.copy(sunDirection(s));snowLighting.cloudCover.value=s.cover;this.uniforms.time.value=this.elapsed;
     this.sky.position.copy(camera.position);const shadowFocus=stableShadowTarget(focus,snowLighting.sunDirection.value,this.sun.shadow.camera.right-this.sun.shadow.camera.left,this.sun.shadow.mapSize.x);this.sun.position.copy(shadowFocus).addScaledVector(snowLighting.sunDirection.value,700);this.sun.target.position.copy(shadowFocus);this.sun.target.updateMatrixWorld();
-    this.sun.color.copy(s.sun);this.sun.intensity=s.direct;this.hemisphere.color.copy(s.horizon).lerp(s.zenith,.35);this.hemisphere.groundColor.copy(s.ground);this.hemisphere.intensity=s.ambient;
-    this.scene.fog.color.copy(s.horizon);this.scene.fog.density=s.density;this.renderer.toneMappingExposure=s.exposure;this.scene.environmentIntensity=.12*(1-s.cover*.4);
+    const shade=local?.shade??0, basin=local?.basin??0;
+    snowLighting.slopeShade.value=shade*(1-s.cover*.55);
+    snowLighting.slopeFocus.value.set(camera.position.x,camera.position.z);
+    this.sun.color.copy(s.sun);this.sun.intensity=s.direct;this.hemisphere.color.copy(s.horizon).lerp(s.zenith,.35+shade*.14);this.hemisphere.groundColor.copy(s.ground);this.hemisphere.intensity=s.ambient;
+    this.scene.fog.color.copy(s.horizon);this.scene.fog.density=s.density+basin*(.00031+s.snow*.00014);this.renderer.toneMappingExposure=s.exposure*(1-shade*(1-s.cover*.65)*.075);this.scene.environmentIntensity=.12*(1-s.cover*.4);
     this.snowfall.update(this.elapsed,camera.position,s,this.renderer.getPixelRatio());
   }
 }

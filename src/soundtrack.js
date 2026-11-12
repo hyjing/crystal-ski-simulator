@@ -30,7 +30,8 @@ export class Soundtrack {
     this.hidden = document.hidden;
     this.enabled = false;
     try { this.enabled = sessionStorage.getItem('ski-music') === 'on'; } catch {}
-    player.volume = .65;
+    this.volume = .65;
+    player.volume = this.volume;
     button.addEventListener('click', () => {
       this.enabled = !this.enabled || this.blocked;
       this.blocked = false;
@@ -48,6 +49,12 @@ export class Soundtrack {
     this.track = track;
     this.button.disabled = !track;
     this.refresh();
+  }
+
+  mix(duck, dt) {
+    const target = .65 * (1 - Math.max(0, Math.min(1, duck)) * .55);
+    this.volume += (target - this.volume) * (1 - Math.exp(-dt * 3));
+    this.player.volume = this.volume;
   }
 
   save() {

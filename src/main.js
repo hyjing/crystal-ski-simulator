@@ -10,6 +10,9 @@ import {StructureWorld} from './structure-collision.js';
 import {LiftJourney} from './lift-journey.js';
 import {createStationLife} from './station-life.js';
 import {StationAudio} from './station-audio.js';
+import {SlopeAudio} from './slope-audio.js';
+import {sampleSlopeConditions} from './slope-conditions.js';
+import {chairAtStation} from './lift-station-layout.js';
 import {assignTrailMusic,Soundtrack} from './soundtrack.js';
 import {RunChallenge,practiceTerrain,practiceBumps,recordRun} from './run-challenges.js';
 import {ChallengeRenderer} from './challenge-renderer.js';
@@ -23,6 +26,7 @@ import {applyMountainIdentity} from './mountain-identity.js';
 import {sceneryProfile} from './scenery-profile.js';
 import {MOUNTAINS,resolveMountain,mountainAsset} from './mountains.js';
 const mountainId=resolveMountain(new URLSearchParams(location.search).get('mountain')),mountain=MOUNTAINS[mountainId];
+const isCrystal=mountainId==='crystal';
 const asset=name=>`${import.meta.env.BASE_URL}${mountainAsset(mountainId,name)}`;
 import {stepAirborne} from './airborne.js';
 import {recoverLook,crestView,clearCameraSight} from './camera-look.js';
@@ -44,6 +48,7 @@ const soundtrack = new Soundtrack($('soundtrack'), $('music'), import.meta.env.B
 let trailMusic;
 let terrain, routes, route, skier, renderer, scene, camera, athlete, routeGroup, snow='soft';
 let mode='intro', view='follow', elapsed=0, peakSpeed=0, checkpoint=0, totalDistance=0, uiClock=0;
+let slopeAudio, slopeConditions, slopeTarget, slopeSampleTime=0, localStation, localChair, previousPractice=false;
 let lastTime=0, accumulator=0, pausedFrom='running', soundOn=false, audio, noiseGain, toastTimeout;
 let frameTime=1/60,physicsMs=0;
 let powderMs=0,frameSamples=[],frameP95=0,frameMax=0,slowFrames=0;
@@ -125,7 +130,9 @@ async function init(){
   routes.forEach(r=>{r.spawn=liftExitSpawn(terrain,r,infrastructure);});
   treePositions=addForest(scene,terrain,[...mappedRoutes,...routes],landcover,firTexture,vegetation,stationAreas);resortUpdate=addResort(scene,terrain,infrastructure);addStationStructures(scene,terrain,infrastructure,stationAreas);structures=new StructureWorld(scene);challengeRenderer=new ChallengeRenderer(scene,terrain);
   addAlpineDetails(scene,terrain,mappedRoutes,stationAreas);
-  await createAthlete();snowEffects=new SnowEffects(scene,{...terrain,surface:(x,z)=>powder.surface(x,z)});createMapBackground();
+  await createAthlete();snowEffects=new SnowEffects(scene,isCrystal?terrain:{...terrain,surface:(x,z)=>powder.surface(x,z)});
+  if(isCrystal)snowEffects.spraySurface=(x,z)=>powder.surface(x,z);
+  createMapBackground();
   speedRenderer=new SpeedRenderer(renderer,scene,camera);
   aerialImage=new Image();aerialImage.onload=()=>drawMap();aerialImage.src=asset(hasSatellite?'satellite.jpg':'aerial.jpg');
   // Load real far terrain progressively; retain the coarse grid if detailed assets fail.
@@ -151,8 +158,10 @@ async function init(){
       scene.remove(coarse);coarse.geometry.dispose();coarse.material.dispose();$('scenery').disabled=false;
     }catch(error){console.warn('Detailed scenery unavailable',error);toast('高清远景暂未载入，已保留基础远山');}
   }).catch(()=>toast('远山数据载入失败，近处地形仍可滑行'));
-  createSkiTraffic(scene,{...terrain,surface:(x,z)=>powder.surface(x,z)},{stationAreas,infrastructure,onStructuresChanged:()=>structures.rebuild()}).then(t=>{traffic=t;traffic.reset(route,skier,routes);weather.prepareMaterials();}).catch(error=>console.warn('Other skiers unavailable',error));
-  createStationLife(scene,scene.userData.liftTerminals||[],(x,z)=>terrain.surface(x,z)).then(s=>{stationLife=s;weather.prepareMaterials();}).catch(error=>console.warn('Station staff unavailable',error));
+  createSkiTraffic(scene,{...terrain,surface:(x,z)=>powder.surface(x,z)},{stationAreas,infrastructure,crystal:isCrystal,
+    clearSite:isCrystal?p=>!structures.blocked(p.x,p.z,terrain.surface(p.x,p.z))&&!(treePositions.nearby?.(p.x,p.z)||[]).some(t=>Math.hypot(t.x-p.x,t.z-p.z)<1.3):undefined,
+    onStructuresChanged:()=>structures.rebuild()}).then(t=>{traffic=t;traffic.reset(route,skier,routes);weather.prepareMaterials();}).catch(error=>console.warn('Other skiers unavailable',error));
+  createStationLife(scene,scene.userData.liftTerminals||[],(x,z)=>terrain.surface(x,z),isCrystal).then(s=>{stationLife=s;weather.prepareMaterials();}).catch(error=>console.warn('Station staff unavailable',error));
   createLiftPassengers(scene,resortUpdate).then(p=>{liftPassengers=p;p.select(route.liftId);weather.prepareMaterials();}).catch(error=>console.warn('Lift riders unavailable',error));
   renderRouteList();
   selectRoute(routes.find(r=>r.id===new URLSearchParams(location.search).get('route'))?.id||route.id);weather.update(0,camera,athlete.position);weather.snowfall.mesh.visible=true;speedRenderer.prepare();weather.snowfall.mesh.visible=false;$('loading').classList.add('hidden'); $('start').disabled=false;
@@ -242,10 +251,15 @@ function resetPosition(full=false){
   const spawn=full?route.spawn:route.points[i],ahead=full?pointAlongRoute(route,spawn.distance+25):route.points[i+1];
   if(full)checkpoint=spawn.segment;
   pendingRecovery=null;const retainedScore=skier?.freestyleScore||0,collisionCount=skier?.collisionCount||0;
-  skier=createSkier(spawn,ahead);skier.freestyleScore=full?0:retainedScore;skier.collisionCount=full?0:collisionCount;skier.trafficGrace=3;skier.skiSidecut=SKI_PROFILES[gear.board].sidecut;if(full){traffic?.reset(route,skier,routes);pendingRecovery=null;}
+  skier=createSkier(spawn,ahead);skier.freestyleScore=full?0:retainedScore;skier.collisionCount=full?0:collisionCount;skier.trafficGrace=3;skier.skiSidecut=SKI_PROFILES[gear.board].sidecut;if(full&&(!isCrystal||traffic?.route!==route))traffic?.reset(route,skier,routes);
   skier.distance=full?0:totalDistance;
   snowEffects.breakTrail();powder.breakTrail();
-  if(full){elapsed=0;peakSpeed=0;checkpoint=spawn.segment;totalDistance=0;trailPoints=[];frameSamples=[];frameP95=0;snowEffects.reset();powder.reset();}
+  if(full){elapsed=0;peakSpeed=0;checkpoint=spawn.segment;totalDistance=0;trailPoints=[];frameSamples=[];frameP95=0;
+    const practice=challengeMode==='freestyle';
+    if(!isCrystal||practice||previousPractice){snowEffects.reset();powder.reset();}
+    previousPractice=practice;
+    slopeConditions=slopeTarget=undefined;slopeSampleTime=0;
+  }
   else trailPoints.push({x:skier.x,z:skier.z,break:true});
   powder.update(skier,false,snow);updateAthlete(0); updateCamera(1,true);
   updateUI();
@@ -471,12 +485,23 @@ function animate(time){
     while(accumulator>=fixedStep){if(mode==='running')updatePhysics(fixedStep);accumulator-=fixedStep;}
   }else accumulator=0;
   physicsMs=physicsMs*.9+(performance.now()-physicsStart)*.1;
-  const powderStart=performance.now();powder.update(skier,mode==='running'&&!skier.airborne&&!skier.crashRemaining,snow);powderMs=performance.now()-powderStart;
-  liftClock+=dt*(mode==='lift'&&liftJourney.phase==='riding'?8:mode==='lift'&&liftJourney.phase==='boarding'?.3:1);resortUpdate(liftClock);updateLift(dt);if(mode==='lift')traffic?.step(dt,{x:1e9,z:1e9},gear.npcs,(x,z)=>treePositions.nearby?.(x,z)||[]);
-  updateAthlete(dt);updateCamera(dt);snowEffects.update(dt,skier,mode==='running',snow,athlete.userData.poleContact);snowEffects.mesh.material.opacity=snow==='soft'?.29:.65;liftPassengers?.update(liftClock,camera,gear.npcs);stationLife?.update(time/1000,skier,resortUpdate.allCarriers,gear.npcs,dt);stationAudio?.update(scene.userData.liftTerminals||[],skier,soundOn&&['running','lift','finished'].includes(mode),time/1000,liftJourney.phase==='boarding');
+  const worldActive=['running','lift','drone','inspection','finished'].includes(mode);
+  const storm=worldActive&&isCrystal?dt*weather.state.snow:0;
+  if(storm){powder.cover(storm);snowEffects.cover(storm);}
+  const trackObserver=mode==='drone'?camera.position:skier;
+  const crowdTracks=isCrystal&&gear.npcs&&worldActive&&traffic
+    ?snowEffects.recordCrowd(dt,traffic.states,trackObserver):undefined;
+  const powderStart=performance.now();
+  powder.update(skier,mode==='running'&&!skier.airborne&&!skier.crashRemaining,snow,crowdTracks);
+  powderMs=performance.now()-powderStart;
+  liftClock+=dt*(mode==='lift'&&liftJourney.phase==='riding'?8:mode==='lift'&&liftJourney.phase==='boarding'?.3:1);resortUpdate(liftClock);updateLift(dt);if(mode==='lift'||(isCrystal&&['drone','inspection','finished'].includes(mode))){
+    traffic?.step(dt,{x:1e9,z:1e9},gear.npcs,(x,z)=>treePositions.nearby?.(x,z)||[]);
+  }
+  updateAthlete(dt);updateCamera(dt);snowEffects.update(dt,skier,mode==='running',snow,athlete.userData.poleContact);snowEffects.mesh.material.opacity=snow==='soft'?.29:.65;liftPassengers?.update(liftClock,camera,gear.npcs);stationLife?.update(time/1000,skier,resortUpdate.allCarriers,gear.npcs,dt);stationAudio?.update(scene.userData.liftTerminals||[],mode==='drone'?camera.position:skier,soundOn&&worldActive,time/1000,liftJourney.phase==='boarding');
   if(arrivalZone){arrivalZone.visible=mode==='running';arrivalZone.children[0].material.opacity=.55+.15*Math.sin(time*.002);}
-  traffic?.update(0,skier,['running','inspection','drone','lift'].includes(mode),gear.npcs,camera,dt);
-  weather.update(dt,camera,athlete.position);
+  traffic?.update(0,skier,worldActive&&(isCrystal||mode!=='finished'),gear.npcs,camera,dt);
+  updateSlopeExperience(dt,worldActive);
+  weather.update(dt,camera,athlete.position,worldActive?slopeConditions:undefined);
   snowEffects.sprayMaterial.color.copy(weather.state.cloud).lerp(weather.state.sun,.2);
   uiClock+=dt;if(uiClock>.1){updateUI();uiClock=0;}
   if(noiseGain)noiseGain.gain.setTargetAtTime(soundOn&&mode==='running'?.006+Math.min(skier.speed/42,1)*.065:0,audio.currentTime,.15);
@@ -484,13 +509,45 @@ function animate(time){
   demoCapture?.afterFrame(time);
 }
 
+function updateSlopeExperience(dt, active){
+  if(!isCrystal)return;
+  const listener=mode==='drone'?camera.position:skier;
+  slopeSampleTime-=dt;
+  if(active&&slopeSampleTime<=0){
+    slopeSampleTime=.2;
+    slopeTarget=sampleSlopeConditions(terrain,route,listener,(x,z)=>treePositions.nearby?.(x,z)||[],weather.state);
+    slopeConditions??={...slopeTarget};
+    localStation=null;
+    for(const station of scene.userData.liftTerminals||[]){
+      const distance=Math.hypot(station.x-listener.x,station.z-listener.z);
+      if(distance<65&&(!localStation||distance<localStation.distance))localStation={...station,distance};
+    }
+    localChair=localStation?chairAtStation(localStation,resortUpdate.allCarriers)?.carrier:null;
+  }
+  if(active&&slopeTarget){
+    const blend=1-Math.exp(-dt*2);
+    for(const key of ['shelter','shade','basin','exposure'])slopeConditions[key]+=(slopeTarget[key]-slopeConditions[key])*blend;
+  }
+  const inStation=localStation?clamp(1-localStation.distance/55,0,1):0;
+  soundtrack.mix(active&&soundOn?inStation:0,dt);
+  slopeAudio?.update({
+    enabled:active&&soundOn,skier,grounded:mode==='running'&&!skier.airborne&&!skier.crashRemaining,
+    snow,conditions:slopeConditions,camera,states:gear.npcs?(traffic?.states||[]):[],
+    wind:weather.state.wind,station:localStation,carrier:localChair,poleContact:athlete.userData.poleContact,
+  });
+}
+
 function enableAudio(){
   if(!audio){
-    audio=new AudioContext();stationAudio=new StationAudio(audio);const buffer=audio.createBuffer(1,audio.sampleRate*2,audio.sampleRate),samples=buffer.getChannelData(0),rng=random(89);
-    for(let i=0;i<samples.length;i++)samples[i]=(rng()*2-1);
-    const noise=audio.createBufferSource();noise.buffer=buffer;noise.loop=true;
-    const filter=audio.createBiquadFilter();filter.type='lowpass';filter.frequency.value=900;
-    noiseGain=audio.createGain();noiseGain.gain.value=0;noise.connect(filter).connect(noiseGain).connect(audio.destination);noise.start();
+    audio=new AudioContext();stationAudio=new StationAudio(audio);
+    if(isCrystal)slopeAudio=new SlopeAudio(audio);
+    else {
+      const buffer=audio.createBuffer(1,audio.sampleRate*2,audio.sampleRate),samples=buffer.getChannelData(0),rng=random(89);
+      for(let i=0;i<samples.length;i++)samples[i]=(rng()*2-1);
+      const noise=audio.createBufferSource();noise.buffer=buffer;noise.loop=true;
+      const filter=audio.createBiquadFilter();filter.type='lowpass';filter.frequency.value=900;
+      noiseGain=audio.createGain();noiseGain.gain.value=0;noise.connect(filter).connect(noiseGain).connect(audio.destination);noise.start();
+    }
   }
   audio.resume().catch(()=>toast('浏览器暂时无法播放环境音'));
 }

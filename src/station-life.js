@@ -4,18 +4,29 @@ import {loadHumanoid} from './humanoid.js';
 import {applyGear,GEAR_PRESETS} from './wardrobe.js';
 import {fitSnowContact} from './ground-contact.js';
 import {targetNpcPose,blendNpcPose} from './npc-pose.js';
-import {stationLayout,staffActivity} from './lift-station-layout.js';
+import {stationLayout,staffActivity,stationPoint} from './lift-station-layout.js';
 export const STATION_ACTORS=6;
 // A fixed pool follows the nearest stations; actors never multiply with map size.
 export class StationLife{
- constructor(stations,actors,surface){this.stations=stations;this.actors=actors;this.surface=surface;this.nextSelection=0;this.selected=[];}
+ constructor(stations,actors,surface,activeQueues=false){this.activeQueues=activeQueues;this.stations=stations;this.actors=actors;this.surface=surface;this.nextSelection=0;this.selected=[];}
  update(time,player,carriers,enabled=true,dt=1/60){
   if(time>=this.nextSelection){this.nextSelection=time+1;this.selected=this.stations.map(s=>({s,d:Math.hypot(s.x-player.x,s.z-player.z)})).filter(v=>v.d<180).sort((a,b)=>(a.d-(this.selected.includes(a.s)?25:0))-(b.d-(this.selected.includes(b.s)?25:0))).slice(0,2).map(v=>v.s);}
   for(let i=0;i<this.actors.length;i++){
    const actor=this.actors[i],station=this.selected[Math.floor(i/3)],role=i%3;actor.visible=!!station&&enabled;if(!actor.visible)continue;
-   const layout=stationLayout(station),p=role===2?layout.queue[1]:layout.staff[role],activity=staffActivity(station,carriers,time,role,player);
-   actor.position.set(p.x,this.surface(p.x,p.z)-1200-.07,p.z);actor.rotation.set(0,station.heading+(role===2?Math.PI:0),0);
-   const pose={pedestrian:true,holding:role===2?undefined:'staff',idleGesture:role===2?'goggles':undefined,headLook:Math.sin(time*.35+i)*.14,staffGesture:role===2?undefined:activity.gesture,staffPhase:activity.phase,speed:0,poseShape:{bend:activity.gesture==='shovel'?.18:0}};
+   const layout=stationLayout(station),activity=staffActivity(station,carriers,time,role,player);
+   let p=role===2?layout.queue[1]:layout.staff[role];
+   let direction=role===2?Math.PI:0,walk=0,gesture=role===2?'goggles':undefined;
+   if(role===2&&this.activeQueues){
+    const queue=station.role==='lower',phase=(time+Math.abs(station.x)*.03)%24;
+    const out=Math.max(0,Math.min(1,(phase-3)/6)),back=Math.max(0,Math.min(1,(phase-14)/6));
+    const smooth=t=>t*t*(3-2*t);
+    p=stationPoint(station,queue?-12:-8,23+(queue?-5:5)*(smooth(out)-smooth(back)));
+    walk=out>0&&out<1||back>0&&back<1?.8:0;
+    direction=phase<14?(queue?Math.PI:0):(queue?0:Math.PI);
+    gesture=walk?'':phase<3?'goggles':'chat';
+   }
+   actor.position.set(p.x,this.surface(p.x,p.z)-1200-.07,p.z);actor.rotation.set(0,station.heading+direction,0);
+   const pose={pedestrian:true,holding:role===2&&walk?undefined:'staff',idleGesture:gesture,walkAmount:walk,walkPhase:time*5,headLook:Math.sin(time*.35+i)*.14,staffGesture:role===2?undefined:activity.gesture,staffPhase:activity.phase,speed:0,poseShape:{bend:activity.gesture==='shovel'?.18:0}};
    const changed=actor.userData.stationId!==station.id;actor.userData.stationId=station.id;
    const tick=Math.floor(time*20+i*.17);if(changed||actor.userData.staffTick!==tick){actor.userData.staffTick=tick;targetNpcPose(actor,()=>updateAthletePose(actor,pose,changed?0:.05,this.surface));}blendNpcPose(actor,dt,changed);fitSnowContact(actor,this.surface,role!==2);
    const shovel=actor.userData.shovel;shovel.visible=role===1&&activity.gesture==='shovel';
@@ -23,7 +34,7 @@ export class StationLife{
   }
  }
 }
-export async function createStationLife(scene,stations,surface){
+export async function createStationLife(scene,stations,surface,activeQueues=false){
  const actors=[];for(let i=0;i<STATION_ACTORS;i++){
   const actor=createAthleteRig(scene);actor.visible=false;await loadHumanoid(actor,'npc');const worker=i%3!==2;
   applyGear(actor,worker?{...GEAR_PRESETS.blue,jacket:'#edaa32',pants:'#26394b',helmet:'#e9e4d7'}:GEAR_PRESETS.cream);
@@ -32,5 +43,5 @@ export async function createStationLife(scene,stations,surface){
   const shaft=new THREE.Mesh(new THREE.CylinderGeometry(.025,.025,2.6,6),metal);shaft.position.y=-.55;shovel.add(shaft);
   const blade=new THREE.Mesh(new THREE.BoxGeometry(.42,.46,.07),metal);blade.position.set(0,-1.75,.05);shovel.add(blade);actor.add(shovel);actor.userData.shovel=shovel;
   actor.traverse(o=>{if(o.isMesh)o.castShadow=false;});actors.push(actor);
- }return new StationLife(stations,actors,surface);
+ }return new StationLife(stations,actors,surface,activeQueues);
 }
