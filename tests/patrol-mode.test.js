@@ -61,3 +61,24 @@ test('the Crystal pursuit itinerary is a long downhill route ending at Quicksilv
   assert.equal(r.returnLift,'Quicksilver');
   assert.ok(pointAlongRoute(r,1500).distance===1500);
 });
+
+test('snow pulse is kept out of range, pushes away nearby patrol, and interrupts capture',()=>{
+  const run=new PatrolRun(route,()=>true),player=makePlayer(100);
+  run.item='pulse';
+  run.contact=1;
+  assert.equal(run.use(player),false);
+  assert.equal(run.item,'pulse');
+  const close={x:0,z:96,speed:15,heading:0,bank:0};
+  const far={x:0,z:74,speed:15,heading:0,bank:0};
+  run.agents=[close,far];
+  run.stars=1;
+  assert.equal(run.use(player),true);
+  assert.equal(run.contact,0);
+  assert.equal(run.item,null);
+  assert.ok(close.stunUntil>2);
+  assert.equal(far.stunUntil,undefined);
+  run.step(.1,player);
+  assert.ok(close.z<95);
+  assert.ok(far.z>74);
+  assert.equal(run.contact,0);
+});

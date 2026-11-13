@@ -6,6 +6,7 @@ export const PATROL_ITEMS = {
   boost: {name: '加速充能', color: '#ffe16d', symbol: '»'},
   decoy: {name: '幻影信标', color: '#c9a4ff', symbol: '◇'},
   shield: {name: '护盾', color: '#83dcff', symbol: '+'},
+  pulse: {name: '雪浪脉冲', color: '#b0fff0', symbol: '◎'},
 };
 const range = (a, b) => Math.hypot(a.x-b.x, a.z-b.z);
 const turnAngle = (a, b) => Math.atan2(Math.sin(b-a), Math.cos(b-a));
@@ -34,7 +35,7 @@ export class PatrolRun {
     this.effect = null;
     this.boostEnergy = 0;
     this.nextIncident = 0;
-    const types = Object.keys(PATROL_ITEMS);
+    const types = ['boost','pulse','decoy','shield'];
     this.pickups = [];
     for(let d=route.spawn.distance+115;d<route.length-90;d+=180){
       const side=this.pickups.length%2?1:-1;
@@ -58,8 +59,21 @@ export class PatrolRun {
   use(player){
     if(!this.item||this.effect||this.outcome||player.crashRemaining||player.airborne)return false;
     const type=this.item;
+    if(type==='pulse'){
+      const nearby=this.agents.filter(agent=>range(agent,player)<=15);
+      if(!nearby.length)return false;
+      this.contact=0;
+      for(const agent of nearby){
+        const dx=agent.x-player.x,dz=agent.z-player.z;
+        agent.repelHeading=Math.hypot(dx,dz)>.1?Math.atan2(dx,dz):player.heading+Math.PI;
+        agent.repelUntil=this.time+.55;
+        agent.stunUntil=this.time+2.4;
+        agent.speed=0;
+      }
+    }
     this.item=null;
-    this.effect={type,until:this.time+(type==='boost'?2.1:type==='decoy'?5:6),x:player.x,z:player.z};
+    const duration={boost:2.1,decoy:5,shield:6,pulse:.62}[type];
+    this.effect={type,until:this.time+duration,x:player.x,z:player.z};
     this.boostEnergy=type==='boost'?7:0;
     if(type==='shield')this.contact=0;
     return true;
@@ -100,6 +114,15 @@ export class PatrolRun {
     const playerHeight=surface(player.x,player.z);
     for(const agent of this.agents){
       const separation=range(agent,player);
+      if(agent.stunUntil>this.time){
+        if(agent.repelUntil>this.time){
+          const step=16*dt;
+          const point={x:agent.x+Math.sin(agent.repelHeading)*step,z:agent.z+Math.cos(agent.repelHeading)*step};
+          if(this.clear(point))Object.assign(agent,point);
+        }
+        agent.bank*=Math.exp(-dt*8);
+        continue;
+      }
       const onRoute=along.distance<24&&separation>32?nearestOnRoute(agent,this.route.points):null;
       const following=onRoute&&onRoute.distance<24&&along.progress>onRoute.progress+12;
       const distracted=lure&&range(agent,lure)<85;

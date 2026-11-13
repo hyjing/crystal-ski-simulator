@@ -21,6 +21,16 @@ export class PatrolScene {
     this.beacon=new THREE.Mesh(this.tokenGeometry,this.materials.decoy);
     this.beacon.visible=false;
     this.root.add(this.beacon);
+    this.pulse=new THREE.Mesh(new THREE.RingGeometry(.92,1,48),new THREE.MeshBasicMaterial({
+      color:PATROL_ITEMS.pulse.color,side:THREE.DoubleSide,transparent:true,depthWrite:false,
+    }));
+    this.pulse.geometry.rotateX(-Math.PI/2);
+    const positions=this.pulse.geometry.attributes.position;
+    this.pulseShape=positions.array.slice();
+    positions.setUsage(THREE.DynamicDrawUsage);
+    this.pulse.frustumCulled=false;
+    this.pulse.visible=false;
+    this.root.add(this.pulse);
     for(let i=0;i<5;i++){
       const actor=createAthleteRig(this.root);
       actor.visible=false;
@@ -63,6 +73,20 @@ export class PatrolScene {
       const {x,z}=this.run.effect;
       this.beacon.position.set(x,this.surface(x,z)+1.3,z);
       this.beacon.rotation.y=this.phase*2;
+    }
+    this.pulse.visible=this.run.effect?.type==='pulse';
+    if(this.pulse.visible){
+      const {x,z,until}=this.run.effect;
+      const progress=1-Math.max(0,Math.min(1,(until-this.run.time)/.62));
+      const ground=this.surface(x,z),radius=1+progress*14;
+      this.pulse.position.set(x,ground,z);
+      const positions=this.pulse.geometry.attributes.position;
+      for(let i=0;i<positions.count;i++){
+        const dx=this.pulseShape[i*3]*radius,dz=this.pulseShape[i*3+2]*radius;
+        positions.setXYZ(i,dx,this.surface(x+dx,z+dz)-ground+.16,dz);
+      }
+      positions.needsUpdate=true;
+      this.pulse.material.opacity=(1-progress)*.75;
     }
     this.clock+=dt;
     const pose=this.clock>=.05;
