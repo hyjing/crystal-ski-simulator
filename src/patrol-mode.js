@@ -38,10 +38,12 @@ export class PatrolRun {
     this.stars = 0;
     this.peakStars = 0;
     this.contact = 0;
+    this.evadeUntil = 0;
     this.outcome = '';
     this.furthest = route.spawn.distance;
     this.lastSeen = 0;
     this.spawnAfter = 0;
+    this.rearmAt = route.spawn.distance+22;
     this.agents = [];
     this.inventory = [];
     this.lastPickup = null;
@@ -59,6 +61,32 @@ export class PatrolRun {
 
   get captureRemaining(){
     return this.contact > 0 ? Math.max(0, CAPTURE_SECONDS - this.contact) : null;
+  }
+
+  evadeLanding(event){
+    if(event?.type==='land'&&event.quality==='clean'&&event.airTime>=.35){
+      this.evadeUntil=this.time+.35;
+      this.contact=0;
+    }
+  }
+
+  reinforcement(player,progress,offscreen,surface){
+    const heading=player.heading,ground=surface(player.x,player.z);
+    const behind=Math.max(0,progress-45-this.agents.length*12);
+    const candidates=[
+      ...[-5,5,0].map(offset=>routePoint(this.route,behind,offset)),
+      ...[-.65,.65,0,-1.2,1.2].map(angle=>({
+        x:player.x-Math.sin(heading+angle)*32,
+        z:player.z-Math.cos(heading+angle)*32,
+        heading:heading+angle,
+      })),
+      ...[-7,7,0].map(offset=>routePoint(this.route,progress+46,offset)),
+    ];
+    return candidates.find(point=>{
+      const gap=range(point,player);
+      return gap>=26&&gap<=105&&this.agents.every(agent=>range(agent,point)>9)&&
+        offscreen(point)&&this.clear(point)&&Math.abs(surface(point.x,point.z)-ground)<gap*.65+3;
+    });
   }
 
   repel(agent,player,duration,speed,pushTime){
@@ -133,7 +161,7 @@ export class PatrolRun {
         this.spawnAfter=Math.max(this.spawnAfter,this.time+2.5);
       }
     }
-    if(!this.stars&&this.peakStars===0&&this.furthest>this.route.spawn.distance+22)this.addStar();
+    if(!this.stars&&this.furthest>this.rearmAt)this.addStar();
     for(const fraction of [.24,.44,.64,.81]){
       const marker=this.route.length*fraction;
       if(previous<marker&&this.furthest>=marker)this.addStar();
@@ -141,10 +169,12 @@ export class PatrolRun {
 
     const desired=this.stars?Math.min(5,this.stars+1):0;
     if(this.agents.length<desired&&this.time>=this.spawnAfter){
-      const distance=Math.max(this.route.spawn.distance-12,along.progress-78-this.agents.length*16);
-      const point=[-5,5,0].map(offset=>routePoint(this.route,distance,offset)).find(p=>range(p,player)>38&&offscreen(p)&&this.clear(p));
+      const point=this.reinforcement(player,along.progress,offscreen,surface);
       this.spawnAfter=this.time+(point?3.5:.5);
-      if(point)this.agents.push({...point,speed:Math.max(9,player.speed*.75),bank:0,id:this.nextAgent++});
+      if(point){
+        this.agents.push({...point,speed:Math.max(9,player.speed*.75),bank:0,id:this.nextAgent++});
+        this.lastSeen=this.time;
+      }
     }
 
     const lure=this.effect?.type==='decoy'?this.effect:null;
@@ -216,17 +246,20 @@ export class PatrolRun {
     }
 
     if(threat<75)this.lastSeen=this.time;
-    if(this.stars&&this.time-this.lastSeen>12){
+    if(this.stars&&this.agents.some(agent=>!agent.launch)&&this.time-this.lastSeen>12){
       this.stars--;
       this.lastSeen=this.time;
-      if(!this.stars)this.agents=this.agents.filter(agent=>agent.launch);
+      if(!this.stars){
+        this.rearmAt=this.furthest+90;
+        this.agents=this.agents.filter(agent=>agent.launch);
+      }
       else if(this.agents.length>Math.min(5,this.stars+1)){
         const index=this.agents.findLastIndex(agent=>!agent.launch);
         if(index>=0)this.agents.splice(index,1);
       }
     }
     const inReach = this.stars > 0 && contactDistance <= CAPTURE_RADIUS &&
-      !player.airborne && this.effect?.type !== 'shield';
+      !player.airborne && this.time>=this.evadeUntil && this.effect?.type !== 'shield';
     this.contact = inReach ? this.contact + dt : 0;
     if(this.contact >= CAPTURE_SECONDS - 1e-9){
       this.contact = CAPTURE_SECONDS;

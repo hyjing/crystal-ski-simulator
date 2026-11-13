@@ -324,7 +324,7 @@ function startRun(reset=true){
   $('intro').classList.add('hidden');$('session').classList.remove('hidden');$('touch').classList.add('active');
   $('overview').innerHTML='俯瞰 <kbd>O</kbd>';
   $('game-menu').open=false;
-  if(patrol)toast('愤怒的雪友 · 沿标记滑到终点 · X 使用道具 · Z 踹飞');
+  if(patrol)toast('愤怒的雪友 · 沿标记滑到终点 · K 踢开 · L 使用道具');
   else toast(touchDevice?'长按左侧转弯 · 右侧撑杖起步 · 拖动场景环视':'上站缓坡出发 · 按住 Shift 撑杖 · 沿雪道滑到下站光圈');
   if(soundOn) enableAudio();
   soundtrack.refresh();
@@ -394,7 +394,11 @@ function updatePhysics(dt){
     }
   }
   if(skier.airEvent?.type==='takeoff'||skier.airEvent?.type==='land'||skier.airEvent?.type==='crash'){snowEffects.breakTrail();powder.breakTrail();}
-  if(skier.airEvent?.type==='land'&&skier.airEvent.points&&!pendingRecovery)toast(`平稳落地 +${skier.airEvent.points}${skier.airEvent.rotation?' · '+skier.airEvent.rotation+'°':''}${skier.airEvent.grab?' · 抓板':''}`);
+  if(skier.airEvent?.type==='land'&&!pendingRecovery){
+    const event=skier.airEvent,charge=kick.chargeLanding(event);
+    patrol?.evadeLanding(event);
+    if(event.points||charge)toast(`平稳落地${event.points?` +${event.points}`:''}${charge?` · 踢开充能 +${Number(charge.toFixed(1))}`:''}`);
+  }
   if(skier.airEvent?.type==='jump-blocked')toast('起跳需要至少 18 km/h · 先撑杖或顺坡加速');
   if(skier.airEvent?.type==='land'&&skier.airEvent.quality==='recover')toast('落地稍偏 · 屈膝缓冲、搓雪恢复');
   if(skier.airEvent?.type==='crash'){const reasons={impact:'触地冲击过大',crossed:'高速横板落地',combined:'横板与冲击叠加',rotation:'空中旋转尚未收住'};toast(`落地摔倒：${reasons[skier.airEvent.reason]||'失去支撑'} · 正在起身`);}elapsed+=dt;peakSpeed=Math.max(peakSpeed,skier.speed);totalDistance=skier.distance;
@@ -659,7 +663,9 @@ function updateUI(){
   const cooldown=kick.cooldown;
   for(const id of ['patrol-kick','touch-kick']){
     $(id).disabled=cooldown>0||mode!=='running';
-    $(id).textContent=cooldown>0?`踹飞 · ${cooldown.toFixed(1)}s`:(id==='touch-kick'?'踹飞':'踹飞 · Z');
+    const label=id==='touch-kick'?'踢开':'踢开 · K';
+    $(id).textContent=cooldown>0?`踢开 · ${cooldown.toFixed(1)}s`
+      :kick.charge>0?`${label} · 充能 ${Number(kick.charge.toFixed(1))}/3`:label;
     $(id).hidden=mode!=='running'||(!patrol&&!gear.npcs);
   }
   if(patrol){
@@ -667,11 +673,13 @@ function updateUI(){
     $('wanted-stars').setAttribute('aria-label',`追逐热度 ${patrol.stars} 星`);
     $('patrol-threat').textContent=patrol.outcome==='caught'?'已被雪友追上'
       : remaining!==null&&remaining>0?'快被追上了'
-      : patrol.outcome==='escaped'?'已到达终点':patrol.stars?'愤怒的雪友正在追赶':'暂无雪友追赶';
+      : patrol.outcome==='escaped'?'已到达终点'
+      : patrol.agents.some(agent=>!agent.launch)?'愤怒的雪友正在追赶'
+      : patrol.stars?'雪友正在赶来':'暂无雪友追赶';
     const active=patrol.effect;
     $('patrol-inventory-count').textContent=active
       ?`${PATROL_ITEMS[active.type].name} · ${Math.max(0,active.until-patrol.time).toFixed(1)} 秒`
-      :`道具 ${patrol.inventory.length}/${ITEM_CAPACITY}`;
+      :`道具 ${patrol.inventory.length}/${ITEM_CAPACITY} · L 使用`;
     for(const button of $('patrol-items').children){
       const slot=Number(button.dataset.slot),item=PATROL_ITEMS[patrol.inventory[slot]];
       button.textContent=item?.name??'—';
@@ -934,8 +942,8 @@ addEventListener('keydown',e=>{
   if((e.code==='Space'||e.code==='Enter')&&e.target.closest('button,summary,a'))return;
   if(['Space','ArrowLeft','ArrowRight','ArrowDown','ArrowUp'].includes(e.code))e.preventDefault();
   if(e.repeat)return;
-  if(e.code==='KeyZ'||e.code==='KeyK'){kickSkier();return;}
-  if(e.code==='KeyX'||e.code==='KeyG'){usePatrolItem();return;}
+  if(e.code==='KeyK'){kickSkier();return;}
+  if(e.code==='KeyL'){usePatrolItem();return;}
   if(['Digit1','Digit2','Digit3'].includes(e.code)){usePatrolItem(Number(e.code.at(-1))-1);return;}
   if(e.code==='KeyB'&&!e.repeat){boardLift();return;}
   if(e.code==='KeyV'&&!liftView()){toggleScenery();return;}

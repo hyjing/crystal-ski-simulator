@@ -23,10 +23,21 @@ export class SkierKick {
     this.burstTargets=new Set();
     this.time=0;
     this.readyAt=0;
+    this.charge=0;
     this.action=null;
   }
 
   get cooldown(){return Math.max(0,this.readyAt-this.time);}
+
+  chargeLanding(event){
+    if(event?.type!=='land'||event.quality!=='clean'||!(event.airTime>=.35))return 0;
+    const earned=event.rotation>=180||event.grab?2:1;
+    const applied=Math.min(earned,this.cooldown);
+    this.readyAt-=applied;
+    const stored=Math.min(3-this.charge,earned-applied);
+    this.charge+=stored;
+    return applied+stored;
+  }
 
   get pose(){
     if(!this.action)return null;
@@ -49,7 +60,8 @@ export class SkierKick {
     const point=position(target);
     const across=(point.x-player.x)*Math.cos(player.heading)-(point.z-player.z)*Math.sin(player.heading);
     this.action={target,start:this.time,side:across<0?-1:1,resolved:false};
-    this.readyAt=this.time+COOLDOWN;
+    this.readyAt=this.time+COOLDOWN-this.charge;
+    this.charge=0;
     return true;
   }
 

@@ -24,6 +24,60 @@ test('heading-up map points towards the camera and north-up keeps west to the le
 
 const route={points:[{x:0,z:0},{x:0,z:3200}],length:3200,spawn:{distance:35}};
 const makePlayer=(z)=>({x:0,z,heading:0,speed:20,vx:0,vz:20});
+test('an early chase tries offscreen alternatives and keeps trying if the view blocks all entries',()=>{
+  const run=new PatrolRun(route,()=>true);
+  const player=makePlayer(58);
+  for(let i=0;i<30;i++)run.step(.5,player,()=>false);
+  assert.equal(run.stars,1);
+  assert.equal(run.agents.length,0);
+  run.step(.5,player,p=>p.x>10);
+  assert.equal(run.agents.length,1);
+  assert.ok(run.agents[0].x>10&&run.agents[0].z<player.z);
+});
+
+test('a new chase starts after more downhill progress when a wave loses track',()=>{
+  const run=new PatrolRun(route,()=>true);
+  run.step(.1,makePlayer(100));
+  assert.equal(run.stars,1);
+  run.agents=[{x:160,z:100,speed:0,heading:0,bank:0}];
+  run.spawnAfter=100;
+  run.step(12.1,makePlayer(100),()=>false,()=>0,()=>true);
+  assert.equal(run.stars,0);
+  run.step(.1,makePlayer(180));
+  assert.equal(run.stars,0);
+  run.step(.1,makePlayer(200));
+  assert.equal(run.stars,1);
+});
+
+test('airtime resets capture and a clean landing grants a brief grace period',()=>{
+  const run=new PatrolRun(route,()=>false),player=makePlayer(100);
+  run.stars=1;
+  run.agents=[{x:0,z:98,heading:0,speed:0,bank:0}];
+  run.contact=2;
+  run.step(.1,{...player,airborne:true});
+  assert.equal(run.captureRemaining,null);
+  run.evadeLanding({type:'land',quality:'clean',airTime:.6});
+  run.step(.3,player);
+  assert.equal(run.captureRemaining,null);
+  run.step(.1,player);
+  assert.ok(run.captureRemaining>2.8);
+});
+
+test('clean landings bank charge or shorten an active kick cooldown',()=>{
+  const kick=new SkierKick(()=>0,()=>true),player=makePlayer(100);
+  const landing={type:'land',quality:'clean',airTime:.6};
+  assert.equal(kick.chargeLanding({...landing,quality:'recover'}),0);
+  assert.equal(kick.chargeLanding({...landing,airTime:.2}),0);
+  assert.equal(kick.chargeLanding(landing),1);
+  assert.equal(kick.chargeLanding({...landing,grab:true}),2);
+  assert.equal(kick.chargeLanding(landing),0);
+  assert.ok(kick.start(player,[{x:1,z:98}]));
+  assert.equal(kick.cooldown,2);
+  assert.equal(kick.charge,0);
+  assert.equal(kick.chargeLanding({...landing,rotation:180}),2);
+  assert.equal(kick.cooldown,0);
+});
+
 test('chase escalates at new sections, spawns behind, and catches a skier who stays in reach',()=>{
   const run=new PatrolRun(route,()=>true);
   run.step(.05,makePlayer(70));
