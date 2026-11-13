@@ -43,3 +43,17 @@
 .brand-mark{flex:none}.brand #brand-name{display:block;font-size:clamp(12px,1.6vw,20px);letter-spacing:1.7px;white-space:nowrap}.location b{font-weight:500;white-space:nowrap}.terrain-caption b{font-weight:500}.terrain-caption #caption-source{display:inline}.imagery-credit{position:fixed;left:12px;bottom:4px;z-index:12;max-width:calc(100vw - 24px);padding:3px 6px;border-radius:3px;background:#f3f7eddb;color:#334b4b;font-size:8px;line-height:1.4;letter-spacing:0}.imagery-credit:hover{text-decoration:underline}@media(max-width:700px){.brand #brand-name{font-size:12px;letter-spacing:.8px}.brand .brand-mark{width:32px;height:32px}.imagery-credit{font-size:6px;bottom:2px;line-height:1.25;max-width:calc(100vw - 24px)}}
 
 [hidden]{display:none!important}#lift-controls{margin-top:10px}#lift-controls p{font-size:12px;color:var(--muted,#b5c7d1)}#lift-controls button,#board-lift{margin-top:6px;width:100%;min-height:40px}#challenge-status{font-size:12px;color:#b6d9ea}#board-result:disabled{opacity:.4}
+
+.map-panel{width:clamp(290px,28vw,420px)}
+#minimap{display:block;width:100%;height:auto;aspect-ratio:4/3}
+#patrol-hud{display:grid;gap:5px;margin:8px 0;padding:8px 10px;background:#fbf0e5;border:1px solid #dcb8a9;border-radius:5px}
+#wanted-stars{color:#8f382b;font-size:19px;line-height:1;letter-spacing:2px}
+#patrol-threat{color:#66382c;font-size:11px}
+#patrol-item{min-height:36px;margin:0;padding:5px 7px;font-size:11px}
+@media(max-width:900px),(pointer:coarse){
+ .map-panel{width:clamp(195px,40vw,300px)}
+ #patrol-item{min-height:44px}
+}
+@media(max-height:500px) and (max-width:1000px){
+ .map-panel{width:clamp(175px,31vw,240px)}
+}

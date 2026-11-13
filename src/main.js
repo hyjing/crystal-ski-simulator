@@ -1,3 +1,6 @@
+import {mapProjection} from './minimap.js';
+import {PatrolRun,PATROL_ITEMS,PATROL_ROUTE_ID} from './patrol-mode.js';
+import {PatrolScene} from './patrol-scene.js';
 import * as THREE from 'three';
 import './style.css';
 import {HeldControls,bindTouchControls} from './controls.js';
@@ -45,7 +48,14 @@ import {addAlpineDetails} from './alpine-details.js';
 const $ = id => document.getElementById(id);
 const keys = new HeldControls();
 const soundtrack = new Soundtrack($('soundtrack'), $('music'), import.meta.env.BASE_URL, toast);
-let trailMusic;
+let trailMusic,patrol,patrolScene,patrolStep=0;
+const mapForward=new THREE.Vector3();
+const patrolView=new THREE.Frustum(),patrolProjection=new THREE.Matrix4(),patrolSphere=new THREE.Sphere(new THREE.Vector3(),3);
+function patrolOffscreen(point){
+  patrolSphere.center.set(point.x,yAt(point.x,point.z)+.85,point.z);
+  return !patrolView.intersectsSphere(patrolSphere);
+}
+let mapFollowsCamera=true,mapClock=0;
 let terrain, routes, route, skier, renderer, scene, camera, athlete, routeGroup, snow='soft';
 let mode='intro', view='follow', elapsed=0, peakSpeed=0, checkpoint=0, totalDistance=0, uiClock=0;
 let slopeAudio, slopeConditions, slopeTarget, slopeSampleTime=0, localStation, localChair, previousPractice=false;
@@ -76,6 +86,7 @@ function random(seed=42){ return ()=>{seed=(Math.imul(seed,1664525)+1013904223)|
 
 async function init(){
   $('start').disabled=true;
+  $('challenge').disabled=true;
   $('mountain').value=mountainId;applyMountainIdentity(document,mountainId);
   if(mountain.referenceMap){$('map-layer').textContent='参考图';document.querySelector('.map-attribution').textContent='© OSM · Mapzen / Canada OGL';document.querySelector('.map-attribution').href='https://github.com/tilezen/joerd/blob/master/docs/attribution.md';document.querySelector('.data-note>span:last-child').textContent='缆车上站到下站 / OSM 林区参考 / 局部粉雪形变';}
   const response=await fetch(asset('dem.json'));
@@ -99,6 +110,18 @@ async function init(){
   terrain=preparePisteTerrain(terrain,network);
   const stationGround=prepareStationTerrain(terrain,routes,infrastructure);terrain=practiceTerrain(stationGround.terrain);stationAreas=stationGround.areas;
   routes=getLiftRuns(terrain,runs);route=routes[0];
+  if(isCrystal){
+    try{
+      const patrolData=await fetch(asset('patrol-run.json')).then(r=>{if(!r.ok)throw Error('Patrol route');return r.json();});
+      const [descent]=getLiftRuns(terrain,patrolData);
+      if(descent){
+        descent.patrolOnly=true;
+        descent.label='巡逻追逐 · 长距离';
+        routes.push(descent);
+      }
+    }catch(error){console.warn('Optional patrol route unavailable',error);}
+  }
+  $('patrol-option').hidden=!routes.some(r=>r.patrolOnly);
   trailMusic=assignTrailMusic(mountainId,routes.map(r=>r.id));
   $('terrain-resolution').textContent=`真实 ${mountain.elevationLabel||'USGS'} 高程 · 约 ${Math.round(terrain.spacing)}m 导出采样`;
   scene=new THREE.Scene();scene.userData.sceneryProfile=sceneryProfile(mountainId); scene.background=new THREE.Color('#cbdce9'); scene.fog=new THREE.Fog('#cbdce9',12000,65000);
@@ -141,7 +164,7 @@ async function init(){
   if(isCrystal)snowEffects.spraySurface=(x,z)=>powder.surface(x,z);
   createMapBackground();
   speedRenderer=new SpeedRenderer(renderer,scene,camera);
-  aerialImage=new Image();aerialImage.onload=()=>drawMap();aerialImage.src=asset(hasSatellite?'satellite.jpg':'aerial.jpg');
+  aerialImage=new Image();aerialImage.onload=()=>{if(skier)drawMap();};aerialImage.src=asset(hasSatellite?'satellite.jpg':'aerial.jpg');
   // Load real far terrain progressively; retain the coarse grid if detailed assets fail.
   fetch(`${import.meta.env.BASE_URL}${mountain.context||(mountain.area?'data/snoqualmie/context/dem.json':'data/context-dem.json')}`).then(r=>{if(!r.ok)throw new Error('context DEM');return r.json();}).then(async context=>{
     let coarse=addContextTerrain(scene,context,terrain);
@@ -170,8 +193,8 @@ async function init(){
     onStructuresChanged:()=>structures.rebuild()}).then(t=>{traffic=t;traffic.reset(route,skier,routes);weather.prepareMaterials();}).catch(error=>console.warn('Other skiers unavailable',error));
   createStationLife(scene,scene.userData.liftTerminals||[],(x,z)=>terrain.surface(x,z),isCrystal).then(s=>{stationLife=s;weather.prepareMaterials();}).catch(error=>console.warn('Station staff unavailable',error));
   createLiftPassengers(scene,resortUpdate).then(p=>{liftPassengers=p;p.select(route.liftId);weather.prepareMaterials();}).catch(error=>console.warn('Lift riders unavailable',error));
-  renderRouteList();
-  selectRoute(routes.find(r=>r.id===new URLSearchParams(location.search).get('route'))?.id||route.id);weather.update(0,camera,athlete.position);weather.snowfall.mesh.visible=true;speedRenderer.prepare();weather.snowfall.mesh.visible=false;$('loading').classList.add('hidden'); $('start').disabled=false;
+  const requestedRoute=routes.find(r=>r.id===new URLSearchParams(location.search).get('route'));
+  selectRoute(requestedRoute?.id||route.id);weather.update(0,camera,athlete.position);weather.snowfall.mesh.visible=true;speedRenderer.prepare();weather.snowfall.mesh.visible=false;$('loading').classList.add('hidden'); $('start').disabled=false;$('challenge').disabled=false;
   if(import.meta.env.DEV&&new URLSearchParams(location.search).has('visual-qa')){
     const panel=document.createElement('div');Object.assign(panel.style,{position:'fixed',left:'350px',top:'95px',zIndex:40,display:'flex',gap:'6px'});
     for(const [id,label,routeId,fraction] of [['slope','QA：坡面','green-valley',.38],['forest','QA：林间','mr-magoo',.48],['queens','QA：Queens','queens-run',.30],['hop','QA：跳跃','queens-run',.25]]){
@@ -209,7 +232,7 @@ function setRouteMarkers(){
   routeGroup=new THREE.Group();
   const curve=new THREE.CatmullRomCurve3(route.points.map(p=>new THREE.Vector3(p.x,yAt(p.x,p.z)+1.5,p.z)),false,'centripetal');
   const pts=curve.getPoints(Math.ceil(route.length/8)).map(p=>new THREE.Vector3(p.x,yAt(p.x,p.z)+1.5,p.z));
-  const line=new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts),new THREE.LineDashedMaterial({color:route.color,dashSize:8,gapSize:10,transparent:true,opacity:.18}));line.computeLineDistances();line.visible=false;routeGroup.add(line);
+  const line=new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts),new THREE.LineDashedMaterial({color:route.color,dashSize:8,gapSize:10,transparent:true,opacity:.18}));line.computeLineDistances();line.visible=Boolean(route.patrolOnly);if(route.patrolOnly)line.material.opacity=.68;routeGroup.add(line);
   const signCanvas=document.createElement('canvas');signCanvas.width=512;signCanvas.height=160;
   const signContext=signCanvas.getContext('2d');signContext.fillStyle=route.difficulty==='easy'?'#22684b':route.difficulty==='advanced'?'#172a34':'#245d80';signContext.fillRect(0,0,512,160);signContext.strokeStyle='#ffffff';signContext.lineWidth=7;signContext.strokeRect(6,6,500,148);signContext.fillStyle='#ffffff';signContext.font=`bold ${Math.min(48,720/route.name.length)}px sans-serif`;signContext.textAlign='center';signContext.fillText(route.name,256,100);
   const signTexture=new THREE.CanvasTexture(signCanvas);signTexture.colorSpace=THREE.SRGBColorSpace;
@@ -228,8 +251,10 @@ function setRouteMarkers(){
 
 const escapeHTML=value=>String(value).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 function renderRouteList(){
-  const visible=filterRoutes(routes,routeFilter,routeQuery);
-  $('route-count').textContent=`${visible.length} / ${routes.length} 条`;
+  const selectable=routes.filter(r=>Boolean(r.patrolOnly)===(challengeMode==='patrol'));
+  const visible=challengeMode==='patrol'?selectable:filterRoutes(selectable,routeFilter,routeQuery);
+  $('route-filters').hidden=$('route-search').hidden=challengeMode==='patrol';
+  $('route-count').textContent=`${visible.length} / ${selectable.length} 条`;
   $('routes').innerHTML=visible.length?visible.map(r=>`<button class="route difficulty-${r.difficulty} ${r.id===route.id?'active':''}" data-route="${r.id}" aria-pressed="${r.id===route.id}" style="--route:${r.color}" title="${escapeHTML(r.name)}"><span class="route-dot"></span><span class="route-text"><span class="route-name">${escapeHTML(r.name)}</span><span class="route-sub">${escapeHTML(r.label)}</span></span><span class="route-stat">${(r.length/1000).toFixed(1)} km<small>↓ ${Math.round(r.drop)} m</small></span></button>`).join(''):'<p class="route-empty">没找到这条雪道，换个名称试试。</p>';
 }
 $('routes').addEventListener('click',event=>{const button=event.target.closest('[data-route]');if(button)selectRoute(button.dataset.route);});
@@ -241,8 +266,11 @@ $('route-filters').addEventListener('click',event=>{
 });
 
 function selectRoute(id){
-  liftJourney.cancel();route=routes.find(r=>r.id===id);soundtrack.select(trailMusic.get(id));liftPassengers?.select(route.liftId); checkpoint=0;
-  document.querySelectorAll('[data-route]').forEach(b=>{const active=b.dataset.route===id;b.classList.toggle('active',active);b.setAttribute('aria-pressed',active);});
+  liftJourney.cancel();route=routes.find(r=>r.id===id);
+  if(route.patrolOnly)challengeMode=$('challenge').value='patrol';
+  else if(challengeMode==='patrol')challengeMode=$('challenge').value='free';
+  soundtrack.select(trailMusic.get(id));liftPassengers?.select(route.liftId);checkpoint=0;
+  renderRouteList();
   $('route-selection').textContent=`已选：${route.name} · ${route.lift} 上站 → ${route.returnLift&&route.returnLift!==route.lift?route.returnLift+' ':''}下站`;
   $('map-label').textContent=route.name.toUpperCase();$('session-name').textContent=route.name.toUpperCase();
   fitMapToRoute();createMapBackground();setRouteMarkers(); resetPosition(true); updateAthlete(0); updateCamera(1,true); drawMap();weather?.prepareMaterials();
@@ -252,7 +280,13 @@ function resetPosition(full=false){
   if(full){
     liftJourney.cancel();terrain.setPractice([]);
     const features=challengeMode==='freestyle'?practiceBumps(route,terrain,p=>structures?.blocked(p.x,p.z,terrain.surface(p.x,p.z))||(treePositions.nearby?.(p.x,p.z)||[]).some(t=>Math.hypot(t.x-p.x,t.z-p.z)<7)):[];
-    terrain.setPractice(features);powder?.setPractice(features);challenge=new RunChallenge(route,challengeMode);challengeRenderer?.configure(challenge,features);
+    terrain.setPractice(features);powder?.setPractice(features);
+    challenge=new RunChallenge(route,challengeMode);
+    challengeRenderer?.configure(challenge,features);
+    patrol=challengeMode==='patrol'&&route.patrolOnly?new PatrolRun(route,liftWalkClear):null;
+    patrolStep=0;
+    if(patrol&&!patrolScene)patrolScene=new PatrolScene(scene,yAt,terrain.gradient);
+    patrolScene?.select(patrol);
   }
   const i=full?0:Math.min(checkpoint,route.points.length-2);
   const spawn=full?route.spawn:route.points[i],ahead=full?pointAlongRoute(route,spawn.distance+25):route.points[i+1];
@@ -278,7 +312,8 @@ function startRun(reset=true){
   $('intro').classList.add('hidden');$('session').classList.remove('hidden');$('touch').classList.add('active');
   $('overview').innerHTML='俯瞰 <kbd>O</kbd>';
   document.body.classList.remove('mobile-menu-open');$('mobile-menu').setAttribute('aria-expanded','false');
-  toast(touchDevice?'长按左侧转弯 · 右侧撑杖起步 · 拖动场景环视':'上站缓坡出发 · 按住 Shift 撑杖 · 沿雪道滑到下站光圈');
+  if(patrol)toast('巡逻追逐 · 沿标记滑到终点 · G 使用拾取的道具');
+  else toast(touchDevice?'长按左侧转弯 · 右侧撑杖起步 · 拖动场景环视':'上站缓坡出发 · 按住 Shift 撑杖 · 沿雪道滑到下站光圈');
   if(soundOn) enableAudio();
   soundtrack.refresh();
 }
@@ -306,14 +341,20 @@ function resumeRun(){
   keys.clear();
 }
 function liftView(){return mode==='lift'||(mode==='paused'&&pauseOrigin==='lift');}
-function finishRun(){
+function finishRun(caught=false){
+  if(patrol&&!caught)patrol.outcome='escaped';
+  $('result-title').textContent=patrol?(caught?'被巡逻员截停':'成功抵达终点'):'Nice line.';
+  $('result-copy').textContent=patrol?(caught?'追逐结束。可以重开同一条路线。':'完成了 Summit to Quicksilver 追逐。'):'已到下站登乘区。可以返回山顶，再滑一趟。';
   mode='finished';keys.clear();skier.vx=skier.vz=skier.speed=0;
   $('result-stats').innerHTML=`<div><strong>${clockFormat(elapsed)}</strong><small>滑行时间</small></div><div><strong>${Math.round(peakSpeed*3.6)}</strong><small>最高速度 KM/H</small></div><div><strong>${(totalDistance/1000).toFixed(2)}</strong><small>滑行里程 KM</small></div><div><strong>${skier.freestyleScore||0}</strong><small>特技分数</small></div>`;
-  if(challenge&&challenge.mode!=='free'){
+  if(patrol){
+    $('challenge-result').textContent=`最高通缉 ${patrol.peakStars} 星`;
+  }else if(challenge&&challenge.mode!=='free'){
     const r=challenge.result(),best=r.complete&&['time','turns'].includes(challenge.mode)?recordRun(localStorage,`ski-best:${mountainId}:${route.id}:${challenge.mode}`,r.time):null;
     $('challenge-result').textContent=challenge.mode==='freestyle'?`花式练习 · ${skier.freestyleScore||0} 分`:`${r.complete?'全部门点完成':'漏门 '+r.missed+' 个'} · ${r.time.toFixed(1)} 秒（罚时 ${r.penalty} 秒）${best?' · 本机最佳 '+best.toFixed(1)+' 秒':''}`;
   }else $('challenge-result').textContent='';
-  $('lift-route-note').textContent=boardingTarget()?'椅子靠站后自动上车，行程可跳过。':'此下站需要换乘，衔接线路尚未制作；可以直接重新开始。';$('board-result').disabled=!boardingTarget();$('board-result').title=boardingTarget()?'':'此下站需要换乘，尚无衔接线路，可直接重新开始';$('result').showModal();
+  $('board-result').hidden=caught;
+  $('lift-route-note').textContent=caught?'':boardingTarget()?'椅子靠站后自动上车，行程可跳过。':'此下站需要换乘，衔接线路尚未制作；可以直接重新开始。';$('board-result').disabled=!boardingTarget();$('board-result').title=boardingTarget()?'':'此下站需要换乘，尚无衔接线路，可直接重新开始';$('result').showModal();
 }
 
 function updatePhysics(dt){
@@ -324,6 +365,7 @@ function updatePhysics(dt){
   const edge=keys.has('Space')||keys.has('ArrowDown')?1:0;
   const tuck=keys.has('KeyW')||keys.has('ArrowUp')?1:0;
   const pole=keys.has('ShiftLeft')||keys.has('ShiftRight');
+  patrol?.boost(skier,dt);
   stepAirborne(skier,recordedInput||{steer,edge,tuck,pole,jump:keys.has('KeyJ'),spin:(keys.has('KeyE')?1:0)-(keys.has('KeyQ')?1:0),grab:keys.has('KeyF')},terrain,dt,snow);
   if(pendingRecovery&&!skier.crashRemaining){
     const score=skier.freestyleScore,distance=skier.distance,count=skier.collisionCount,p=pendingRecovery;
@@ -331,6 +373,7 @@ function updatePhysics(dt){
   }
   if(!skier.crashRemaining&&!pendingRecovery){const contact=structures?.resolve(previousPosition,skier,terrain);if(contact&&contact.impact>4.5){pendingRecovery=safeRecovery(route,skier,terrain,(x,z)=>structures.blocked(x,z,terrain.surface(x,z))||(treePositions.nearby?.(x,z)||[]).some(t=>Math.hypot(t.x-x,t.z-z)<3));skier.airborne=false;skier.crashReason='structure';skier.crashRemaining=skier.crashDuration=3.2;skier.vx=skier.vz=skier.speed=0;keys.clear();snowEffects.breakTrail();powder.breakTrail();toast(`撞到${contact.collider.label||'设施'} · 稍后在附近重新站起`);}}
   if(traffic&&traffic.collide(previousPosition,skier)!==null&&!pendingRecovery){
+    patrol?.incident();
     pendingRecovery=safeRecovery(route,skier,terrain,(x,z)=>(treePositions.nearby?.(x,z)||[]).some(t=>Math.hypot(t.x-x,t.z-z)<3)||traffic.states.some(s=>s.point&&!s.indoor&&Math.hypot(s.point.x-x,s.point.z-z)<5)||structures?.blocked(x,z,terrain.surface(x,z)));
     skier.freestyleScore=(skier.freestyleScore||0)-TRAFFIC_PENALTY;skier.collisionCount=(skier.collisionCount||0)+1;skier.airborne=false;skier.crashReason='traffic';skier.crashRemaining=3.2;skier.crashDuration=3.2;skier.vx=skier.vz=skier.speed=0;keys.clear();snowEffects.breakTrail();powder.breakTrail();toast(`碰撞雪友 −${TRAFFIC_PENALTY} 分 · 稍后在附近重新站起`);
   }
@@ -339,15 +382,24 @@ function updatePhysics(dt){
   if(skier.airEvent?.type==='jump-blocked')toast('起跳需要至少 18 km/h · 先撑杖或顺坡加速');
   if(skier.airEvent?.type==='land'&&skier.airEvent.quality==='recover')toast('落地稍偏 · 屈膝缓冲、搓雪恢复');
   if(skier.airEvent?.type==='crash'){const reasons={impact:'触地冲击过大',crossed:'高速横板落地',combined:'横板与冲击叠加',rotation:'空中旋转尚未收住'};toast(`落地摔倒：${reasons[skier.airEvent.reason]||'失去支撑'} · 正在起身`);}elapsed+=dt;peakSpeed=Math.max(peakSpeed,skier.speed);totalDistance=skier.distance;
+  if(patrol){
+    patrolStep+=dt;
+    if(patrolStep>=1/30){
+      const event=patrol.step(patrolStep,skier,patrolOffscreen,yAt);
+      patrolStep=0;
+      if(event==='caught'){finishRun(true);return;}
+      if(event==='pickup')toast(`拾取 ${PATROL_ITEMS[patrol.item].name} · G 使用`);
+    }
+  }
   challenge?.step(previousPosition,skier,dt);challengeRenderer?.update(challenge);
   const boundsX=(terrain.width-1)*terrain.spacing/2-20,boundsZ=(terrain.height-1)*terrain.spacing/2-20;
   if(Math.abs(skier.x)>boundsX||Math.abs(skier.z)>boundsZ){resetPosition();toast('已到地形边界，返回检查点');return;}
-  const goal=route.points.at(-1);if(!skier.airborne&&!skier.crashRemaining&&Math.hypot(skier.x-goal.x,skier.z-goal.z)<18){finishRun();return;}
+  const goal=route.points.at(-1);if((!patrol||patrol.furthest>route.length*.88)&&!skier.airborne&&!skier.crashRemaining&&Math.hypot(skier.x-goal.x,skier.z-goal.z)<18){finishRun();return;}
   const p=route.points[Math.min(checkpoint+1,route.points.length-1)];
   if(!skier.airborne&&!skier.crashRemaining&&Math.hypot(skier.x-p.x,skier.z-p.z)<(checkpoint===route.points.length-2?18:55)){
     checkpoint++;
     if(checkpoint===route.points.length-1){finishRun();return;}
-    toast(`检查点 ${checkpoint} / ${route.points.length-1}`);
+    if(!patrol)toast(`检查点 ${checkpoint} / ${route.points.length-1}`);
   }
   if(skier.speed>2){
     for(const tree of treePositions.nearby?.(skier.x,skier.z)||treePositions){if(hitsTreeTrunk(previousPosition,skier,tree)){resetPosition();toast('撞到树干，已返回检查点');break;}}
@@ -363,6 +415,7 @@ function liftWalkClear(point){
     !(treePositions.nearby?.(point.x,point.z)||[]).some(tree=>Math.hypot(tree.x-point.x,tree.z-point.z)<(tree.trunkRadius||.25)+.5);
 }
 function boardLift(){
+  if(patrol&&(mode==='running'||patrol.outcome==='caught'))return;
   const target=boardingTarget();if(!target||!['running','finished'].includes(mode)||skier.speed>3.5||skier.airborne||skier.crashRemaining){toast('请在下站登乘区停稳后乘车');return;}
   if(!liftJourney.begin(target.lower,target.upper,target.destination,{...skier,y:athlete.position.y},liftWalkClear)){
     toast('这里无法进入排队区，请靠近站台入口');return;
@@ -444,43 +497,98 @@ function updateCamera(dt,snap=false){
   camera.fov=THREE.MathUtils.lerp(camera.fov,fov,a);camera.updateProjectionMatrix();
 }
 
+const mapBounds={minX:-2300,maxX:1300,minZ:-850,maxZ:1850};
 function createMapBackground(){
-  mapBackground=document.createElement('canvas');mapBackground.width=280;mapBackground.height=210;
-  const ctx=mapBackground.getContext('2d'),im=ctx.createImageData(280,210);
-  for(let y=0;y<210;y++)for(let x=0;x<280;x++){
-    const p=mapToWorld(x,y),e=terrain.sample(p.x,p.z),g=terrain.gradient(p.x,p.z);
+  mapBackground=document.createElement('canvas');mapBackground.width=560;mapBackground.height=420;
+  const {width,height}=mapBackground,ctx=mapBackground.getContext('2d'),im=ctx.createImageData(width,height);
+  for(let y=0;y<height;y++)for(let x=0;x<width;x++){
+    const wx=mapBounds.minX+x/width*(mapBounds.maxX-mapBounds.minX);
+    const wz=mapBounds.minZ+y/height*(mapBounds.maxZ-mapBounds.minZ);
+    const e=terrain.sample(wx,wz),g=terrain.gradient(wx,wz);
     const light=clamp(.7+(g.x-g.z)*.18,.2,1),contour=(e%40)<3;
-    const i=(y*280+x)*4;
+    const i=(y*width+x)*4;
     im.data[i]=contour?147:176+light*49;im.data[i+1]=contour?166:190+light*40;im.data[i+2]=contour?154:173+light*43;im.data[i+3]=255;
   }
   ctx.putImageData(im,0,0);
 }
-const mapBounds={minX:-2300,maxX:1300,minZ:-850,maxZ:1850};
 function fitMapToRoute(){
-  const xs=route.points.map(p=>p.x),zs=route.points.map(p=>p.z),minX=Math.min(...xs),maxX=Math.max(...xs),minZ=Math.min(...zs),maxZ=Math.max(...zs);
-  const width=Math.max(1700,maxX-minX+450,(maxZ-minZ+450)*4/3),height=width*3/4,cx=(minX+maxX)/2,cz=(minZ+maxZ)/2;
+  const xs=route.points.map(p=>p.x),zs=route.points.map(p=>p.z);
+  const minX=Math.min(...xs),maxX=Math.max(...xs),minZ=Math.min(...zs),maxZ=Math.max(...zs);
+  const width=Math.max(1500,maxX-minX+850,(maxZ-minZ+850)*4/3),height=width*.75;
+  const cx=(minX+maxX)/2,cz=(minZ+maxZ)/2;
   Object.assign(mapBounds,{minX:cx-width/2,maxX:cx+width/2,minZ:cz-height/2,maxZ:cz+height/2});
 }
-function mapPoint(p){return {x:(p.x-mapBounds.minX)/(mapBounds.maxX-mapBounds.minX)*280,y:(p.z-mapBounds.minZ)/(mapBounds.maxZ-mapBounds.minZ)*210};}
-function mapToWorld(x,y){return {x:mapBounds.minX+x/280*(mapBounds.maxX-mapBounds.minX),z:mapBounds.minZ+y/210*(mapBounds.maxZ-mapBounds.minZ)};}
 function drawMap(){
-  const ctx=$('minimap').getContext('2d');ctx.drawImage(mapBackground,0,0);
-  if(mapLayer==='aerial'&&aerialImage?.complete&&aerialImage.naturalWidth){
-    const fullW=aerialBounds.maxX-aerialBounds.minX,fullH=aerialBounds.maxZ-aerialBounds.minZ;
-    ctx.drawImage(aerialImage,(mapBounds.minX-aerialBounds.minX)/fullW*aerialImage.width,(mapBounds.minZ-aerialBounds.minZ)/fullH*aerialImage.height,(mapBounds.maxX-mapBounds.minX)/fullW*aerialImage.width,(mapBounds.maxZ-mapBounds.minZ)/fullH*aerialImage.height,0,0,280,210);
+  if(!skier||!mapBackground)return;
+  const canvas=$('minimap'),ctx=canvas.getContext('2d'),{width,height}=canvas;
+  const local=mode!=='intro'&&mapFollowsCamera;
+  const center=local?(mode==='drone'?camera.position:skier):{
+    x:(mapBounds.minX+mapBounds.maxX)/2,z:(mapBounds.minZ+mapBounds.maxZ)/2,
+  };
+  const heading=local?Math.atan2(camera.getWorldDirection(mapForward).x,mapForward.z):Math.PI;
+  const projection=mapProjection(width,height,center,heading,local?(patrol?670:510):mapBounds.maxX-mapBounds.minX);
+  const {scale,cos,sin,point}=projection;
+  const aerial=mapLayer==='aerial'&&aerialImage?.complete&&aerialImage.naturalWidth;
+  ctx.fillStyle=aerial?'#405651':'#dce7d8';ctx.fillRect(0,0,width,height);
+  ctx.save();
+  ctx.translate(width/2,height/2);
+  ctx.transform(-cos*scale,-sin*scale,sin*scale,-cos*scale,0,0);
+  ctx.translate(-center.x,-center.z);
+  ctx.drawImage(mapBackground,mapBounds.minX,mapBounds.minZ,mapBounds.maxX-mapBounds.minX,mapBounds.maxZ-mapBounds.minZ);
+  if(aerial)ctx.drawImage(aerialImage,aerialBounds.minX,aerialBounds.minZ,aerialBounds.maxX-aerialBounds.minX,aerialBounds.maxZ-aerialBounds.minZ);
+  ctx.restore();
+
+  function line(points,color,size,dash=[]){
+    ctx.beginPath();
+    points.forEach((p,i)=>{const m=point(p);if(i&&!p.break)ctx.lineTo(m.x,m.y);else ctx.moveTo(m.x,m.y);});
+    ctx.strokeStyle=color;ctx.lineWidth=size;ctx.setLineDash(dash);ctx.stroke();ctx.setLineDash([]);
   }
-  for(const r of routes){ctx.beginPath();r.points.forEach((p,i)=>{const m=mapPoint(p);i?ctx.lineTo(m.x,m.y):ctx.moveTo(m.x,m.y);});ctx.strokeStyle=r.id===route.id?(mapLayer==='aerial'?'#c3f47d':'#365b49'):(mapLayer==='aerial'?'#9ebdcc':'#94ac8b');ctx.lineWidth=r.id===route.id?2.5:1;ctx.setLineDash(r.id===route.id?[]:[3,3]);ctx.stroke();}
-  ctx.setLineDash([]);
-  if(trailPoints.length>1){ctx.beginPath();trailPoints.forEach((p,i)=>{const m=mapPoint({x:p.x,z:p.z});i&&!p.break?ctx.lineTo(m.x,m.y):ctx.moveTo(m.x,m.y);});ctx.strokeStyle='#d57f4d';ctx.lineWidth=1.5;ctx.stroke();}
-  for(const [index,p] of [route.points[0],route.points.at(-1)].entries()){const m=mapPoint(p);ctx.beginPath();ctx.arc(m.x,m.y,7,0,Math.PI*2);ctx.fillStyle=index?'#e4ac56':'#315b4b';ctx.fill();ctx.fillStyle='#fff';ctx.font='bold 8px sans-serif';ctx.textAlign='center';ctx.fillText(index?'F':'S',m.x,m.y+3);}
-  const m=mapPoint(skier);ctx.save();ctx.translate(m.x,m.y);ctx.rotate(-skier.heading);ctx.beginPath();ctx.moveTo(0,7);ctx.lineTo(-5,-5);ctx.lineTo(0,-3);ctx.lineTo(5,-5);ctx.closePath();ctx.fillStyle='#dd7446';ctx.strokeStyle='#fff8e9';ctx.lineWidth=1.5;ctx.fill();ctx.stroke();ctx.restore();
+  for(const other of routes)if(other!==route&&!other.patrolOnly)line(other.points,aerial?'#9ebdcc':'#94ac8b',1.4,[4,4]);
+  line(route.points,aerial?'#ddfaab':'#2e5847',4);
+  if(trailPoints.length>1)line(trailPoints,'#d57f4d',2);
+  function dot(p,color,r,text){
+    const m=point(p);
+    if(m.x<0||m.x>width||m.y<0||m.y>height)return;
+    ctx.beginPath();ctx.arc(m.x,m.y,r,0,Math.PI*2);ctx.fillStyle=color;ctx.fill();
+    ctx.strokeStyle='#f5f8f0';ctx.lineWidth=1.2;ctx.stroke();
+    if(text){ctx.fillStyle='#fff';ctx.font='bold 10px sans-serif';ctx.textAlign='center';ctx.fillText(text,m.x,m.y+3.5);}
+  }
+  dot(route.points[0],'#315b4b',8,'S');
+  dot(route.points.at(-1),'#996027',8,'F');
+  if(patrol){
+    for(const p of patrol.pickups)if(!p.taken)dot(p,PATROL_ITEMS[p.type].color,4.5);
+    for(const agent of patrol.agents)dot(agent,'#b4213a',5.4);
+  }
+  const m=point(skier),front=point({x:skier.x+Math.sin(skier.heading)*10,z:skier.z+Math.cos(skier.heading)*10});
+  ctx.save();
+  ctx.translate(m.x,m.y);ctx.rotate(Math.atan2(front.x-m.x,m.y-front.y));
+  ctx.beginPath();ctx.moveTo(0,-11);ctx.lineTo(-7,6);ctx.lineTo(0,3);ctx.lineTo(7,6);ctx.closePath();
+  ctx.fillStyle='#c34d27';ctx.strokeStyle='#fff8e9';ctx.lineWidth=1.7;ctx.fill();ctx.stroke();ctx.restore();
+  const north=point({x:center.x,z:center.z-20});
+  ctx.save();ctx.translate(width-23,23);ctx.rotate(Math.atan2(north.x-width/2,height/2-north.y));
+  ctx.beginPath();ctx.moveTo(0,-11);ctx.lineTo(-5,6);ctx.lineTo(0,3);ctx.lineTo(5,6);ctx.closePath();ctx.fillStyle='#173e36';ctx.strokeStyle='#fff';ctx.stroke();ctx.fill();ctx.restore();
+  ctx.fillStyle='#173e36';ctx.font='bold 10px sans-serif';ctx.textAlign='center';ctx.fillText('N',width-23,44);
+  if(local){
+    const length=100*scale;
+    ctx.fillStyle='#173e36';ctx.fillRect(12,height-14,length,2);
+    ctx.textAlign='left';ctx.fillText('100 m',12,height-19);
+  }
 }
 
 function updateUI(){
   $('speed').textContent=Math.round(skier.speed*3.6);$('altitude').textContent=Math.round(skier.airborne?skier.airY:terrain.sample(skier.x,skier.z));
   const g=terrain.gradient(skier.x,skier.z);$('slope').textContent=Math.round(Math.atan(Math.hypot(g.x,g.z))*180/Math.PI);
-  $('challenge-status').textContent=challenge?.label||'';
-  const boarding=mode==='running'&&boardingTarget()&&skier.speed<3.5;$('board-lift').hidden=!boarding;$('lift-controls').hidden=!liftView();
+  $('challenge-status').textContent=patrol?'巡逻追逐 · 滑到终点':challenge?.label||'';
+  $('patrol-hud').hidden=!patrol;
+  if(patrol){
+    $('wanted-stars').textContent='★'.repeat(patrol.stars)+'☆'.repeat(5-patrol.stars);
+    $('wanted-stars').setAttribute('aria-label',`${patrol.stars} 星通缉`);
+    const threat=patrol.contact>0?` · 截停 ${Math.min(99,Math.round(patrol.contact/1.75*100))}%`:'';
+    $('patrol-threat').textContent=patrol.stars?`巡逻追逐中${threat}`:'暂未被追踪';
+    $('patrol-item').disabled=!patrol.item||Boolean(patrol.effect)||mode!=='running';
+    $('patrol-item').textContent=patrol.item?`${PATROL_ITEMS[patrol.item].name} · G 使用`:'沿途拾取道具';
+  }
+  const boarding=mode==='running'&&!patrol&&boardingTarget()&&skier.speed<3.5;$('board-lift').hidden=!boarding;$('lift-controls').hidden=!liftView();
   $('lift-status').textContent=({queue:'前往候车位置',approaching:'按指引进入上车位',waiting:'候车 · 请勿越过栏杆',boarding:liftJourney.transferAge?'正在上车':'载具正在靠站 · 请在标线等候',riding:'乘缆车上山 · 拖动环视',dismounting:'到站 · 起身下车',unloading:'正在滑离下车区'})[liftJourney.phase]||'';
   $('timer').textContent=clockFormat(elapsed);$('distance').textContent=`${Math.round(totalDistance)} m`;
   $('stance').textContent=skier.crashRemaining>0?(skier.crashReason==='traffic'?'碰撞倒地':skier.crashReason==='structure'?'撞到设施':'落地失衡'):skier.airborne?`腾空${skier.grab>.3?' · 抓板':''}`:skier.poling>.2?'双杖蹬撑':skier.edge>.5&&skier.speed<.35?'立刃停稳':skier.edge>.5?`${skier.slip>.5||skier.edgeBrake?'横板搓雪':'加强立刃'} · ${Math.round(skier.edgeAngle*180/Math.PI)}°`:skier.tuck>.5?'收身 · 低风阻':skier.slip>1.5?'侧滑控速':Math.abs(skier.turn)>.15?'沿弧转弯':'直滑';
@@ -497,7 +605,6 @@ function updateUI(){
       trailPoints.push({x:skier.x,y:yAt(skier.x,skier.z)+.35,z:skier.z});
     }
   }
-  drawMap();
 }
 
 function animate(time){
@@ -516,6 +623,10 @@ function animate(time){
   }
   frameTime=frameTime*.94+Math.max(Math.min(rawDt,.1),.001)*.06;const physicsStart=performance.now();
   if(mode==='running'){
+    if(patrol){
+      camera.updateMatrixWorld();
+      patrolView.setFromProjectionMatrix(patrolProjection.multiplyMatrices(camera.projectionMatrix,camera.matrixWorldInverse));
+    }
     accumulator+=dt;
     while(accumulator>=fixedStep){if(mode==='running')updatePhysics(fixedStep);accumulator-=fixedStep;}
   }else accumulator=0;
@@ -544,6 +655,7 @@ function animate(time){
   if(mode==='lift'||(isCrystal&&['drone','inspection','finished'].includes(mode))){
     traffic?.step(dt,{x:1e9,z:1e9},gear.npcs,(x,z)=>treePositions.nearby?.(x,z)||[]);
   }
+  patrolScene?.update(mode==='paused'?0:dt,Boolean(patrol)&&['running','paused','drone','inspection','finished','help'].includes(mode));
   if(mode!=='paused')updateAthlete(dt);
   updateCamera(dt);snowEffects.update(dt,skier,mode==='running',snow,athlete.userData.poleContact);snowEffects.mesh.material.opacity=snow==='soft'?.29:.65;liftPassengers?.update(liftClock,camera,gear.npcs);stationLife?.update(stationClock,skier,resortUpdate.allCarriers,gear.npcs,mode==='paused'?0:dt);stationAudio?.update(scene.userData.liftTerminals||[],mode==='drone'?camera.position:skier,soundOn&&worldActive,time/1000,liftJourney.phase==='boarding');
   if(arrivalZone){arrivalZone.visible=mode==='running';arrivalZone.children[0].material.opacity=.55+.15*Math.sin(time*.002);}
@@ -552,6 +664,7 @@ function animate(time){
   weather.update(mode==='paused'?0:dt,camera,athlete.position,worldActive||mode==='paused'?slopeConditions:undefined);
   snowEffects.sprayMaterial.color.copy(weather.state.cloud).lerp(weather.state.sun,.2);
   uiClock+=dt;if(uiClock>.1){updateUI();uiClock=0;}
+  mapClock+=dt;if(mapClock>=1/24){drawMap();mapClock=0;}
   if(noiseGain)noiseGain.gain.setTargetAtTime(soundOn&&mode==='running'?.006+Math.min(skier.speed/42,1)*.065:0,audio.currentTime,.15);
   speedRenderer.render(skier.speed,mode==='running'&&view==='follow');
   demoCapture?.afterFrame(time);
@@ -643,9 +756,27 @@ $('help').addEventListener('click',openHelp);document.querySelectorAll('.close-d
 $('help-dialog').addEventListener('cancel',e=>{e.preventDefault();closeHelp();});
 $('overview').addEventListener('click',()=>{if(liftView())return;if(mode==='intro'){toast('开始滑行后，可以切换跟随 / 俯瞰镜头');return;}view=view==='follow'?'overview':'follow';$('overview').innerHTML=view==='overview'?'跟随 <kbd>O</kbd>':'俯瞰 <kbd>O</kbd>';});
 $('blur').addEventListener('click',()=>{speedRenderer.enabled=!speedRenderer.enabled;$('blur').textContent=speedRenderer.enabled?'速度模糊开':'速度模糊关';$('blur').setAttribute('aria-pressed',speedRenderer.enabled);});
+$('map-orientation').addEventListener('click',()=>{
+  mapFollowsCamera=!mapFollowsCamera;
+  $('map-orientation').textContent=mapFollowsCamera?'跟随镜头':'北向总览';
+  $('map-orientation').setAttribute('aria-pressed',String(mapFollowsCamera));
+  drawMap();
+});
 $('map-layer').addEventListener('click',()=>{mapLayer=mapLayer==='terrain'?'aerial':'terrain';$('map-layer').textContent=mapLayer==='terrain'?(hasSatellite?'卫星图':mountain.referenceMap?'参考图':'航拍图'):'地形图';drawMap();});
 $('weather').addEventListener('change',event=>{const id=event.target.value;weather.set(id);event.target.blur();$('weather-status').textContent=`${WEATHER_PRESETS[id].label} · 环境过渡中`;toast(`正在转为${WEATHER_PRESETS[id].label}，天空、光照与能见度同步变化`);});
-$('challenge').addEventListener('change',e=>{challengeMode=e.target.value;resetPosition(true);weather?.prepareMaterials();});
+$('challenge').addEventListener('change',e=>{
+  challengeMode=e.target.value;
+  if(challengeMode==='patrol'&&routes.some(r=>r.id===PATROL_ROUTE_ID))selectRoute(PATROL_ROUTE_ID);
+  else if(route.patrolOnly)selectRoute('lucky-shot');
+  else resetPosition(true);
+  weather?.prepareMaterials();
+});
+function usePatrolItem(){
+  if(mode!=='running'||!patrol?.item)return;
+  const name=PATROL_ITEMS[patrol.item].name;
+  if(patrol.use(skier)){toast(`${name}已启用`);updateUI();}
+}
+$('patrol-item').addEventListener('click',usePatrolItem);
 $('board-lift').addEventListener('click',boardLift);$('board-result').addEventListener('click',boardLift);
 $('skip-lift').addEventListener('click',()=>liftJourney.skip((x,z)=>powder.surface(x,z)));
 $('cancel-lift').addEventListener('click',()=>{liftJourney.cancel();goIntro();});
@@ -659,6 +790,7 @@ addEventListener('keydown',e=>{
   if(e.target instanceof HTMLInputElement||e.target instanceof HTMLSelectElement)return;
   if(['Space','ArrowLeft','ArrowRight','ArrowDown','ArrowUp'].includes(e.code))e.preventDefault();
   if(e.repeat)return;
+  if(e.code==='KeyG'){usePatrolItem();return;}
   if(e.code==='KeyB'&&!e.repeat){boardLift();return;}
   if(e.code==='KeyV'&&!liftView()){toggleScenery();return;}
   if(e.code==='KeyC'){lookYaw=lookPitch=lookDistance=0;return;}
@@ -666,7 +798,7 @@ addEventListener('keydown',e=>{
   if(e.code==='Escape'||e.code==='KeyP'){if(mode==='running'||mode==='lift'){e.preventDefault();pauseRun();}else if(mode==='paused'){e.preventDefault();resumeRun();}return;}
   if(e.code==='KeyH'&&!document.querySelector('dialog[open]')){openHelp();return;}
   if(e.code==='KeyO'&&!sceneryView&&!document.querySelector('dialog[open]')){$('overview').click();return;}
-  if(e.code==='KeyR'&&mode==='running'){resetPosition();toast('已返回最近检查点');return;}
+  if(e.code==='KeyR'&&mode==='running'){if(patrol){startRun();return;}resetPosition();toast('已返回最近检查点');return;}
   if(e.code==='KeyN'&&(mode==='running'||mode==='paused'||mode==='finished')){startRun();toast('已从起点重新开始');return;}
   if(mode==='running'||mode==='drone'||mode==='lift') keys.hold(`keyboard:${e.code}`,e.code);
 });

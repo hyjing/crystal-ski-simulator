@@ -61,4 +61,28 @@ for(const def of definitions){
  console.log(def.name,Math.round(length),'m','station links',Math.round(start.distance),Math.round(finish.distance),names.join(' → '));
  features.push({type:'Feature',id:def.id,properties:{name:def.name,lift:def.lift,liftId:String(lift.id),primaryWayId:def.way,osmWayIds:wayIds,via:names,startLinkMeters:start.distance,finishLinkMeters:finish.distance,stationEndpoints:true,junctionLinks:legs.filter(l=>!l.way).map(l=>({length:l.length,name:l.name})),source:'OSM network itinerary; short station apron links are authored'},geometry:{type:'LineString',coordinates}});
 }
-fs.writeFileSync(new URL('public/data/crystal-lift-runs.json',root),JSON.stringify({type:'FeatureCollection',source:'OpenStreetMap contributors',license:'ODbL 1.0',attributionUrl:'https://www.openstreetmap.org/copyright',features},null,2));
+if(!process.argv.includes('--patrol'))fs.writeFileSync(new URL('public/data/crystal-lift-runs.json',root),JSON.stringify({type:'FeatureCollection',source:'OpenStreetMap contributors',license:'ODbL 1.0',attributionUrl:'https://www.openstreetmap.org/copyright',features},null,2));
+
+
+if(process.argv.includes('--patrol')){
+ const startLift=lifts.features.find(f=>f.properties.name==='Rainier Express');
+ const returnLift=lifts.features.find(f=>f.properties.name==='Quicksilver');
+ const [upper]=orderedEndpoints(startLift),[,lower]=orderedEndpoints(returnLift);
+ const start=nearest(upper),finish=nearest(lower),itinerary=path(start.id,finish.id,new Set());
+ const osmWayIds=[...new Set(itinerary.legs.flatMap(leg=>leg.way?[leg.way]:[]))];
+ const via=[...new Set(itinerary.legs.filter(leg=>leg.way).map(leg=>leg.name))];
+ const feature={type:'Feature',id:'crystal-patrol-descent',
+  properties:{name:'Summit to Quicksilver',difficulty:'advanced',lift:startLift.properties.name,liftId:String(startLift.id),
+   returnLift:returnLift.properties.name,returnLiftId:String(returnLift.id),primaryWayId:osmWayIds[0],osmWayIds,via,
+   source:'Game itinerary using OSM pistes and short approximate connectors'},
+  geometry:{type:'LineString',coordinates:[upper,...itinerary.ids.map(id=>nodes.get(id).ll),lower]}};
+ const output={type:'FeatureCollection',features:[feature]};
+ fs.writeFileSync(new URL('public/data/crystal-patrol-run.json',root),JSON.stringify(output,null,2)+'\n');
+}
+function orderedEndpoints(lift){
+ const points=lift.geometry.coordinates;
+ return [points[0],points.at(-1)].sort((a,b)=>{
+  const p=project(a),q=project(b);
+  return terrain.sample(q.x,q.z)-terrain.sample(p.x,p.z);
+ });
+}
