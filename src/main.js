@@ -398,15 +398,14 @@ function updatePhysics(dt){
   if(skier.airEvent?.type==='jump-blocked')toast('起跳需要至少 18 km/h · 先撑杖或顺坡加速');
   if(skier.airEvent?.type==='land'&&skier.airEvent.quality==='recover')toast('落地稍偏 · 屈膝缓冲、搓雪恢复');
   if(skier.airEvent?.type==='crash'){const reasons={impact:'触地冲击过大',crossed:'高速横板落地',combined:'横板与冲击叠加',rotation:'空中旋转尚未收住'};toast(`落地摔倒：${reasons[skier.airEvent.reason]||'失去支撑'} · 正在起身`);}elapsed+=dt;peakSpeed=Math.max(peakSpeed,skier.speed);totalDistance=skier.distance;
-  const kickEvent=kick.step(dt,skier,canBeKicked);
+  const kickEvent=kick.step(dt,skier,canBeKicked,playLaunchLanding);
   if(kickEvent?.type==='hit'){
     if(patrol?.agents.includes(kickEvent.target))patrol.contact=0;
     const {start,fromY,heading}=kickEvent.flight;
     snowEffects.kickBurst(start.x,fromY,start.z,heading);
     toast('踹飞了！');
   }else if(kickEvent?.type==='land'){
-    const {end,toY,heading}=kickEvent.flight;
-    snowEffects.kickBurst(end.x,toY,end.z,heading,true);
+    playLaunchLanding(kickEvent.flight);
   }else if(kickEvent?.type==='miss')toast('雪友已滑出踢击范围');
   if(patrol){
     patrolStep+=dt;
@@ -868,8 +867,18 @@ $('challenge').addEventListener('change',e=>{
 function usePatrolItem(slot=0){
   const type=patrol?.inventory[slot];
   if(mode!=='running'||!type)return;
-  if(patrol.use(skier,slot)){toast(`${PATROL_ITEMS[type].name}已启用`);updateUI();}
+  if(patrol.use(skier,slot,()=>kick.avalanche(skier,[
+    ...patrol.agents,...(gear.npcs?traffic?.states.filter(state=>traffic.canBeKicked(state))??[]:[]),
+  ]))){
+    if(type==='avalanche')snowEffects.avalancheBurst(skier.x,yAt(skier.x,skier.z),skier.z);
+    toast(`${PATROL_ITEMS[type].name}已启用`);
+    updateUI();
+  }
   else if(type==='pulse'&&!patrol.effect&&!skier.airborne&&!skier.crashRemaining)toast('附近没有愤怒的雪友，雪浪脉冲已保留');
+  else if(type==='avalanche'&&!patrol.effect&&!skier.airborne&&!skier.crashRemaining)toast('附近没有雪友，雪崩弹已保留');
+}
+function playLaunchLanding({end,toY,heading}){
+  snowEffects.kickBurst(end.x,toY,end.z,heading,true);
 }
 $('patrol-items').addEventListener('click',event=>{
   const slot=event.target.closest('[data-slot]');

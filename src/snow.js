@@ -139,6 +139,15 @@ export class SnowEffects {
     this.crowdPrevious=next;
     return segments;
   }
+  avalancheBurst(x,y,z){
+    for(let i=0;i<96;i++){
+      const particle=this.particles[this.particleCursor++%this.particleCount];
+      const angle=i*Math.PI*2/96,spread=10+Math.random()*13;
+      const life=.45+Math.random()*.65;
+      Object.assign(particle,{x:x+Math.cos(angle),y:y+.3,z:z+Math.sin(angle),
+        vx:Math.cos(angle)*spread,vz:Math.sin(angle)*spread,vy:1.5+Math.random()*4.5,life,maxLife:life});
+    }
+  }
   kickBurst(x,y,z,heading,landing=false){
     const forwardX=Math.sin(heading),forwardZ=Math.cos(heading);
     for(let i=0;i<(landing?34:24);i++){

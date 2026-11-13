@@ -1,5 +1,6 @@
 import {clamp, nearestOnRoute} from './physics.js';
 import {pointAlongRoute} from './terrain.js';
+import {AVALANCHE_DURATION} from './kick.js';
 
 export const PATROL_ROUTE_ID = 'crystal-angry-skiers';
 export const resolveChaseRoute = id => id === 'crystal-patrol-descent' ? PATROL_ROUTE_ID : id;
@@ -16,6 +17,7 @@ export const PATROL_ITEMS = {
   decoy: {name: '幻影信标', color: '#c9a4ff', symbol: '◇'},
   shield: {name: '护盾', color: '#83dcff', symbol: '+'},
   pulse: {name: '雪浪脉冲', color: '#b0fff0', symbol: '◎'},
+  avalanche: {name: '雪崩弹', color: '#ff986e', symbol: '✹'},
 };
 const range = (a, b) => Math.hypot(a.x-b.x, a.z-b.z);
 const turnAngle = (a, b) => Math.atan2(Math.sin(b-a), Math.cos(b-a));
@@ -47,7 +49,7 @@ export class PatrolRun {
     this.boostEnergy = 0;
     this.nextIncident = 0;
     this.nextAgent = 0;
-    const types = ['boost','pulse','decoy','shield'];
+    const types = ['boost','pulse','decoy','shield','avalanche','boost','avalanche'];
     this.pickups = [];
     for(let d=route.spawn.distance+115;d<route.length-90;d+=180){
       const side=this.pickups.length%2?1:-1;
@@ -82,9 +84,14 @@ export class PatrolRun {
     this.addStar();
   }
 
-  use(player,slot=0){
+  use(player,slot=0,launchAvalanche){
     const type=this.inventory[slot];
     if(!type||this.effect||this.outcome||player.crashRemaining||player.airborne)return false;
+    if(type==='avalanche'){
+      const hit=launchAvalanche?.();
+      if(!hit?.size)return false;
+      if(this.agents.some(agent=>hit.has(agent)))this.contact=0;
+    }
     if(type==='pulse'){
       const nearby=this.agents.filter(agent=>!agent.launch&&range(agent,player)<=15);
       if(!nearby.length)return false;
@@ -92,7 +99,7 @@ export class PatrolRun {
       for(const agent of nearby)this.repel(agent,player,2.4,16);
     }
     this.inventory.splice(slot,1);
-    const duration={boost:2.1,decoy:5,shield:6,pulse:.62}[type];
+    const duration={boost:2.1,decoy:5,shield:6,pulse:.62,avalanche:AVALANCHE_DURATION}[type];
     this.effect={type,until:this.time+duration,x:player.x,z:player.z};
     this.boostEnergy=type==='boost'?7:0;
     if(type==='shield')this.contact=0;

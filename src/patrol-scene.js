@@ -4,7 +4,7 @@ import {loadHumanoid} from './humanoid.js';
 import {applyGear,GEAR_PRESETS} from './wardrobe.js';
 import {fallAnimation} from './npc-routines.js';
 import {PATROL_ITEMS} from './patrol-mode.js';
-import {poseKickedSkier} from './kick.js';
+import {AVALANCHE_DURATION,AVALANCHE_RADIUS,poseKickedSkier} from './kick.js';
 
 export class PatrolScene {
   constructor(scene,surface,gradient){
@@ -81,11 +81,15 @@ export class PatrolScene {
       this.beacon.position.set(x,this.surface(x,z)+1.3,z);
       this.beacon.rotation.y=this.phase*2;
     }
-    this.pulse.visible=this.run.effect?.type==='pulse';
+    const blast=this.run.effect?.type==='avalanche';
+    this.pulse.visible=blast||this.run.effect?.type==='pulse';
     if(this.pulse.visible){
       const {x,z,until}=this.run.effect;
-      const progress=1-Math.max(0,Math.min(1,(until-this.run.time)/.62));
-      const ground=this.surface(x,z),radius=1+progress*14;
+      const duration=blast?AVALANCHE_DURATION:.62;
+      const progress=1-THREE.MathUtils.clamp((until-this.run.time)/duration,0,1);
+      const maxRadius=blast?AVALANCHE_RADIUS:15;
+      const radius=1+(maxRadius-1)*(blast?1-(1-progress)**2:progress);
+      const ground=this.surface(x,z);
       this.pulse.position.set(x,ground,z);
       const positions=this.pulse.geometry.attributes.position;
       for(let i=0;i<positions.count;i++){
@@ -93,7 +97,8 @@ export class PatrolScene {
         positions.setXYZ(i,dx,this.surface(x+dx,z+dz)-ground+.16,dz);
       }
       positions.needsUpdate=true;
-      this.pulse.material.opacity=(1-progress)*.75;
+      this.pulse.material.color.set(blast?'#fff1d2':PATROL_ITEMS.pulse.color);
+      this.pulse.material.opacity=(1-progress)*(blast?.95:.75);
     }
     this.clock+=dt;
     const pose=this.clock>=.05;

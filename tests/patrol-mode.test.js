@@ -136,6 +136,32 @@ test('the inventory holds three items, leaves overflow on the snow, and supports
   assert.deepEqual(run.inventory,['boost','pulse','shield']);
 });
 
+test('an avalanche launches nearby skiers in all directions and preserves the item without targets',()=>{
+  const run=new PatrolRun(route,()=>true),player=makePlayer(100);
+  const kick=new SkierKick(x=>x===5?14:0,()=>true);
+  const pursuer={x:-6,z:100},visitor={point:{x:0,z:118}};
+  const far={x:0,z:121},above={x:5,z:100};
+  run.agents=[pursuer];run.inventory=['avalanche'];run.contact=2;
+  assert.ok(run.pickups.some(p=>p.type==='avalanche'));
+  assert.equal(run.use(player,0,()=>kick.avalanche(player,[far,above])),false);
+  assert.deepEqual(run.inventory,['avalanche']);
+  assert.equal(run.contact,2);
+  assert.ok(run.use(player,0,()=>kick.avalanche(player,[pursuer,visitor,far,above])));
+  assert.deepEqual(run.inventory,[]);
+  assert.equal(run.contact,0);
+  assert.equal(run.effect.type,'avalanche');
+  assert.ok(pursuer.launch.end.x<pursuer.x-15);
+  assert.ok(visitor.launch.end.z>visitor.point.z+12);
+  assert.equal(far.launch,undefined);
+  assert.equal(above.launch,undefined);
+  const landings=[];
+  kick.step(1.1,player,()=>false,flight=>landings.push(flight));
+  assert.equal(landings.length,2);
+  kick.step(.3,player,()=>false,flight=>landings.push(flight));
+  assert.equal(landings.length,2);
+  assert.ok(pursuer.launch.finished&&visitor.launch.finished);
+});
+
 test('each additional ski area exposes its longest mapped run as a shareable chase',()=>{
   for(const id of Object.keys(MOUNTAINS).filter(id=>id!=='crystal')){
     const read=name=>JSON.parse(fs.readFileSync(new URL('../public/'+mountainAsset(id,name),import.meta.url)));
