@@ -126,7 +126,7 @@ export class SnowEffects {
     this.crowdClock+=dt;
     if(this.crowdClock<.1)return;
     this.crowdClock=0;
-    const nearest=states.filter(s=>s.point&&s.kind==='ski'&&s.activity==='ski'&&!s.indoor&&!s.fall&&s.speed>2)
+    const nearest=states.filter(s=>s.point&&s.kind==='ski'&&s.activity==='ski'&&!s.indoor&&!s.launch&&!s.fall&&s.speed>2)
       .map(s=>({s,d:Math.hypot(s.point.x-observer.x,s.point.z-observer.z)}))
       .filter(v=>v.d<90).sort((a,b)=>a.d-b.d).slice(0,4);
     const next=new Map(),segments=[];

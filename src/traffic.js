@@ -10,6 +10,7 @@ import {createRestArea,setVisitorProp,updateVisitorProp} from './rest-area.js';
 import {targetNpcPose,blendNpcPose} from './npc-pose.js';
 import {fitSnowContact} from './ground-contact.js';
 import {stageSkier,stepLiftExit} from './skier-lifecycle.js';
+import {poseKickedSkier} from './kick.js';
 export {trafficPoint} from './traffic-brain.js';
 export const TRAFFIC_LIMIT=CROWD_LIMIT;
 export class SkiTraffic{
@@ -40,12 +41,26 @@ export class SkiTraffic{
     if(point)staged.push(point);
    }
    s.heading=s.point.heading;s.previousHeading=s.heading;
+   delete s.launch;
   });
+ }
+ canBeKicked(state){return Boolean(state.point&&!state.indoor&&!state.launch);}
+ recoverKickedSkier(state,player){
+  const point=state.point;
+  this.sphere.center.set(point.x,this.terrain.surface(point.x,point.z)-1199,point.z);
+  if(Math.hypot(point.x-player.x,point.z-player.z)<10||this.hasCamera&&this.frustum.intersectsSphere(this.sphere))return;
+  delete state.launch;
+  state.speed=0;
+  state.cooldown=1.2;
+  state.poseAge=1;
+  state.decisionAge=1;
  }
  step(dt,player,enabled=true,obstacles=()=>[]){
   this.enabled=enabled;if(!this.route||!enabled)return;this.elapsed+=dt;
   for(let i=0;i<this.states.length;i++){
-   const s=this.states[i];s.poseAge+=dt;s.time+=dt;s.cooldown=Math.max(0,s.cooldown-dt);if(s.fall>0){s.fall=Math.max(0,s.fall-dt);advanceNpcPoling(s,false,dt);continue;}
+   const s=this.states[i];
+   if(s.launch){if(s.launch.finished)this.recoverKickedSkier(s,player);continue;}
+   s.poseAge+=dt;s.time+=dt;s.cooldown=Math.max(0,s.cooldown-dt);if(s.fall>0){s.fall=Math.max(0,s.fall-dt);advanceNpcPoling(s,false,dt);continue;}
    if(s.kind==='lodge'){this.stepVisitor(s,i,dt,player,obstacles);continue;}
    if(s.startWait>0){
     s.startWait-=dt;s.gesture=s.startWait>2.5?'chat':'goggles';
@@ -66,7 +81,7 @@ export class SkiTraffic{
    const old=s.point,distance=Math.hypot(old.x-player.x,old.z-player.z),profile=advanceSkierRoutine(s,i,dt);if(s.fall>0){advanceNpcPoling(s,false,dt);continue;}s.decisionAge+=dt;
    if(s.decisionAge>=(distance<250?.10:.5)){
     const decisionDt=s.decisionAge;s.decisionAge=0;const path=trafficPoint(s.route,s.progress,s.time,i),g=this.terrain.gradient(old.x,old.z);s.slope=Math.max(0,-g.x*Math.sin(path.heading)-g.z*Math.cos(path.heading));
-    const neighbors=distance<350?[player,...this.states.filter(n=>n!==s&&n.point&&!n.indoor).map(n=>n.point),...obstacles(old.x,old.z)]:[];
+    const neighbors=distance<350?[player,...this.states.filter(n=>n!==s&&n.point&&!n.indoor&&!n.launch).map(n=>n.point),...obstacles(old.x,old.z)]:[];
     const plan=planAvoidance(s,neighbors,path.heading,i,decisionDt);s.brake=plan.brake;s.avoidTarget=plan.avoid;s.target=clamp((3.2+s.slope*16)*profile.speed,2.2,18)*plan.brake;
    }
    s.yieldCooldown=Math.max(0,s.yieldCooldown-dt);
@@ -100,7 +115,7 @@ export class SkiTraffic{
 
  collide(from,player){
   if(!this.enabled||player.crashRemaining>0||player.trafficGrace>0)return null;
-  for(let i=0;i<this.states.length;i++){const s=this.states[i],p=s.point;if(!p||s.indoor||s.cooldown>0||s.fall>0||Math.hypot(player.x-p.x,player.z-p.z)>Math.hypot(player.x-from.x,player.z-from.z)+2)continue;
+  for(let i=0;i<this.states.length;i++){const s=this.states[i],p=s.point;if(!p||s.indoor||s.launch||s.cooldown>0||s.fall>0||Math.hypot(player.x-p.x,player.z-p.z)>Math.hypot(player.x-from.x,player.z-from.z)+2)continue;
    const separation=(player.airborne?player.airY:this.terrain.surface(player.x,player.z))-this.terrain.surface(p.x,p.z);
    if(Math.abs(separation)<1.6&&sweptContact(from,player,p,s.kind==='lodge'?.75:.9)){
     const impact=Math.hypot(player.vx-Math.sin(s.heading)*s.speed,player.vz-Math.cos(s.heading)*s.speed);
@@ -114,9 +129,18 @@ export class SkiTraffic{
  update(dt,player,active,enabled=true,camera,frameDt=dt){
   if(!this.route)return;if(!active||!enabled){for(const a of this.actors)a.visible=false;this.lastPoseMs=0;this.lastVisibleCount=0;return;}const start=performance.now();if(dt>0)this.step(dt,player,enabled);const {up,forward,right,basis}=this;this.viewPoint={x:camera?.position.x??player.x,z:camera?.position.z??player.z};this.hasCamera=!!camera;if(camera){camera.updateMatrixWorld();this.frustum.setFromProjectionMatrix(this.projection.multiplyMatrices(camera.projectionMatrix,camera.matrixWorldInverse));}
   const visible=[];
-  for(let i=0;i<this.actors.length;i++){const actor=this.actors[i],s=this.states[i],p=s.point,wasVisible=actor.visible,distance=Math.hypot(p.x-this.viewPoint.x,p.z-this.viewPoint.z);actor.visible=false;if(s.indoor||distance>(wasVisible?500:470))continue;this.sphere.center.set(p.x,this.terrain.surface(p.x,p.z)-1200+.8,p.z);this.sphere.radius=wasVisible?4:2.2;if(camera&&!this.frustum.intersectsSphere(this.sphere))continue;visible.push({i,distance,wasVisible,priority:distance-(wasVisible?60:0)});}
+  for(let i=0;i<this.actors.length;i++){const actor=this.actors[i],s=this.states[i],p=s.launch??s.point,wasVisible=actor.visible;actor.visible=false;if(!p||s.indoor||s.launch?.finished)continue;const distance=Math.hypot(p.x-this.viewPoint.x,p.z-this.viewPoint.z);if(distance>(wasVisible?500:470))continue;this.sphere.center.set(p.x,this.terrain.surface(p.x,p.z)-1200+.8+(s.launch?.height??0),p.z);this.sphere.radius=wasVisible?4:2.2;if(camera&&!this.frustum.intersectsSphere(this.sphere))continue;visible.push({i,distance,wasVisible,priority:s.launch?-Infinity:distance-(wasVisible?60:0)});}
   visible.sort((a,b)=>a.priority-b.priority);this.lastVisibleCount=Math.min(visible.length,VISIBLE_CROWD_LIMIT);
   for(const {i,distance,wasVisible} of visible.slice(0,VISIBLE_CROWD_LIMIT)){
+   const launched=this.states[i].launch;
+   if(launched){
+    const actor=this.actors[i];actor.visible=true;
+    poseKickedSkier(actor,launched,(x,z)=>this.terrain.surface(x,z)-1200);
+    updateAthletePose(actor,{speed:14,heading:launched.heading,airborne:launched.progress<1,
+      fallAmount:.78,fallBrace:.55,fallPhase:launched.progress<1?'impact':'settle',
+      pedestrian:this.states[i].kind==='lodge'},frameDt);
+    continue;
+   }
    const actor=this.actors[i],s=this.states[i],p=s.point,walking=s.kind==='lodge',waiting=s.activity==='waiting'||s.activity==='lift-line';actor.visible=true;const snow=(x,z)=>walking?visitorSurface(s.site,x,z,(u,v)=>this.terrain.surface(u,v)):this.terrain.surface(x,z),base=snow(p.x,p.z),ground=walking?base+((s.seatGround??base)-base)*(s.sit||0):base;actor.position.set(p.x,ground-1200-.07,p.z);
    const gradient=walking?{x:0,z:0}:this.terrain.gradient(p.x,p.z),heading=s.heading;
    up.set(-gradient.x,1,-gradient.z).normalize();forward.set(Math.sin(heading),gradient.x*Math.sin(heading)+gradient.z*Math.cos(heading),Math.cos(heading)).normalize();right.crossVectors(up,forward).normalize();basis.makeBasis(right,up,forward);const rootTarget=new THREE.Quaternion().setFromRotationMatrix(basis);const fall=fallAnimation(s.fall,s.fallDuration||1.5);if(s.fall>0)rootTarget.multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0,0,1),fall.amount*1.25));if(!wasVisible||!frameDt)actor.quaternion.copy(rootTarget);else actor.quaternion.slerp(rootTarget,1-Math.exp(-frameDt*10));

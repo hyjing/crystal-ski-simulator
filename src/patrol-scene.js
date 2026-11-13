@@ -4,6 +4,7 @@ import {loadHumanoid} from './humanoid.js';
 import {applyGear,GEAR_PRESETS} from './wardrobe.js';
 import {fallAnimation} from './npc-routines.js';
 import {PATROL_ITEMS} from './patrol-mode.js';
+import {poseKickedSkier} from './kick.js';
 
 export class PatrolScene {
   constructor(scene,surface,gradient){
@@ -106,9 +107,8 @@ export class PatrolScene {
       const {x,z,heading,speed,bank,launch}=agent;
       actor.userData.chaseMarker.visible=!launch;
       if(launch){
-        const t=launch.progress,spin=1-(1-t)*(1-t);
-        actor.position.set(x,this.surface(x,z)+launch.height,z);
-        actor.rotation.set(spin*2*Math.PI+1.28*t,launch.heading,(i%2?1:-1)*t*1.6,'YXZ');
+        const t=launch.progress;
+        poseKickedSkier(actor,launch,this.surface);
         if(pose||appeared||t===0)updateAthletePose(actor,{
           speed:14,heading:launch.heading,airborne:t<1,flightTime:this.run.time-launch.at,
           fallAmount:.78,fallBrace:.55,fallPhase:t<1?'impact':'settle',

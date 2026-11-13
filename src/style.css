@@ -48,10 +48,12 @@
 #patrol-hud{display:grid;gap:5px;margin:8px 0;padding:8px 10px;background:#fbf0e5;border:1px solid #dcb8a9;border-radius:5px}
 #wanted-stars{color:#8f382b;font-size:19px;line-height:1;letter-spacing:2px}
 #patrol-threat{color:#66382c;font-size:11px}
-#patrol-item{min-height:36px;margin:0;padding:5px 7px;font-size:11px}
+#patrol-inventory-count{font-size:11px;color:#66382c}
+#patrol-items{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:4px}
+#patrol-items button{min-height:36px;margin:0;padding:3px;background:linear-gradient(135deg,var(--item-color),#fff8ed);font-size:11px;line-height:1.25}
 @media(max-width:900px),(pointer:coarse){
  .map-panel{width:clamp(195px,40vw,300px)}
- #patrol-item{min-height:44px}
+ #patrol-items button{min-height:44px}
 }
 @media(max-height:500px) and (max-width:1000px){
  .map-panel{width:clamp(175px,31vw,240px)}
@@ -164,8 +166,8 @@ summary:focus-visible { outline: 3px solid #91b741; outline-offset: 3px; }
   .map-panel { top: 65px; }
 }
 
-.patrol-warning{display:flex;align-items:center;gap:8px}
-#capture-clock{display:grid;place-items:center;flex:0 0 36px;height:36px;border-radius:50%;background:conic-gradient(#b53f38 var(--capture-angle,1turn),#ead3c9 0)}
-#capture-number{display:grid;place-items:center;width:28px;height:28px;border-radius:50%;background:#fff7ee;color:#8f2828;font-size:18px;font-variant-numeric:tabular-nums}
-#patrol-kick{min-height:36px;margin:0;padding:5px 7px;font-size:11px}
-@media(max-width:900px),(pointer:coarse){#patrol-kick{min-height:44px}}
+#capture-clock{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);z-index:5;display:grid;place-items:center;width:clamp(62px,11vmin,92px);aspect-ratio:1;border-radius:50%;pointer-events:none}
+#capture-clock::before{content:"";position:absolute;inset:0;border-radius:inherit;background:conic-gradient(#ff9b86aa var(--capture-angle,1turn),#d8e8ff35 0);mask:radial-gradient(farthest-side,transparent calc(100% - 5px),#000 calc(100% - 4px));filter:blur(.6px)}
+#capture-number{color:#fffc;font-size:clamp(30px,6vmin,48px);font-weight:700;font-variant-numeric:tabular-nums;text-shadow:0 1px 7px #491c2588}
+#patrol-kick{min-height:36px;width:100%;margin:0;padding:5px 7px;font-size:11px}
+@media(max-width:900px),(pointer:coarse){#patrol-kick{display:none}}

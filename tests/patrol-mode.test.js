@@ -2,8 +2,14 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import {mapProjection} from '../src/minimap.js';
-import {PatrolRun, PATROL_ROUTE_ID, resolveChaseRoute} from '../src/patrol-mode.js';
+import {PatrolRun, PATROL_ROUTE_ID, resolveChaseRoute, longestChaseRoute} from '../src/patrol-mode.js';
+import {SkierKick} from '../src/kick.js';
+import {SkiTraffic} from '../src/traffic.js';
+import {MOUNTAINS, mountainAsset} from '../src/mountains.js';
 import {createTerrain, getLiftRuns, pointAlongRoute} from '../src/terrain.js';
+import {preparePisteTerrain} from '../src/pistes.js';
+import {prepareStationTerrain} from '../src/stations.js';
+import {liftExitSpawn} from '../src/resort.js';
 
 test('heading-up map points towards the camera and north-up keeps west to the left',()=>{
   const center={x:100,z:300};
@@ -39,13 +45,13 @@ test('pickups are one-use, boost increases speed, and shield stops capture progr
   const run=new PatrolRun(route,()=>true),p=run.pickups[0];
   const player={...makePlayer(p.z),x:p.x};
   assert.equal(run.step(.03,player),'pickup');
-  assert.equal(run.item,'boost');
+  assert.deepEqual(run.inventory,['boost']);
   assert.ok(run.use(player));
   run.boost(player,.1);
   assert.ok(player.speed>20);
   assert.equal(run.use(player),false);
   assert.ok(p.taken);
-  run.effect=null;run.item='shield';run.contact=1;
+  run.effect=null;run.inventory.push('shield');run.contact=1;
   assert.ok(run.use(player));
   assert.equal(run.contact,0);
   run.agents.push({x:player.x,z:player.z,speed:0,heading:0,bank:0});
@@ -66,17 +72,17 @@ test('the Crystal pursuit itinerary is a long downhill route ending at Quicksilv
 
 test('snow pulse is kept out of range, pushes away nearby patrol, and interrupts capture',()=>{
   const run=new PatrolRun(route,()=>true),player=makePlayer(100);
-  run.item='pulse';
+  run.inventory.push('pulse');
   run.contact=1;
   assert.equal(run.use(player),false);
-  assert.equal(run.item,'pulse');
+  assert.deepEqual(run.inventory,['pulse']);
   const close={x:0,z:96,speed:15,heading:0,bank:0};
   const far={x:0,z:74,speed:15,heading:0,bank:0};
   run.agents=[close,far];
   run.stars=1;
   assert.equal(run.use(player),true);
   assert.equal(run.contact,0);
-  assert.equal(run.item,null);
+  assert.deepEqual(run.inventory,[]);
   assert.ok(close.stunUntil>2);
   assert.equal(far.stunUntil,undefined);
   run.step(.1,player);
@@ -114,44 +120,78 @@ test('leaving the five-meter range resets the countdown before re-entry',()=>{
   assert.equal(run.step(1/30,player),'caught');
 });
 
-test('a close kick resolves after its windup, interrupts capture and has a five-second cooldown',()=>{
-  const run=new PatrolRun(route,()=>false);
-  const player=makePlayer(100),agent={x:0,z:98,heading:0,speed:0,bank:0};
-  run.agents=[agent];run.stars=1;run.contact=1;
-  assert.ok(run.startKick(player));
-  assert.equal(run.kickCooldown,5);
-  assert.equal(run.startKick(player),false);
-  run.step(.10,player);
-  assert.ok(run.kickPose.amount>0);
-  assert.equal(agent.launch,undefined);
-  run.step(.07,player);
-  assert.equal(agent.launch.progress,0);
-  assert.ok(run.kick.hit);
-  assert.equal(run.contact,0);
-  assert.equal(run.startKick(player),false);
-  run.step(4.84,player);
-  run.agents.push({x:0,z:98,heading:0,speed:0,bank:0});
-  assert.ok(run.startKick(player));
+test('the inventory holds three items, leaves overflow on the snow, and supports using a slot',()=>{
+  const run=new PatrolRun(route,()=>true);
+  for(const p of run.pickups.slice(0,3)){
+    assert.equal(run.step(.03,{...makePlayer(p.z),x:p.x}),'pickup');
+  }
+  assert.deepEqual(run.inventory,['boost','pulse','decoy']);
+  const fourth=run.pickups[3],player={...makePlayer(fourth.z),x:fourth.x};
+  assert.equal(run.step(.03,player),null);
+  assert.equal(fourth.taken,false);
+  assert.equal(run.use(player,1),false);
+  assert.ok(run.use(player,2));
+  assert.equal(run.effect.type,'decoy');
+  assert.equal(run.step(.03,player),'pickup');
+  assert.deepEqual(run.inventory,['boost','pulse','shield']);
 });
 
-test('a kicked skier tumbles clear, lands, and is replaced away from the player',()=>{
+test('each additional ski area exposes its longest mapped run as a shareable chase',()=>{
+  for(const id of Object.keys(MOUNTAINS).filter(id=>id!=='crystal')){
+    const read=name=>JSON.parse(fs.readFileSync(new URL('../public/'+mountainAsset(id,name),import.meta.url)));
+    const raw=createTerrain(read('dem.json')),data=read('lift-runs.json'),infrastructure=read('infrastructure.json');
+    const terrain=prepareStationTerrain(preparePisteTerrain(raw,read('trail-network.json')),getLiftRuns(raw,data),infrastructure).terrain;
+    const runs=getLiftRuns(terrain,data);
+    const chase=longestChaseRoute(runs,id);
+    assert.equal(chase.id,id+'-angry-skiers');
+    assert.equal(chase.length,Math.max(...runs.map(r=>r.length)));
+    assert.ok(chase.patrolOnly&&chase.length>1300&&chase.drop>200);
+    assert.ok(runs.every(r=>!r.patrolOnly));
+    chase.spawn=liftExitSpawn(terrain,chase,infrastructure);
+    const run=new PatrolRun(chase,p=>Math.abs(p.x)<(terrain.width-1)*terrain.spacing/2-18&&
+      Math.abs(p.z)<(terrain.height-1)*terrain.spacing/2-18);
+    assert.ok(run.pickups.length>=3);
+  }
+});
+
+test('the kick targets the closest regular snow visitor, then waits five seconds',()=>{
+  const kick=new SkierKick(()=>0,()=>true),player=makePlayer(100);
+  const visitor={kind:'lodge',point:{x:0,z:99}},agent={x:0,z:98};
+  const eligible=()=>true;
+  assert.ok(kick.start(player,[agent,visitor]));
+  assert.equal(kick.cooldown,5);
+  assert.equal(kick.start(player,[agent]),false);
+  assert.equal(kick.step(.1,player,eligible),null);
+  assert.ok(kick.pose.amount>0);
+  assert.equal(kick.step(.07,player,eligible).target,visitor);
+  assert.equal(kick.step(.43,player,eligible),null);
+  assert.ok(visitor.launch.height>3.5);
+  assert.ok(visitor.launch.x>4&&visitor.launch.z<93);
+  assert.equal(kick.step(.44,player,eligible).type,'land');
+  assert.equal(visitor.launch.height,0);
+  kick.step(4,player,eligible);
+  assert.ok(visitor.launch.finished);
+  assert.ok(kick.start(player,[agent,visitor]));
+});
+
+test('a kicked pursuer stops counting toward capture and is replaced offscreen',()=>{
   const run=new PatrolRun(route,()=>true,()=>false);
+  const kick=new SkierKick(()=>0,()=>true);
   const player=makePlayer(100);
   const agent={x:0,z:98,heading:0,speed:0,bank:0,id:10};
   const other={x:0,z:60,heading:0,speed:0,bank:0,id:11};
   run.agents=[agent,other];
   run.stars=1;
-  assert.ok(run.startKick(player));
+  run.contact=1;
+  assert.ok(kick.start(player,[agent,other]));
+  kick.step(.17,player,()=>true);
   run.step(.17,player);
-  run.step(.43,player);
-  assert.ok(agent.launch.height>3.5);
-  assert.ok(agent.x>4&&agent.z<92);
   assert.equal(run.captureRemaining,null);
-  run.step(.44,player);
-  assert.equal(agent.launch.progress,1);
-  assert.equal(agent.launch.height,0);
+  kick.step(.87,player,()=>true);
+  run.step(.87,player);
   assert.ok(run.agents.includes(agent));
-  run.step(.25,player);
+  kick.step(.23,player,()=>true);
+  run.step(.23,player);
   assert.deepEqual(run.agents,[other]);
   run.step(1,player);
   assert.deepEqual(run.agents,[other]);
@@ -161,6 +201,24 @@ test('a kicked skier tumbles clear, lands, and is replaced away from the player'
   const replacement=run.agents.find(s=>s!==other);
   assert.ok(replacement&&replacement.id!==agent.id&&replacement.z<player.z-38);
   assert.equal(replacement.launch,undefined);
+});
+
+test('a finished regular NPC stays out of collision and returns only when away from the player and camera',()=>{
+  const traffic=new SkiTraffic(null,{width:3,height:3,spacing:10,surface:()=>1200},[]);
+  const state={point:{x:0,z:100},launch:{finished:true},speed:12};
+  traffic.route=route;
+  traffic.states=[state];
+  traffic.step(.05,makePlayer(100));
+  assert.ok(state.launch);
+  assert.equal(traffic.collide(makePlayer(98),{...makePlayer(100),trafficGrace:0}),null);
+  traffic.hasCamera=true;
+  traffic.frustum.intersectsSphere=()=>true;
+  traffic.step(.05,makePlayer(120));
+  assert.ok(state.launch);
+  traffic.frustum.intersectsSphere=()=>false;
+  traffic.step(.05,makePlayer(120));
+  assert.equal(state.launch,undefined);
+  assert.equal(state.speed,0);
 });
 
 test('patrol steering is radius limited and collisions interrupt the capture countdown',()=>{
