@@ -139,6 +139,16 @@ export class SnowEffects {
     this.crowdPrevious=next;
     return segments;
   }
+  kickBurst(x,y,z,heading,landing=false){
+    const forwardX=Math.sin(heading),forwardZ=Math.cos(heading);
+    for(let i=0;i<(landing?34:24);i++){
+      const p=this.particles[this.particleCursor++%this.particleCount];
+      const angle=Math.random()*Math.PI*2,spread=Math.random()*4,drift=landing?1.4:3.8;
+      const life=.35+Math.random()*.35;
+      Object.assign(p,{x,y:y+.28,z,vx:forwardX*drift+Math.cos(angle)*spread,
+        vz:forwardZ*drift+Math.sin(angle)*spread,vy:.8+Math.random()*2.6,life,maxLife:life});
+    }
+  }
   update(dt,skier,running,snow,poleContact,boost=false){
     if(running&&!skier.airborne&&!skier.crashRemaining&&poleContact){for(let k=0;k<5;k++){const p=this.particles[this.particleCursor++%this.particleCount];Object.assign(p,{x:poleContact.x,y:poleContact.y+.02,z:poleContact.z,vx:(Math.random()-.5)*.5,vz:(Math.random()-.5)*.5,vy:.3+Math.random()*.3,life:.24,maxLife:.3});}}
     if(running&&!skier.airborne&&!skier.crashRemaining&&skier.speed>.8){

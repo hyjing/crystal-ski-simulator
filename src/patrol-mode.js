@@ -1,11 +1,14 @@
 import {clamp, nearestOnRoute} from './physics.js';
 import {pointAlongRoute} from './terrain.js';
 
-export const PATROL_ROUTE_ID = 'crystal-patrol-descent';
+export const PATROL_ROUTE_ID = 'crystal-angry-skiers';
+export const resolveChaseRoute = id => id === 'crystal-patrol-descent' ? PATROL_ROUTE_ID : id;
 const CAPTURE_RADIUS = 5;
 const CAPTURE_SECONDS = 3;
 const KICK_COOLDOWN = 5;
 const KICK_RANGE = 3.2;
+const FLIGHT_SECONDS = .86;
+const REPLACEMENT_DELAY = 1.2;
 export const PATROL_ITEMS = {
   boost: {name: '加速充能', color: '#ffe16d', symbol: '»'},
   decoy: {name: '幻影信标', color: '#c9a4ff', symbol: '◇'},
@@ -63,7 +66,7 @@ export class PatrolRun {
   startKick(player,surface=()=>0){
     if(this.kickCooldown>0||this.outcome||player.airborne||player.crashRemaining)return false;
     const height=surface(player.x,player.z);
-    const target=this.agents.filter(agent=>(agent.stunUntil??0)<=this.time)
+    const target=this.agents.filter(agent=>!agent.launch&&(agent.stunUntil??0)<=this.time)
       .filter(agent=>range(agent,player)<=KICK_RANGE&&Math.abs(surface(agent.x,agent.z)-height)<1.6)
       .sort((a,b)=>range(a,player)-range(b,player))[0];
     if(!target)return false;
@@ -91,6 +94,33 @@ export class PatrolRun {
     agent.speed=0;
   }
 
+  launchAway(agent,player,surface){
+    const dx=agent.x-player.x,dz=agent.z-player.z;
+    const distance=Math.hypot(dx,dz);
+    const side=(dx*Math.cos(player.heading)-dz*Math.sin(player.heading))<0?-1:1;
+    const heading=distance>.1?Math.atan2(dx+Math.cos(player.heading)*side*distance*.7,
+      dz-Math.sin(player.heading)*side*distance*.7):player.heading+side*Math.PI/2;
+    const start={x:agent.x,z:agent.z};
+    const end=[14,11,8,5].map(distance=>({
+      x:start.x+Math.sin(heading)*distance,z:start.z+Math.cos(heading)*distance,
+    })).find(this.clear)??start;
+    agent.launch={start,end,fromY:surface(start.x,start.z),toY:surface(end.x,end.z),
+      heading,at:this.time,progress:0,height:0};
+    agent.speed=agent.bank=0;
+  }
+
+  advanceLaunch(agent,surface){
+    const flight=agent.launch;
+    flight.progress=clamp((this.time-flight.at)/FLIGHT_SECONDS,0,1);
+    const t=flight.progress;
+    const distance=1-Math.pow(1-t,1.35);
+    agent.x=flight.start.x+(flight.end.x-flight.start.x)*distance;
+    agent.z=flight.start.z+(flight.end.z-flight.start.z)*distance;
+    const ground=surface(agent.x,agent.z);
+    const arcY=flight.fromY+(flight.toY-flight.fromY)*distance+15.2*t*(1-t);
+    flight.height=Math.max(0,arcY-ground);
+  }
+
   addStar(){
     this.stars=Math.min(5,this.stars+1);
     this.peakStars=Math.max(this.peakStars,this.stars);
@@ -107,7 +137,7 @@ export class PatrolRun {
     if(!this.item||this.effect||this.outcome||player.crashRemaining||player.airborne)return false;
     const type=this.item;
     if(type==='pulse'){
-      const nearby=this.agents.filter(agent=>range(agent,player)<=15);
+      const nearby=this.agents.filter(agent=>!agent.launch&&range(agent,player)<=15);
       if(!nearby.length)return false;
       this.contact=0;
       for(const agent of nearby)this.repel(agent,player,2.4,16);
@@ -135,9 +165,9 @@ export class PatrolRun {
     const kick=this.kick;
     if(kick&&!kick.resolved&&this.time-kick.start>=.16){
       kick.resolved=true;
-      if(!player.airborne&&!player.crashRemaining&&this.agents.includes(kick.target)&&range(kick.target,player)<=KICK_RANGE+.5&&
+      if(!player.airborne&&!player.crashRemaining&&this.agents.includes(kick.target)&&!kick.target.launch&&range(kick.target,player)<=KICK_RANGE+.5&&
         Math.abs(surface(kick.target.x,kick.target.z)-surface(player.x,player.z))<1.6){
-        this.repel(kick.target,player,1.9,12);
+        this.launchAway(kick.target,player,surface);
         this.contact=0;
         kick.hit=true;
       }
@@ -148,7 +178,10 @@ export class PatrolRun {
     if(along.distance<58)this.furthest=Math.max(previous,along.progress);
     for(let i=this.agents.length-1;i>=0;i--){
       const agent=this.agents[i];
-      if(range(agent,player)>230&&offscreen(agent)){
+      if(agent.launch&&this.time-agent.launch.at>=FLIGHT_SECONDS+.22){
+        this.agents.splice(i,1);
+        this.spawnAfter=Math.max(this.spawnAfter,this.time+REPLACEMENT_DELAY);
+      }else if(!agent.launch&&range(agent,player)>230&&offscreen(agent)){
         this.agents.splice(i,1);
         this.spawnAfter=Math.max(this.spawnAfter,this.time+2.5);
       }
@@ -161,9 +194,9 @@ export class PatrolRun {
 
     const desired=this.stars?Math.min(5,this.stars+1):0;
     if(this.agents.length<desired&&this.time>=this.spawnAfter){
-      this.spawnAfter=this.time+3.5;
       const distance=Math.max(this.route.spawn.distance-12,along.progress-78-this.agents.length*16);
       const point=[-5,5,0].map(offset=>routePoint(this.route,distance,offset)).find(p=>range(p,player)>38&&offscreen(p)&&this.clear(p));
+      this.spawnAfter=this.time+(point?3.5:.5);
       if(point)this.agents.push({...point,speed:Math.max(9,player.speed*.75),bank:0,id:this.nextAgent++});
     }
 
@@ -171,6 +204,7 @@ export class PatrolRun {
     let threat=Infinity,contactDistance=Infinity;
     const playerHeight=surface(player.x,player.z);
     for(const agent of this.agents){
+      if(agent.launch){this.advanceLaunch(agent,surface);continue;}
       const separation=range(agent,player);
       if(agent.stunUntil>this.time){
         if(agent.repelUntil>this.time){
@@ -232,8 +266,11 @@ export class PatrolRun {
     if(this.stars&&this.time-this.lastSeen>12){
       this.stars--;
       this.lastSeen=this.time;
-      if(this.agents.length>Math.min(5,this.stars+1))this.agents.pop();
-      if(!this.stars)this.agents.length=0;
+      if(!this.stars)this.agents=this.agents.filter(agent=>agent.launch);
+      else if(this.agents.length>Math.min(5,this.stars+1)){
+        const index=this.agents.findLastIndex(agent=>!agent.launch);
+        if(index>=0)this.agents.splice(index,1);
+      }
     }
     const inReach = this.stars > 0 && contactDistance <= CAPTURE_RADIUS &&
       !player.airborne && this.effect?.type !== 'shield';

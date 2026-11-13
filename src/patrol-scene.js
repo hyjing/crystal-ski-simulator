@@ -43,16 +43,11 @@ export class PatrolScene {
         applyGear(actor,{...GEAR_PRESETS.rust,jacket:'#bd243d',pants:'#202938',helmet:'#f2f2ef'});
         actor.traverse(o=>{if(o.isMesh)o.castShadow=false;});
       }).catch(()=>{});
-      const tag=new THREE.Mesh(new THREE.BoxGeometry(.4,.24,.10),new THREE.MeshBasicMaterial({color:'#f03652'}));
+      const tag=new THREE.Mesh(this.tokenGeometry,new THREE.MeshBasicMaterial({color:'#f03652'}));
       tag.position.set(0,3.65,0);
-      const mark=new THREE.MeshBasicMaterial({color:'#ffffff'});
-      for(const [width,height] of [[.16,.045],[.045,.16]]){
-        const cross=new THREE.Mesh(new THREE.PlaneGeometry(width,height),mark);
-        cross.position.z=-.052;
-        cross.rotation.y=Math.PI;
-        tag.add(cross);
-      }
+      tag.scale.set(.25,.34,.25);
       actor.add(tag);
+      actor.userData.chaseMarker=tag;
     }
   }
 
@@ -104,10 +99,22 @@ export class PatrolScene {
     if(pose)this.clock=0;
     for(const [i,actor] of this.actors.entries()){
       const agent=this.run.agents[i];
-      const appeared=!actor.visible;
+      const appeared=actor.userData.chaseAgent!==agent;
+      actor.userData.chaseAgent=agent;
       actor.visible=Boolean(agent);
       if(!agent)continue;
-      const {x,z,heading,speed,bank}=agent;
+      const {x,z,heading,speed,bank,launch}=agent;
+      actor.userData.chaseMarker.visible=!launch;
+      if(launch){
+        const t=launch.progress,spin=1-(1-t)*(1-t);
+        actor.position.set(x,this.surface(x,z)+launch.height,z);
+        actor.rotation.set(spin*2*Math.PI+1.28*t,launch.heading,(i%2?1:-1)*t*1.6,'YXZ');
+        if(pose||appeared||t===0)updateAthletePose(actor,{
+          speed:14,heading:launch.heading,airborne:t<1,flightTime:this.run.time-launch.at,
+          fallAmount:.78,fallBrace:.55,fallPhase:t<1?'impact':'settle',
+        },.05);
+        continue;
+      }
       const g=this.gradient(x,z),fx=Math.sin(heading),fz=Math.cos(heading);
       const up=new THREE.Vector3(-g.x,1,-g.z).normalize();
       const forward=new THREE.Vector3(fx,g.x*fx+g.z*fz,fz).normalize();

@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import {mapProjection} from '../src/minimap.js';
-import {PatrolRun, PATROL_ROUTE_ID} from '../src/patrol-mode.js';
+import {PatrolRun, PATROL_ROUTE_ID, resolveChaseRoute} from '../src/patrol-mode.js';
 import {createTerrain, getLiftRuns, pointAlongRoute} from '../src/terrain.js';
 
 test('heading-up map points towards the camera and north-up keeps west to the left',()=>{
@@ -55,8 +55,10 @@ test('pickups are one-use, boost increases speed, and shield stops capture progr
 
 test('the Crystal pursuit itinerary is a long downhill route ending at Quicksilver',()=>{
   const read=name=>JSON.parse(fs.readFileSync(new URL(`../public/data/crystal-${name}.json`,import.meta.url)));
-  const terrain=createTerrain(read('dem')), [r]=getLiftRuns(terrain,read('patrol-run'));
+  const terrain=createTerrain(read('dem')), [r]=getLiftRuns(terrain,read('angry-skiers-run'));
   assert.equal(r.id,PATROL_ROUTE_ID);
+  assert.equal(resolveChaseRoute('crystal-patrol-descent'),r.id);
+  assert.equal(resolveChaseRoute('lucky-shot'),'lucky-shot');
   assert.ok(r.length>3000&&r.drop>600);
   assert.equal(r.returnLift,'Quicksilver');
   assert.ok(pointAlongRoute(r,1500).distance===1500);
@@ -121,14 +123,44 @@ test('a close kick resolves after its windup, interrupts capture and has a five-
   assert.equal(run.startKick(player),false);
   run.step(.10,player);
   assert.ok(run.kickPose.amount>0);
-  assert.equal(agent.stunUntil,undefined);
+  assert.equal(agent.launch,undefined);
   run.step(.07,player);
-  assert.ok(agent.stunUntil>run.time);
+  assert.equal(agent.launch.progress,0);
   assert.ok(run.kick.hit);
   assert.equal(run.contact,0);
   assert.equal(run.startKick(player),false);
-  run.time=5.01;
+  run.step(4.84,player);
+  run.agents.push({x:0,z:98,heading:0,speed:0,bank:0});
   assert.ok(run.startKick(player));
+});
+
+test('a kicked skier tumbles clear, lands, and is replaced away from the player',()=>{
+  const run=new PatrolRun(route,()=>true,()=>false);
+  const player=makePlayer(100);
+  const agent={x:0,z:98,heading:0,speed:0,bank:0,id:10};
+  const other={x:0,z:60,heading:0,speed:0,bank:0,id:11};
+  run.agents=[agent,other];
+  run.stars=1;
+  assert.ok(run.startKick(player));
+  run.step(.17,player);
+  run.step(.43,player);
+  assert.ok(agent.launch.height>3.5);
+  assert.ok(agent.x>4&&agent.z<92);
+  assert.equal(run.captureRemaining,null);
+  run.step(.44,player);
+  assert.equal(agent.launch.progress,1);
+  assert.equal(agent.launch.height,0);
+  assert.ok(run.agents.includes(agent));
+  run.step(.25,player);
+  assert.deepEqual(run.agents,[other]);
+  run.step(1,player);
+  assert.deepEqual(run.agents,[other]);
+  run.step(.3,player,()=>false);
+  assert.deepEqual(run.agents,[other]);
+  run.step(.5,player);
+  const replacement=run.agents.find(s=>s!==other);
+  assert.ok(replacement&&replacement.id!==agent.id&&replacement.z<player.z-38);
+  assert.equal(replacement.launch,undefined);
 });
 
 test('patrol steering is radius limited and collisions interrupt the capture countdown',()=>{

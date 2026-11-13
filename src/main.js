@@ -1,5 +1,5 @@
 import {mapProjection} from './minimap.js';
-import {PatrolRun,PATROL_ITEMS,PATROL_ROUTE_ID} from './patrol-mode.js';
+import {PatrolRun,PATROL_ITEMS,PATROL_ROUTE_ID,resolveChaseRoute} from './patrol-mode.js';
 import {PatrolScene} from './patrol-scene.js';
 import * as THREE from 'three';
 import './style.css';
@@ -113,14 +113,14 @@ async function init(){
   routes=getLiftRuns(terrain,runs);route=routes[0];
   if(isCrystal){
     try{
-      const patrolData=await fetch(asset('patrol-run.json')).then(r=>{if(!r.ok)throw Error('Patrol route');return r.json();});
+      const patrolData=await fetch(asset('angry-skiers-run.json')).then(r=>{if(!r.ok)throw Error('Chase route');return r.json();});
       const [descent]=getLiftRuns(terrain,patrolData);
       if(descent){
         descent.patrolOnly=true;
-        descent.label='巡逻追逐 · 长距离';
+        descent.label='愤怒的雪友 · 长距离';
         routes.push(descent);
       }
-    }catch(error){console.warn('Optional patrol route unavailable',error);}
+    }catch(error){console.warn('Optional chase route unavailable',error);}
   }
   $('patrol-option').hidden=!routes.some(r=>r.patrolOnly);
   trailMusic=assignTrailMusic(mountainId,routes.map(r=>r.id));
@@ -194,7 +194,7 @@ async function init(){
     onStructuresChanged:()=>structures.rebuild()}).then(t=>{traffic=t;traffic.reset(route,skier,routes);weather.prepareMaterials();}).catch(error=>console.warn('Other skiers unavailable',error));
   createStationLife(scene,scene.userData.liftTerminals||[],(x,z)=>terrain.surface(x,z),isCrystal).then(s=>{stationLife=s;weather.prepareMaterials();}).catch(error=>console.warn('Station staff unavailable',error));
   createLiftPassengers(scene,resortUpdate).then(p=>{liftPassengers=p;p.select(route.liftId);weather.prepareMaterials();}).catch(error=>console.warn('Lift riders unavailable',error));
-  const requestedRoute=routes.find(r=>r.id===new URLSearchParams(location.search).get('route'));
+  const requestedRoute=routes.find(r=>r.id===resolveChaseRoute(new URLSearchParams(location.search).get('route')));
   selectRoute(requestedRoute?.id||route.id);weather.update(0,camera,athlete.position);weather.snowfall.mesh.visible=true;speedRenderer.prepare();weather.snowfall.mesh.visible=false;$('loading').classList.add('hidden'); $('start').disabled=false;$('challenge').disabled=false;
   if(import.meta.env.DEV&&new URLSearchParams(location.search).has('visual-qa')){
     const panel=document.createElement('div');Object.assign(panel.style,{position:'fixed',left:'350px',top:'95px',zIndex:40,display:'flex',gap:'6px'});
@@ -313,7 +313,7 @@ function startRun(reset=true){
   $('intro').classList.add('hidden');$('session').classList.remove('hidden');$('touch').classList.add('active');
   $('overview').innerHTML='俯瞰 <kbd>O</kbd>';
   $('game-menu').open=false;
-  if(patrol)toast('巡逻追逐 · 沿标记滑到终点 · G 使用拾取的道具');
+  if(patrol)toast('愤怒的雪友 · 沿标记滑到终点 · G 使用道具 · K 踹飞');
   else toast(touchDevice?'长按左侧转弯 · 右侧撑杖起步 · 拖动场景环视':'上站缓坡出发 · 按住 Shift 撑杖 · 沿雪道滑到下站光圈');
   if(soundOn) enableAudio();
   soundtrack.refresh();
@@ -344,12 +344,12 @@ function resumeRun(){
 function liftView(){return mode==='lift'||(mode==='paused'&&pauseOrigin==='lift');}
 function finishRun(caught=false){
   if(patrol&&!caught)patrol.outcome='escaped';
-  $('result-title').textContent=patrol?(caught?'被巡逻员截停':'成功抵达终点'):'Nice line.';
+  $('result-title').textContent=patrol?(caught?'被愤怒的雪友追上':'成功抵达终点'):'Nice line.';
   $('result-copy').textContent=patrol?(caught?'追逐结束。可以重开同一条路线。':'完成了 Summit to Quicksilver 追逐。'):'已到下站登乘区。可以返回山顶，再滑一趟。';
   mode='finished';keys.clear();skier.vx=skier.vz=skier.speed=0;
   $('result-stats').innerHTML=`<div><strong>${clockFormat(elapsed)}</strong><small>滑行时间</small></div><div><strong>${Math.round(peakSpeed*3.6)}</strong><small>最高速度 KM/H</small></div><div><strong>${(totalDistance/1000).toFixed(2)}</strong><small>滑行里程 KM</small></div><div><strong>${skier.freestyleScore||0}</strong><small>特技分数</small></div>`;
   if(patrol){
-    $('challenge-result').textContent=`最高通缉 ${patrol.peakStars} 星`;
+    $('challenge-result').textContent=`最高追逐热度 ${patrol.peakStars} 星`;
   }else if(challenge&&challenge.mode!=='free'){
     const r=challenge.result(),best=r.complete&&['time','turns'].includes(challenge.mode)?recordRun(localStorage,`ski-best:${mountainId}:${route.id}:${challenge.mode}`,r.time):null;
     $('challenge-result').textContent=challenge.mode==='freestyle'?`花式练习 · ${skier.freestyleScore||0} 分`:`${r.complete?'全部门点完成':'漏门 '+r.missed+' 个'} · ${r.time.toFixed(1)} 秒（罚时 ${r.penalty} 秒）${best?' · 本机最佳 '+best.toFixed(1)+' 秒':''}`;
@@ -391,8 +391,20 @@ function updatePhysics(dt){
     patrolStep+=dt;
     if(patrolStep>=1/30){
       const pendingKick=patrol.kick&&!patrol.kick.resolved;
+      const flight=patrol.kick?.target.launch;
+      const wasAirborne=flight&&flight.progress<1;
       const event=patrol.step(patrolStep,skier,patrolOffscreen,yAt,patrolCollision);
-      if(pendingKick&&patrol.kick.resolved)toast(patrol.kick.hit?'已踢开巡逻员':'巡逻员已离开踢击范围');
+      if(pendingKick&&patrol.kick.resolved){
+        toast(patrol.kick.hit?'踹飞了！':'雪友已滑出踢击范围');
+        if(patrol.kick.hit){
+          const {start,fromY,heading}=patrol.kick.target.launch;
+          snowEffects.kickBurst(start.x,fromY,start.z,heading);
+        }
+      }
+      if(wasAirborne&&flight.progress===1){
+        const {end,toY,heading}=flight;
+        snowEffects.kickBurst(end.x,toY,end.z,heading,true);
+      }
       patrolStep=0;
       if(event==='caught'){finishRun(true);return;}
       if(event==='pickup')toast(`拾取 ${PATROL_ITEMS[patrol.item].name} · G 使用`);
@@ -607,7 +619,7 @@ function drawMap(){
   dot(route.points.at(-1),'#996027',8,'F');
   if(patrol){
     for(const p of patrol.pickups)if(!p.taken)dot(p,PATROL_ITEMS[p.type].color,4.5);
-    for(const agent of patrol.agents)dot(agent,'#b4213a',5.4);
+    for(const agent of patrol.agents)if(!agent.launch)dot(agent,'#b4213a',5.4);
   }
   const m=point(skier),front=point({x:skier.x+Math.sin(skier.heading)*10,z:skier.z+Math.cos(skier.heading)*10});
   ctx.save();
@@ -633,7 +645,7 @@ function updateUI(){
   $('patrol-hud').hidden=!patrol;
   if(patrol){
     $('wanted-stars').textContent='★'.repeat(patrol.stars)+'☆'.repeat(5-patrol.stars);
-    $('wanted-stars').setAttribute('aria-label',`${patrol.stars} 星通缉`);
+    $('wanted-stars').setAttribute('aria-label',`追逐热度 ${patrol.stars} 星`);
     const remaining=patrol.captureRemaining;
     $('capture-clock').hidden=remaining===null||remaining<=0||Boolean(patrol.outcome);
     const seconds=Math.ceil(remaining||0);
@@ -641,10 +653,10 @@ function updateUI(){
     $('capture-clock').style.setProperty('--capture-angle',`${(remaining||0)/3}turn`);
     const cooldown=patrol.kickCooldown;
     $('patrol-kick').disabled=cooldown>0||mode!=='running';
-    $('patrol-kick').textContent=cooldown>0?`踢开 · ${cooldown.toFixed(1)} 秒`:'踢开 · K';
-    $('patrol-threat').textContent=patrol.outcome==='caught'?'已被截停'
-      : remaining!==null&&remaining>0?'即将被抓'
-      : patrol.outcome==='escaped'?'已到达终点':patrol.stars?'巡逻追逐中':'暂未被追踪';
+    $('patrol-kick').textContent=cooldown>0?`踹飞 · ${cooldown.toFixed(1)} 秒`:'踹飞 · K';
+    $('patrol-threat').textContent=patrol.outcome==='caught'?'已被雪友追上'
+      : remaining!==null&&remaining>0?'快被追上了'
+      : patrol.outcome==='escaped'?'已到达终点':patrol.stars?'愤怒的雪友正在追赶':'暂无雪友追赶';
     $('patrol-item').disabled=!patrol.item||Boolean(patrol.effect)||mode!=='running';
     $('patrol-item').textContent=patrol.item?`${PATROL_ITEMS[patrol.item].name} · G 使用`:'沿途拾取道具';
   }
@@ -836,13 +848,13 @@ function usePatrolItem(){
   if(mode!=='running'||!patrol?.item)return;
   const name=PATROL_ITEMS[patrol.item].name;
   if(patrol.use(skier)){toast(`${name}已启用`);updateUI();}
-  else if(patrol.item==='pulse'&&!patrol.effect&&!skier.airborne&&!skier.crashRemaining)toast('附近没有巡逻员，雪浪脉冲已保留');
+  else if(patrol.item==='pulse'&&!patrol.effect&&!skier.airborne&&!skier.crashRemaining)toast('附近没有愤怒的雪友，雪浪脉冲已保留');
 }
 $('patrol-item').addEventListener('click',usePatrolItem);
 function kickPatrol(){
   if(mode!=='running'||!patrol||patrol.kickCooldown>0||skier.airborne||skier.crashRemaining)return;
   if(patrol.startKick(skier,yAt))updateUI();
-  else toast('巡逻员进入 3.2 米范围后可踢开');
+  else toast('愤怒的雪友进入 3.2 米范围后可踹飞');
 }
 $('patrol-kick').addEventListener('click',kickPatrol);
 $('board-lift').addEventListener('click',boardLift);$('board-result').addEventListener('click',boardLift);
