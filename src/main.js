@@ -585,8 +585,10 @@ function updateUI(){
   if(patrol){
     $('wanted-stars').textContent='★'.repeat(patrol.stars)+'☆'.repeat(5-patrol.stars);
     $('wanted-stars').setAttribute('aria-label',`${patrol.stars} 星通缉`);
-    const threat=patrol.contact>0?` · 截停 ${Math.min(99,Math.round(patrol.contact/1.75*100))}%`:'';
-    $('patrol-threat').textContent=patrol.stars?`巡逻追逐中${threat}`:'暂未被追踪';
+    const remaining=patrol.captureRemaining;
+    $('patrol-threat').textContent=patrol.outcome==='caught'?'已被截停'
+      : remaining!==null&&remaining>0?`即将被抓 · ${(Math.ceil(remaining*10)/10).toFixed(1)} 秒`
+      : patrol.outcome==='escaped'?'已到达终点':patrol.stars?'巡逻追逐中':'暂未被追踪';
     $('patrol-item').disabled=!patrol.item||Boolean(patrol.effect)||mode!=='running';
     $('patrol-item').textContent=patrol.item?`${PATROL_ITEMS[patrol.item].name} · G 使用`:'沿途拾取道具';
   }

@@ -2,6 +2,8 @@ import {clamp, nearestOnRoute} from './physics.js';
 import {pointAlongRoute} from './terrain.js';
 
 export const PATROL_ROUTE_ID = 'crystal-patrol-descent';
+const CAPTURE_RADIUS = 5;
+const CAPTURE_SECONDS = 3;
 export const PATROL_ITEMS = {
   boost: {name: '加速充能', color: '#ffe16d', symbol: '»'},
   decoy: {name: '幻影信标', color: '#c9a4ff', symbol: '◇'},
@@ -42,6 +44,10 @@ export class PatrolRun {
       const point=[side*3,-side*3,0].map(offset=>routePoint(route,d,offset)).find(clear);
       if(point)this.pickups.push({...point,type:types[this.pickups.length%types.length],taken:false});
     }
+  }
+
+  get captureRemaining(){
+    return this.contact > 0 ? Math.max(0, CAPTURE_SECONDS - this.contact) : null;
   }
 
   addStar(){
@@ -128,7 +134,7 @@ export class PatrolRun {
       const distracted=lure&&range(agent,lure)<85;
       if(!distracted){
         threat=Math.min(threat,separation);
-        if(separation<5&&Math.abs(surface(agent.x,agent.z)-playerHeight)<2)
+        if(separation<=CAPTURE_RADIUS&&Math.abs(surface(agent.x,agent.z)-playerHeight)<2)
           contactDistance=Math.min(contactDistance,separation);
       }
       const target=distracted?lure:following?routePoint(this.route,onRoute.progress+22):player;
@@ -166,10 +172,14 @@ export class PatrolRun {
       if(this.agents.length>Math.min(5,this.stars+1))this.agents.pop();
       if(!this.stars)this.agents.length=0;
     }
-    if(this.stars&&contactDistance<4.4&&!player.airborne&&this.effect?.type!=='shield'){
-      this.contact+=dt*(player.speed<4?1.7:1);
-    }else this.contact=Math.max(0,this.contact-dt*1.25);
-    if(this.contact>=1.75){this.outcome='caught';return 'caught';}
+    const inReach = this.stars > 0 && contactDistance <= CAPTURE_RADIUS &&
+      !player.airborne && this.effect?.type !== 'shield';
+    this.contact = inReach ? this.contact + dt : 0;
+    if(this.contact >= CAPTURE_SECONDS - 1e-9){
+      this.contact = CAPTURE_SECONDS;
+      this.outcome = 'caught';
+      return 'caught';
+    }
 
     if(!this.item&&!player.airborne&&!player.crashRemaining){
       const pickup=this.pickups.find(p=>!p.taken&&range(p,player)<5.5);
