@@ -163,3 +163,9 @@ summary:focus-visible { outline: 3px solid #91b741; outline-offset: 3px; }
   .session { top: 65px; max-height: calc(100dvh - 143px); }
   .map-panel { top: 65px; }
 }
+
+.patrol-warning{display:flex;align-items:center;gap:8px}
+#capture-clock{display:grid;place-items:center;flex:0 0 36px;height:36px;border-radius:50%;background:conic-gradient(#b53f38 var(--capture-angle,1turn),#ead3c9 0)}
+#capture-number{display:grid;place-items:center;width:28px;height:28px;border-radius:50%;background:#fff7ee;color:#8f2828;font-size:18px;font-variant-numeric:tabular-nums}
+#patrol-kick{min-height:36px;margin:0;padding:5px 7px;font-size:11px}
+@media(max-width:900px),(pointer:coarse){#patrol-kick{min-height:44px}}

@@ -93,7 +93,7 @@ export function updateHumanoid(athlete,pose){
   }
   if(motionMode!=='visitor'&&!(motionMode&&(pose.airborne||pose.crashRemaining>0)))
   for(const leg of legs){const suffix=leg.sign>0?'l':'r',l=rig.lengths[suffix],hip=bones[`thigh_${suffix}`].getWorldPosition(new THREE.Vector3()),ankle=body.localToWorld(leg.target.ankle.clone().add(new THREE.Vector3(0,-.05,0))),pole=motionMode?bones[`calf_${suffix}`].getWorldPosition(new THREE.Vector3()):body.localToWorld(leg.target.knee.clone());
-    if(motionMode){const current=bones[`foot_${suffix}`].getWorldPosition(new THREE.Vector3()).addScaledVector(up,pose.dynamic?.flex||0),correction=ankle.clone().sub(current);correction.clampLength(0,.065);ankle.copy(current).add(correction);}
+    if(motionMode){const current=bones[`foot_${suffix}`].getWorldPosition(new THREE.Vector3()).addScaledVector(up,pose.dynamic?.flex||0),correction=ankle.clone().sub(current);const reach=pose.kickPose?.side===leg.sign?.065+.48*pose.kickPose.amount:.065;correction.clampLength(0,reach);ankle.copy(current).add(correction);}
     const solution=jointSolution(hip,ankle,pole,l.thigh,l.calf);aim(rig,`thigh_${suffix}`,`calf_${suffix}`,solution.joint);aim(rig,`calf_${suffix}`,`foot_${suffix}`,solution.end);worldQuaternion(bones[`foot_${suffix}`],rootQ.clone().multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1,0,0),(pose.ride||0)*.15)).multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0,0,1),(pose.roll||0)*.70)).multiply(rest.get(`foot_${suffix}`).q));
   }
   for(const arm of arms){

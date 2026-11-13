@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import {createAthleteRig,updateAthletePose} from './athlete.js';
 import {loadHumanoid} from './humanoid.js';
 import {applyGear,GEAR_PRESETS} from './wardrobe.js';
+import {fallAnimation} from './npc-routines.js';
 import {PATROL_ITEMS} from './patrol-mode.js';
 
 export class PatrolScene {
@@ -31,6 +32,9 @@ export class PatrolScene {
     this.pulse.frustumCulled=false;
     this.pulse.visible=false;
     this.root.add(this.pulse);
+    this.shield=new THREE.Mesh(new THREE.SphereGeometry(1.05,20,12),
+      new THREE.MeshBasicMaterial({color:PATROL_ITEMS.shield.color,wireframe:true,transparent:true,opacity:.25,depthWrite:false}));
+    this.root.add(this.shield);
     for(let i=0;i<5;i++){
       const actor=createAthleteRig(this.root);
       actor.visible=false;
@@ -63,11 +67,18 @@ export class PatrolScene {
     }):[];
   }
 
-  update(dt,active){
+  update(dt,active,player){
     if(!this.run)return;
     this.root.visible=active;
     if(!active)return;
     this.phase+=dt;
+    this.shield.visible=Boolean(player)&&this.run.effect?.type==='shield';
+    if(this.shield.visible){
+      const {x,z}=player;
+      this.shield.position.set(x,this.surface(x,z)+.83,z);
+      this.shield.rotation.y=this.phase*1.8;
+      this.shield.scale.setScalar(1+.045*Math.sin(this.phase*8));
+    }
     this.beacon.visible=this.run.effect?.type==='decoy';
     if(this.beacon.visible){
       const {x,z}=this.run.effect;
@@ -103,7 +114,12 @@ export class PatrolScene {
       const right=new THREE.Vector3().crossVectors(up,forward).normalize();
       actor.position.set(x,this.surface(x,z)-.12,z);
       actor.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(right,up,forward));
-      if(pose||appeared)updateAthletePose(actor,{speed,heading,edgeRoll:bank,tuck:speed>15?.42:0},.05,this.surface);
+      const remaining=agent.fallDuration?Math.max(0,agent.stunUntil-this.run.time):0;
+      const fall=fallAnimation(remaining,agent.fallDuration);
+      const repelled=!remaining&&agent.stunUntil>this.run.time?Math.min(1,(agent.stunUntil-this.run.time)*2):0;
+      actor.rotateZ((i%2?1:-1)*(fall.amount*1.25+repelled*.23));
+      if(pose||appeared)updateAthletePose(actor,{speed,heading,edgeRoll:bank,tuck:speed>15?.42:0,
+        crashRemaining:remaining,fallAmount:fall.amount,fallCrouch:fall.crouch,fallBrace:fall.brace,fallPhase:fall.phase},.05,this.surface);
     }
     for(const [i,token] of this.tokens.entries()){
       const p=this.run.pickups[i];

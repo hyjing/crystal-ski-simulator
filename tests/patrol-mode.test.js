@@ -111,3 +111,38 @@ test('leaving the five-meter range resets the countdown before re-entry',()=>{
   for(let i=0;i<89;i++)assert.equal(run.step(1/30,player),null);
   assert.equal(run.step(1/30,player),'caught');
 });
+
+test('a close kick resolves after its windup, interrupts capture and has a five-second cooldown',()=>{
+  const run=new PatrolRun(route,()=>false);
+  const player=makePlayer(100),agent={x:0,z:98,heading:0,speed:0,bank:0};
+  run.agents=[agent];run.stars=1;run.contact=1;
+  assert.ok(run.startKick(player));
+  assert.equal(run.kickCooldown,5);
+  assert.equal(run.startKick(player),false);
+  run.step(.10,player);
+  assert.ok(run.kickPose.amount>0);
+  assert.equal(agent.stunUntil,undefined);
+  run.step(.07,player);
+  assert.ok(agent.stunUntil>run.time);
+  assert.ok(run.kick.hit);
+  assert.equal(run.contact,0);
+  assert.equal(run.startKick(player),false);
+  run.time=5.01;
+  assert.ok(run.startKick(player));
+});
+
+test('patrol steering is radius limited and collisions interrupt the capture countdown',()=>{
+  const run=new PatrolRun(route,()=>true);
+  const agent={x:0,z:97,heading:0,speed:20,bank:0};
+  run.agents=[agent];run.stars=1;run.contact=2.8;
+  const player={...makePlayer(98),x:2};
+  run.step(1/30,player,()=>false);
+  assert.ok(Math.abs(agent.heading)<=1.6/30);
+  const before={x:agent.x,z:agent.z};
+  run.step(1/30,player,()=>false,()=>0,()=> 'tree');
+  assert.deepEqual({x:agent.x,z:agent.z},before);
+  assert.ok(agent.fallDuration>1);
+  assert.equal(agent.speed,0);
+  assert.equal(run.contact,0);
+  assert.equal(run.outcome,'');
+});

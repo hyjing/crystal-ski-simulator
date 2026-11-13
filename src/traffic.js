@@ -102,7 +102,13 @@ export class SkiTraffic{
   if(!this.enabled||player.crashRemaining>0||player.trafficGrace>0)return null;
   for(let i=0;i<this.states.length;i++){const s=this.states[i],p=s.point;if(!p||s.indoor||s.cooldown>0||s.fall>0||Math.hypot(player.x-p.x,player.z-p.z)>Math.hypot(player.x-from.x,player.z-from.z)+2)continue;
    const separation=(player.airborne?player.airY:this.terrain.surface(player.x,player.z))-this.terrain.surface(p.x,p.z);
-   if(Math.abs(separation)<1.6&&sweptContact(from,player,p,s.kind==='lodge'?.75:.9)){s.fall=3.2;s.fallDuration=3.2;s.cooldown=4;s.speed=0;return i;}
+   if(Math.abs(separation)<1.6&&sweptContact(from,player,p,s.kind==='lodge'?.75:.9)){
+    const impact=Math.hypot(player.vx-Math.sin(s.heading)*s.speed,player.vz-Math.cos(s.heading)*s.speed);
+    this.contactImpact=Number.isFinite(impact)?impact:Infinity;
+    s.cooldown=this.contactImpact>=9?4:1.2;
+    if(this.contactImpact>=9){s.fall=s.fallDuration=3.2;s.speed=0;}
+    return i;
+   }
   }return null;
  }
  update(dt,player,active,enabled=true,camera,frameDt=dt){

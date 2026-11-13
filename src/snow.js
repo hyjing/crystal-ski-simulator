@@ -139,7 +139,7 @@ export class SnowEffects {
     this.crowdPrevious=next;
     return segments;
   }
-  update(dt,skier,running,snow,poleContact){
+  update(dt,skier,running,snow,poleContact,boost=false){
     if(running&&!skier.airborne&&!skier.crashRemaining&&poleContact){for(let k=0;k<5;k++){const p=this.particles[this.particleCursor++%this.particleCount];Object.assign(p,{x:poleContact.x,y:poleContact.y+.02,z:poleContact.z,vx:(Math.random()-.5)*.5,vz:(Math.random()-.5)*.5,vy:.3+Math.random()*.3,life:.24,maxLife:.3});}}
     if(running&&!skier.airborne&&!skier.crashRemaining&&skier.speed>.8){
       const current={x:skier.x,z:skier.z,heading:skier.heading,slip:skier.slip,vx:skier.vx,vz:skier.vz};
@@ -162,6 +162,19 @@ export class SnowEffects {
           vx:skier.vx*.12+Math.cos(skier.heading)*side*(.3+Math.random()*intensity*3.5),vz:skier.vz*.12-Math.sin(skier.heading)*side*(.3+Math.random()*intensity*3.5),vy:.25+Math.random()*intensity*2.2,life:.6+Math.random()*.7,maxLife:1.3});
       }
     }
+    if(running&&boost&&!skier.crashRemaining){
+      this.boostEmission=(this.boostEmission||0)+dt*110;
+      const count=Math.floor(this.boostEmission);
+      this.boostEmission-=count;
+      const fx=Math.sin(skier.heading),fz=Math.cos(skier.heading);
+      for(let i=0;i<count;i++){
+        const particle=this.particles[this.particleCursor++%this.particleCount];
+        const spread=(Math.random()-.5)*.9,tail=1+Math.random()*.7;
+        const x=skier.x-fx*tail+fz*spread,z=skier.z-fz*tail-fx*spread;
+        Object.assign(particle,{x,z,y:this.height(x,z)+.25,vx:-fx*7+fz*spread*3,vz:-fz*7-fx*spread*3,
+          vy:1.3+Math.random()*1.3,life:.52,maxLife:.52});
+      }
+    }else this.boostEmission=0;
     // Pausing also freezes airborne snow.
     for(let i=0;i<this.particleCount;i++){
       const p=this.particles[i];if(p.life>0){if(running){p.life-=dt;p.vy-=3.4*dt;p.vx*=Math.exp(-dt*1.6);p.vz*=Math.exp(-dt*1.6);p.x+=p.vx*dt;p.y+=p.vy*dt;p.z+=p.vz*dt;}

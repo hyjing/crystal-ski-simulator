@@ -89,6 +89,13 @@ export function updateAthletePose(athlete,s,dt,surface){
     const inside=Math.max(0,-leg.sign*Math.sign(roll)),hip=new THREE.Vector3(hipX+leg.sign*.23,hipY,shape.hipForward),knee=new THREE.Vector3(hipX*.55+leg.sign*(.29+weight*.12),.94-tuck*.18-inside*weight*.12,shape.knee+inside*weight*.18),ankle=new THREE.Vector3(leg.sign*.30,.45+grab,.15+grab*.9);
     const gait=walkingFoot(walkPhase+(leg.sign>0?0:Math.PI));ankle.z+=walk*gait.stride;ankle.y+=walk*gait.lift;ankle.z+=sit*.95+inside*weight*.12;ankle.x*=shape.stance;ankle.y+=shape.fold*.55;ankle.z-=shape.fold*.28;knee.z+=shape.fold*.35;knee.y-=shape.fold*.18;knee.z+=walk*.25*gait.stride+sit*.6+crouch*.35;ankle.x+=leg.sign*crouch*.14;
     ankle.y=THREE.MathUtils.lerp(ankle.y,.02,ride);ankle.z=THREE.MathUtils.lerp(ankle.z,.80,ride);
+    const kick=s.kickPose;
+    if(kick?.side===leg.sign){
+      ankle.x+=leg.sign*.75*kick.amount;
+      ankle.y+=.45*kick.amount;
+      ankle.z+=.32*kick.amount;
+      knee.x+=leg.sign*.46*kick.amount;
+    }
     leg.target={hip,knee,ankle};if(!athlete.userData.humanRig)shapeLimb(leg.mesh,hip,knee,ankle);
   }
   for(const arm of arms){
@@ -127,5 +134,5 @@ export function updateAthletePose(athlete,s,dt,surface){
     arm.target={hand:hand.clone(),tip:tip.clone(),pedestrian:!!s.pedestrian,planted:!!(activePlant&&plantState.contact),plant,poleAim:new THREE.Vector3(sign*.08,-1,-.65-pole*.35*Math.sin(phase)+plant*.95).normalize()};
     connect(arm.pole,hand,tip);arm.basket.position.copy(tip).y+=.12;arm.basket.rotation.x=Math.PI/2;
   }
-  updateHumanoid(athlete,{hipY,hipX,lean,tuck:Math.max(tuck,crouch*.8),counter,roll,grab,headLook:s.headLook||0,ride,poling:pole,polePhase:s.polePhase||0,edgeRoll:roll*balance,airborne:!!s.airborne,pedestrian:!!s.pedestrian,walkAmount:walk,walkPhase,sitAmount:sit,holding:s.holding,surface,shape,dynamic:gesture.dynamic,release:gesture.release,absorption:gesture.absorption,landing:gesture.landing,landingPhase:gesture.landingPhase,landingStrength:gesture.landingStrength,jumpPreparation:s.jumpPreparation||0,flightTime:s.flightTime||0,airVy:s.airVy||0,airClearance:s.airClearance??10,landingRecover:s.landingRecover||0,fallPhase:s.fallPhase,crashRemaining:s.crashRemaining||0,plantActive:plantState.active,plantSide:plantState.plantSide,plantPhase:plantState.phase,fall:fall,crouch,dt});
+  updateHumanoid(athlete,{hipY,hipX,lean,tuck:Math.max(tuck,crouch*.8),counter,roll,grab,headLook:s.headLook||0,ride,kickPose:s.kickPose,poling:pole,polePhase:s.polePhase||0,edgeRoll:roll*balance,airborne:!!s.airborne,pedestrian:!!s.pedestrian,walkAmount:walk,walkPhase,sitAmount:sit,holding:s.holding,surface,shape,dynamic:gesture.dynamic,release:gesture.release,absorption:gesture.absorption,landing:gesture.landing,landingPhase:gesture.landingPhase,landingStrength:gesture.landingStrength,jumpPreparation:s.jumpPreparation||0,flightTime:s.flightTime||0,airVy:s.airVy||0,airClearance:s.airClearance??10,landingRecover:s.landingRecover||0,fallPhase:s.fallPhase,crashRemaining:s.crashRemaining||0,plantActive:plantState.active,plantSide:plantState.plantSide,plantPhase:plantState.phase,fall:fall,crouch,dt});
 }
