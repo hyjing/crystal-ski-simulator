@@ -668,7 +668,10 @@ function updateUI(){
     $('patrol-threat').textContent=patrol.outcome==='caught'?'已被雪友追上'
       : remaining!==null&&remaining>0?'快被追上了'
       : patrol.outcome==='escaped'?'已到达终点':patrol.stars?'愤怒的雪友正在追赶':'暂无雪友追赶';
-    $('patrol-inventory-count').textContent=`道具 ${patrol.inventory.length}/${ITEM_CAPACITY}`;
+    const active=patrol.effect;
+    $('patrol-inventory-count').textContent=active
+      ?`${PATROL_ITEMS[active.type].name} · ${Math.max(0,active.until-patrol.time).toFixed(1)} 秒`
+      :`道具 ${patrol.inventory.length}/${ITEM_CAPACITY}`;
     for(const button of $('patrol-items').children){
       const slot=Number(button.dataset.slot),item=PATROL_ITEMS[patrol.inventory[slot]];
       button.textContent=item?.name??'—';
@@ -676,7 +679,7 @@ function updateUI(){
       button.disabled=!item||Boolean(patrol.effect)||mode!=='running';
       const label=`${slot+1} · ${item?.name??'空槽'}`;
       button.setAttribute('aria-label',label);
-      button.title=label;
+      button.title=item?`${label} · ${item.duration} 秒 · ${item.description}`:label;
     }
   }
   const boarding=mode==='running'&&!patrol&&boardingTarget()&&skier.speed<3.5;$('board-lift').hidden=!boarding;$('lift-controls').hidden=!liftView();

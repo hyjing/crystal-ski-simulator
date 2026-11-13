@@ -182,7 +182,7 @@ export class SnowEffects {
       }
     }
     if(running&&boost&&!skier.crashRemaining){
-      this.boostEmission=(this.boostEmission||0)+dt*110;
+      this.boostEmission=(this.boostEmission||0)+dt*200;
       const count=Math.floor(this.boostEmission);
       this.boostEmission-=count;
       const fx=Math.sin(skier.heading),fz=Math.cos(skier.heading);
@@ -190,7 +190,7 @@ export class SnowEffects {
         const particle=this.particles[this.particleCursor++%this.particleCount];
         const spread=(Math.random()-.5)*.9,tail=1+Math.random()*.7;
         const x=skier.x-fx*tail+fz*spread,z=skier.z-fz*tail-fx*spread;
-        Object.assign(particle,{x,z,y:this.height(x,z)+.25,vx:-fx*7+fz*spread*3,vz:-fz*7-fx*spread*3,
+        Object.assign(particle,{x,z,y:this.height(x,z)+.25,vx:-fx*12+fz*spread*3,vz:-fz*12-fx*spread*3,
           vy:1.3+Math.random()*1.3,life:.52,maxLife:.52});
       }
     }else this.boostEmission=0;

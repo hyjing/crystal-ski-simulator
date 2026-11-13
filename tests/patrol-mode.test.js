@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import {mapProjection} from '../src/minimap.js';
-import {PatrolRun, PATROL_ROUTE_ID, resolveChaseRoute, longestChaseRoute} from '../src/patrol-mode.js';
+import {PatrolRun, PATROL_ITEMS, PATROL_ROUTE_ID, resolveChaseRoute, longestChaseRoute} from '../src/patrol-mode.js';
 import {SkierKick} from '../src/kick.js';
 import {SkiTraffic} from '../src/traffic.js';
 import {MOUNTAINS, mountainAsset} from '../src/mountains.js';
@@ -83,12 +83,51 @@ test('snow pulse is kept out of range, pushes away nearby patrol, and interrupts
   assert.equal(run.use(player),true);
   assert.equal(run.contact,0);
   assert.deepEqual(run.inventory,[]);
-  assert.ok(close.stunUntil>2);
+  assert.ok(close.stunUntil<1);
   assert.equal(far.stunUntil,undefined);
   run.step(.1,player);
-  assert.ok(close.z<95);
+  assert.ok(close.z<93);
   assert.ok(far.z>74);
   assert.equal(run.contact,0);
+});
+
+test('boost delivers a short burst, then the shield repels pursuers and expires',()=>{
+  const run=new PatrolRun(route,()=>true),player=makePlayer(100);
+  run.inventory=['boost','shield'];
+  run.stars=1;
+  assert.ok(run.use(player));
+  for(let i=0;i<90;i++){
+    run.boost(player,.01);
+    run.step(.01,player,()=>false);
+  }
+  assert.ok(player.speed>34);
+  assert.equal(run.effect,null);
+  const speed=player.speed;
+  run.boost(player,.1);
+  assert.equal(player.speed,speed);
+  const close={x:0,z:96,speed:10,heading:0,bank:0};
+  run.agents=[close];
+  run.contact=2;
+  assert.ok(run.use(player));
+  run.step(.15,player,()=>false);
+  assert.ok(close.z<92);
+  assert.equal(run.captureRemaining,null);
+  run.step(PATROL_ITEMS.shield.duration,player,()=>false);
+  assert.equal(run.effect,null);
+});
+
+test('a nearby pursuer brakes hard for a decoy and resumes chasing as soon as it expires',()=>{
+  const run=new PatrolRun(route,()=>false),player=makePlayer(100);
+  run.inventory=['decoy'];run.stars=1;run.contact=1;
+  const close={x:0,z:98,speed:25,heading:0,bank:0};
+  run.agents=[close];
+  assert.ok(run.use(player));
+  run.step(.1,player);
+  assert.ok(close.speed<3);
+  assert.equal(run.captureRemaining,null);
+  run.step(2.05,player);
+  assert.equal(run.effect,null);
+  assert.ok(run.captureRemaining>0);
 });
 
 

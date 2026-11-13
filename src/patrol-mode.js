@@ -1,4 +1,4 @@
-import {clamp, nearestOnRoute} from './physics.js';
+import {clamp, nearestOnRoute, PHYSICS} from './physics.js';
 import {pointAlongRoute} from './terrain.js';
 import {AVALANCHE_DURATION} from './kick.js';
 
@@ -13,11 +13,11 @@ const CAPTURE_SECONDS = 3;
 const REPLACEMENT_DELAY = 1.2;
 export const ITEM_CAPACITY = 3;
 export const PATROL_ITEMS = {
-  boost: {name: '加速充能', color: '#ffe16d', symbol: '»'},
-  decoy: {name: '幻影信标', color: '#c9a4ff', symbol: '◇'},
-  shield: {name: '护盾', color: '#83dcff', symbol: '+'},
-  pulse: {name: '雪浪脉冲', color: '#b0fff0', symbol: '◎'},
-  avalanche: {name: '雪崩弹', color: '#ff986e', symbol: '✹'},
+  boost: {name:'加速充能',color:'#ffe16d',symbol:'»',duration:.85,description:'短时间猛冲，最高额外加速约 55 km/h'},
+  decoy: {name:'幻影信标',color:'#c9a4ff',symbol:'◇',duration:2.1,radius:120,description:'120 米内的追赶者立即急刹，转向信标'},
+  shield: {name:'护盾',color:'#83dcff',symbol:'+',duration:1.7,radius:6,description:'阻止截停，并弹开靠近的追赶者'},
+  pulse: {name:'雪浪脉冲',color:'#b0fff0',symbol:'◎',duration:.32,radius:17,description:'瞬间推开 17 米内的追赶者'},
+  avalanche: {name:'雪崩弹',color:'#ff986e',symbol:'✹',duration:AVALANCHE_DURATION,description:'掀飞周围的追赶者和普通雪友'},
 };
 const range = (a, b) => Math.hypot(a.x-b.x, a.z-b.z);
 const turnAngle = (a, b) => Math.atan2(Math.sin(b-a), Math.cos(b-a));
@@ -46,7 +46,6 @@ export class PatrolRun {
     this.inventory = [];
     this.lastPickup = null;
     this.effect = null;
-    this.boostEnergy = 0;
     this.nextIncident = 0;
     this.nextAgent = 0;
     const types = ['boost','pulse','decoy','shield','avalanche','boost','avalanche'];
@@ -62,14 +61,15 @@ export class PatrolRun {
     return this.contact > 0 ? Math.max(0, CAPTURE_SECONDS - this.contact) : null;
   }
 
-  repel(agent,player,duration,speed){
+  repel(agent,player,duration,speed,pushTime){
     const dx=agent.x-player.x,dz=agent.z-player.z;
     agent.fallDuration=0;
     agent.repelHeading=Math.hypot(dx,dz)>.1?Math.atan2(dx,dz):player.heading+Math.PI;
-    agent.repelUntil=this.time+.48;
+    agent.repelUntil=this.time+pushTime;
     agent.stunUntil=this.time+duration;
     agent.repelSpeed=speed;
     agent.speed=0;
+    agent.aimAt=0;
   }
 
   addStar(){
@@ -93,23 +93,21 @@ export class PatrolRun {
       if(this.agents.some(agent=>hit.has(agent)))this.contact=0;
     }
     if(type==='pulse'){
-      const nearby=this.agents.filter(agent=>!agent.launch&&range(agent,player)<=15);
+      const nearby=this.agents.filter(agent=>!agent.launch&&range(agent,player)<=PATROL_ITEMS.pulse.radius);
       if(!nearby.length)return false;
       this.contact=0;
-      for(const agent of nearby)this.repel(agent,player,2.4,16);
+      for(const agent of nearby)this.repel(agent,player,.9,36,PATROL_ITEMS.pulse.duration);
     }
     this.inventory.splice(slot,1);
-    const duration={boost:2.1,decoy:5,shield:6,pulse:.62,avalanche:AVALANCHE_DURATION}[type];
+    const {duration}=PATROL_ITEMS[type];
     this.effect={type,until:this.time+duration,x:player.x,z:player.z};
-    this.boostEnergy=type==='boost'?7:0;
     if(type==='shield')this.contact=0;
     return true;
   }
 
   boost(player,dt){
-    if(!this.boostEnergy||player.airborne||player.crashRemaining)return;
-    const gain=Math.min(this.boostEnergy,3.4*dt,Math.max(0,55-player.speed));
-    this.boostEnergy-=gain;
+    if(this.effect?.type!=='boost'||player.airborne||player.crashRemaining)return;
+    const gain=Math.min(18*dt,Math.max(0,PHYSICS.maxHorizontalSpeed-Math.hypot(player.vx,player.vz)));
     player.vx+=Math.sin(player.heading)*gain;
     player.vz+=Math.cos(player.heading)*gain;
     player.speed=Math.hypot(player.vx,player.vz);
@@ -118,7 +116,10 @@ export class PatrolRun {
   step(dt,player,offscreen=()=>true,surface=()=>0,collision=()=>null){
     if(this.outcome)return null;
     this.time+=dt;
-    if(this.effect&&this.time>=this.effect.until){this.effect=null;this.boostEnergy=0;}
+    if(this.effect&&this.time>=this.effect.until){
+      if(this.effect.type==='decoy')for(const agent of this.agents)agent.aimAt=0;
+      this.effect=null;
+    }
     const along=nearestOnRoute(player,this.route.points);
     const previous=this.furthest;
     if(along.distance<58)this.furthest=Math.max(previous,along.progress);
@@ -147,11 +148,16 @@ export class PatrolRun {
     }
 
     const lure=this.effect?.type==='decoy'?this.effect:null;
+    const shield=this.effect?.type==='shield';
     let threat=Infinity,contactDistance=Infinity;
     const playerHeight=surface(player.x,player.z);
     for(const agent of this.agents){
       if(agent.launch)continue;
       const separation=range(agent,player);
+      if(shield&&separation<=PATROL_ITEMS.shield.radius&&(agent.stunUntil??0)<=this.time&&
+        Math.abs(surface(agent.x,agent.z)-playerHeight)<2){
+        this.repel(agent,player,.55,32,.28);
+      }
       if(agent.stunUntil>this.time){
         if(agent.repelUntil>this.time){
           const step=(agent.repelSpeed||16)*dt;
@@ -163,7 +169,8 @@ export class PatrolRun {
       }
       const onRoute=along.distance<24&&separation>32?nearestOnRoute(agent,this.route.points):null;
       const following=onRoute&&onRoute.distance<24&&along.progress>onRoute.progress+12;
-      const distracted=lure&&range(agent,lure)<85;
+      const lureDistance=lure?range(agent,lure):Infinity;
+      const distracted=lureDistance<=PATROL_ITEMS.decoy.radius;
       const id=agent.id??0;
       if(this.time>=(agent.aimAt??0)){
         const lane=Math.sin(id*2.4+this.time*.7)*(3+Math.min(5,agent.speed*.16))*clamp(separation/26,.18,1);
@@ -177,10 +184,10 @@ export class PatrolRun {
       const dx=target.x-agent.x,dz=target.z-agent.z;
       const aim=Math.atan2(dx,dz);
       const delta=turnAngle(agent.heading,aim);
-      const pace=distracted&&range(agent,lure)<5?0:clamp(4+this.stars*1.45+player.speed*.78,12,49);
-      agent.speed+=(pace-agent.speed)*Math.min(1,dt*1.7);
+      const pace=distracted?(lureDistance<7?0:12):clamp(4+this.stars*1.45+player.speed*.78,12,49);
+      agent.speed+=(pace-agent.speed)*Math.min(1,dt*(distracted?9:1.7));
       const step=agent.speed*dt;
-      const turnRate=Math.min(1.6,Math.max(5,agent.speed)/16);
+      const turnRate=distracted?3.5:Math.min(1.6,Math.max(5,agent.speed)/16);
       const heading=agent.heading+clamp(delta,-dt*turnRate,dt*turnRate);
       const point={x:agent.x+Math.sin(heading)*step,z:agent.z+Math.cos(heading)*step};
       const hit=step>0&&collision(agent,point);

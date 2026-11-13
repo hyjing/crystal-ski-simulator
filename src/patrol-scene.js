@@ -4,7 +4,7 @@ import {loadHumanoid} from './humanoid.js';
 import {applyGear,GEAR_PRESETS} from './wardrobe.js';
 import {fallAnimation} from './npc-routines.js';
 import {PATROL_ITEMS} from './patrol-mode.js';
-import {AVALANCHE_DURATION,AVALANCHE_RADIUS,poseKickedSkier} from './kick.js';
+import {AVALANCHE_RADIUS,poseKickedSkier} from './kick.js';
 
 export class PatrolScene {
   constructor(scene,surface,gradient){
@@ -71,24 +71,27 @@ export class PatrolScene {
     this.shield.visible=Boolean(player)&&this.run.effect?.type==='shield';
     if(this.shield.visible){
       const {x,z}=player;
+      const remaining=(this.run.effect.until-this.run.time)/PATROL_ITEMS.shield.duration;
       this.shield.position.set(x,this.surface(x,z)+.83,z);
-      this.shield.rotation.y=this.phase*1.8;
-      this.shield.scale.setScalar(1+.045*Math.sin(this.phase*8));
+      this.shield.rotation.y=this.phase*6;
+      this.shield.scale.setScalar(1+.18*Math.sin(this.phase*19));
+      this.shield.material.opacity=.45*Math.min(1,remaining*5);
     }
     this.beacon.visible=this.run.effect?.type==='decoy';
     if(this.beacon.visible){
       const {x,z}=this.run.effect;
       this.beacon.position.set(x,this.surface(x,z)+1.3,z);
-      this.beacon.rotation.y=this.phase*2;
+      this.beacon.rotation.y=this.phase*8;
+      this.beacon.scale.setScalar(1.35+.3*Math.sin(this.phase*16));
     }
     const blast=this.run.effect?.type==='avalanche';
     this.pulse.visible=blast||this.run.effect?.type==='pulse';
     if(this.pulse.visible){
       const {x,z,until}=this.run.effect;
-      const duration=blast?AVALANCHE_DURATION:.62;
+      const duration=PATROL_ITEMS[this.run.effect.type].duration;
       const progress=1-THREE.MathUtils.clamp((until-this.run.time)/duration,0,1);
-      const maxRadius=blast?AVALANCHE_RADIUS:15;
-      const radius=1+(maxRadius-1)*(blast?1-(1-progress)**2:progress);
+      const maxRadius=blast?AVALANCHE_RADIUS:PATROL_ITEMS.pulse.radius;
+      const radius=1+(maxRadius-1)*(1-(1-progress)**2);
       const ground=this.surface(x,z);
       this.pulse.position.set(x,ground,z);
       const positions=this.pulse.geometry.attributes.position;
