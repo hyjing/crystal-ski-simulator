@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {RunExperience,levelProgress,readProgress,saveProgress} from '../src/progression.js';
+import {DEFAULT_TALENTS,RunExperience,levelProgress,readProgress,saveProgress} from '../src/progression.js';
 import {PatrolRun} from '../src/patrol-mode.js';
 import {SkierKick} from '../src/kick.js';
 
@@ -8,7 +8,7 @@ const route={points:[{x:0,z:0},{x:0,z:3200}],length:3200,spawn:{distance:35}};
 const player={x:0,z:100,heading:0,speed:0,vx:0,vz:0};
 
 test('clean landings and escapes earn capped XP and a run only settles once',()=>{
-  const profile={xp:0,talent:null},run=new RunExperience();
+  const profile={xp:0,talents:[...DEFAULT_TALENTS]},run=new RunExperience();
   run.landing({type:'land',quality:'recover',airTime:1,grab:true});
   assert.equal(run.landingXP,0);
   for(let i=0;i<10;i++){
@@ -21,18 +21,20 @@ test('clean landings and escapes earn capped XP and a run only settles once',()=
   assert.equal(new RunExperience().settle(profile,false,true),0);
 });
 
-test('progress persists and invalid or locked talents are cleared',()=>{
+test('new profiles and legacy saves enable all talents while explicit choices persist',()=>{
   const values=new Map();
   const storage={getItem:key=>values.get(key),setItem:(key,value)=>values.set(key,value)};
+  assert.deepEqual(readProgress(null),{xp:0,talents:DEFAULT_TALENTS});
   saveProgress(storage,{xp:120,talent:'agility'});
-  assert.deepEqual(readProgress(storage),{xp:120,talent:'agility'});
-  saveProgress(storage,{xp:59,talent:'recovery'});
-  assert.deepEqual(readProgress(storage),{xp:59,talent:null});
-  assert.deepEqual(readProgress(null),{xp:0,talent:null});
+  assert.deepEqual(readProgress(storage),{xp:120,talents:DEFAULT_TALENTS});
+  saveProgress(storage,{xp:59,talents:['recovery','unknown','recovery']});
+  assert.deepEqual(readProgress(storage),{xp:59,talents:['recovery']});
+  saveProgress(storage,{xp:59,talents:[]});
+  assert.deepEqual(readProgress(storage),{xp:59,talents:[]});
 });
 
 test('selected talents affect damage, medkit healing, and the next run kick cooldown',()=>{
-  const run=new PatrolRun(route,()=>false,()=>false,'stamina');
+  const run=new PatrolRun(route,()=>false,()=>false);
   run.agents=[{x:0,z:96,heading:0,speed:0,bank:0}];
   run.stars=1;
   run.step(.8,player);
@@ -43,13 +45,12 @@ test('selected talents affect damage, medkit healing, and the next run kick cool
   assert.equal(run.escapes,1);
   run.step(.2,{...player,z:120});
   assert.equal(run.escapes,1);
-  const recovery=new PatrolRun(route,()=>true,()=>false,'recovery');
+  const recovery=new PatrolRun(route,()=>true,()=>false);
   const kit=recovery.pickups.find(p=>p.type==='medkit');
   recovery.health=30;
   assert.equal(recovery.step(.1,{...player,x:kit.x,z:kit.z}),'medkit');
   assert.equal(recovery.health,75);
   const kick=new SkierKick(()=>0,()=>true);
-  kick.reset('agility');
   assert.ok(kick.start(player,[{x:0,z:98}]));
   assert.equal(kick.cooldown,4.25);
 });

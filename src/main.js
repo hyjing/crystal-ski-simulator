@@ -339,8 +339,8 @@ function resetPosition(full=false){
     terrain.setPractice(features);powder?.setPractice(features);
     challenge=new RunChallenge(route,challengeMode);
     challengeRenderer?.configure(challenge,features);
-    patrol=challengeMode==='patrol'&&route.patrolOnly?new PatrolRun(route,patrolSpawnClear,patrolPathClear,riderProgress.talent):null;
-    kick.reset(riderProgress.talent);
+    patrol=challengeMode==='patrol'&&route.patrolOnly?new PatrolRun(route,patrolSpawnClear,patrolPathClear,riderProgress.talents):null;
+    kick.reset(riderProgress.talents);
     runExperience=new RunExperience();
     patrolStep=0;
     if(patrol&&!patrolScene)patrolScene=new PatrolScene(scene,yAt,terrain.gradient);
@@ -412,8 +412,8 @@ function finishRun(caught=false){
   if(earned)saveProgress(progressStorage,riderProgress);
   const after=levelProgress(riderProgress.xp).level;
   $('xp-result').hidden=!earned;
-  $('xp-result').textContent=`+${earned} XP · 等级 ${after}${before<2&&after>=2?' · 已解锁天赋':''}`;
-  $('progress-after-run').hidden=after<2||Boolean(riderProgress.talent);
+  $('xp-result').textContent=`+${earned} XP · 等级 ${after}${after>before?' · 升级':''}`;
+  $('progress-after-run').hidden=!earned;
   if(patrol&&!caught)patrol.outcome='escaped';
   $('result-title').textContent=patrol?(caught?'被愤怒的雪友追上':'成功抵达终点'):'Nice line.';
   $('result-copy').textContent=patrol?(caught?'生命值耗尽。可以重开同一条路线。':`完成了 ${route.name} 追逐。`):'已到下站登乘区。可以返回山顶，再滑一趟。';
@@ -1002,11 +1002,10 @@ function openProgress(fromResult=false){
   $('progress-xp').textContent=`${stats.xp} / ${stats.needed} XP`;
   $('progress-meter').max=stats.needed;
   $('progress-meter').value=stats.xp;
-  $('talent-note').textContent=stats.level<2?'升到 2 级可装备一个天赋。':'装备一个天赋，下趟生效。';
+  $('talent-note').textContent='天赋默认全开，可分别切换，下趟生效。';
   for(const button of $('talents').querySelectorAll('button')){
     button.title=TALENTS[button.dataset.talent].description;
-    button.disabled=stats.level<2;
-    button.setAttribute('aria-pressed',String(button.dataset.talent===riderProgress.talent));
+    button.setAttribute('aria-pressed',String(riderProgress.talents.includes(button.dataset.talent)));
   }
   dialog.dataset.result=String(fromResult);
   if(fromResult)$('result').close();
@@ -1024,11 +1023,11 @@ $('progress-dialog').addEventListener('close',()=>{
 });
 $('talents').addEventListener('click',event=>{
   const button=event.target.closest('[data-talent]');
-  if(!button||levelProgress(riderProgress.xp).level<2||!Object.hasOwn(TALENTS,button.dataset.talent))return;
-  riderProgress.talent=button.dataset.talent;
+  if(!button||!Object.hasOwn(TALENTS,button.dataset.talent))return;
+  const talent=button.dataset.talent,enabled=riderProgress.talents.includes(talent);
+  riderProgress.talents=enabled?riderProgress.talents.filter(choice=>choice!==talent):[...riderProgress.talents,talent];
   saveProgress(progressStorage,riderProgress);
-  $('progress-after-run').hidden=true;
-  for(const choice of $('talents').querySelectorAll('button'))choice.setAttribute('aria-pressed',String(choice===button));
+  button.setAttribute('aria-pressed',String(!enabled));
 });
 $('mountain').addEventListener('change',e=>{const url=new URL(location.href);url.searchParams.set('mountain',resolveMountain(e.target.value));url.searchParams.delete('visual-qa');url.searchParams.delete('record-demo');location.assign(url.href);});
 $('start').addEventListener('click',startRun);$('again').addEventListener('click',startRun);$('choose').addEventListener('click',goIntro);

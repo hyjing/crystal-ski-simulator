@@ -1,4 +1,5 @@
 import {clamp} from './physics.js';
+import {DEFAULT_TALENTS} from './progression.js';
 
 export const KICK_RANGE = 3.2;
 export const AVALANCHE_RADIUS = 20;
@@ -17,14 +18,14 @@ export class SkierKick {
     this.reset();
   }
 
-  reset(talent=null) {
+  reset(talents=DEFAULT_TALENTS) {
     if(this.action?.flight) delete this.action.target.launch;
     for(const target of this.burstTargets??[])delete target.launch;
     this.burstTargets=new Set();
     this.time=0;
     this.readyAt=0;
     this.charge=0;
-    this.baseCooldown=COOLDOWN-(talent==='agility'?.75:0);
+    this.baseCooldown=COOLDOWN-(talents.includes('agility')?.75:0);
     this.action=null;
   }
 

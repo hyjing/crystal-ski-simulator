@@ -5,6 +5,7 @@ export const TALENTS={
   recovery:{name:'恢复',description:'血包额外回复 10 点生命'},
   agility:{name:'敏捷',description:'踢开基础冷却缩短 0.75 秒'},
 };
+export const DEFAULT_TALENTS=Object.freeze(Object.keys(TALENTS));
 
 export function levelProgress(xp){
   let level=1,needed=60;
@@ -16,9 +17,9 @@ export function readProgress(storage){
   try{
     const saved=JSON.parse(storage?.getItem(KEY));
     const xp=Number.isFinite(saved?.xp)?Math.max(0,Math.min(1_000_000,Math.floor(saved.xp))):0;
-    const talent=xp>=60&&Object.hasOwn(TALENTS,saved?.talent)?saved.talent:null;
-    return {xp,talent};
-  }catch{return {xp:0,talent:null};}
+    const talents=DEFAULT_TALENTS.filter(talent=>!Array.isArray(saved?.talents)||saved.talents.includes(talent));
+    return {xp,talents};
+  }catch{return {xp:0,talents:[...DEFAULT_TALENTS]};}
 }
 
 export function saveProgress(storage,profile){

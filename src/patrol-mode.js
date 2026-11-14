@@ -2,6 +2,7 @@ import {clamp, nearestOnRoute, PHYSICS} from './physics.js';
 import {pointAlongRoute} from './terrain.js';
 import {AVALANCHE_DURATION} from './kick.js';
 import {sweptContact} from './traffic-brain.js';
+import {DEFAULT_TALENTS} from './progression.js';
 
 export const PATROL_ROUTE_ID = 'crystal-angry-skiers';
 export const resolveChaseRoute = id => id === 'crystal-patrol-descent' ? PATROL_ROUTE_ID : id;
@@ -36,7 +37,7 @@ function routePoint(route, distance, offset=0) {
 }
 
 export class PatrolRun {
-  constructor(route, clear, pathClear=clear, talent=null) {
+  constructor(route, clear, pathClear=clear, talents=DEFAULT_TALENTS) {
     this.route = route;
     this.clear = clear;
     this.pathClear = pathClear;
@@ -44,8 +45,8 @@ export class PatrolRun {
     this.stars = 0;
     this.peakStars = 0;
     this.contact = 0;
-    this.damageRate=DAMAGE_PER_SECOND*(talent==='stamina'?.85:1);
-    this.medkitHeal=MEDKIT_HEAL+(talent==='recovery'?10:0);
+    this.damageRate=DAMAGE_PER_SECOND*(talents.includes('stamina')?.85:1);
+    this.medkitHeal=MEDKIT_HEAL+(talents.includes('recovery')?10:0);
     this.escapeArmed=false;
     this.escapes=0;
     this.health = MAX_HEALTH;

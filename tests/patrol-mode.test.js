@@ -65,6 +65,7 @@ test('airtime resets capture and a clean landing grants a brief grace period',()
 
 test('clean landings bank charge or shorten an active kick cooldown',()=>{
   const kick=new SkierKick(()=>0,()=>true),player=makePlayer(100);
+  kick.reset([]);
   const landing={type:'land',quality:'clean',airTime:.6};
   assert.equal(kick.chargeLanding({...landing,quality:'recover'}),0);
   assert.equal(kick.chargeLanding({...landing,airTime:.2}),0);
@@ -87,7 +88,7 @@ test('chase escalates at new sections, spawns behind, and catches a skier who st
   assert.ok(run.agents.every(agent=>agent.z<2700));
   run.agents=[{x:0,z:2700,speed:0,heading:0,bank:0}];
   const player={...makePlayer(2700),speed:0,vz:0};
-  for(let i=0;i<240&&!run.outcome;i++){
+  for(let i=0;i<283&&!run.outcome;i++){
     run.agents[0].x=player.x;
     run.agents[0].z=player.z;
     run.step(1/30,player);
@@ -187,7 +188,7 @@ test('a nearby pursuer brakes hard for a decoy and resumes chasing as soon as it
 
 test('full health lasts eight uninterrupted seconds regardless of speed or patrol count',()=>{
   for(const speed of [0,20]){
-    const run=new PatrolRun(route,()=>false);
+    const run=new PatrolRun(route,()=>false,()=>false,[]);
     run.stars=1;
     run.agents=Array.from({length:3},()=>({x:0,z:95,heading:0,speed:0,bank:0}));
     const player={...makePlayer(100),speed};
@@ -198,7 +199,7 @@ test('full health lasts eight uninterrupted seconds regardless of speed or patro
 });
 
 test('leaving the five-meter range stops damage but keeps the previous health loss',()=>{
-  const run=new PatrolRun(route,()=>false);
+  const run=new PatrolRun(route,()=>false,()=>false,[]);
   const player=makePlayer(100);
   const agent={x:0,z:95,heading:0,speed:0,bank:0};
   run.stars=1;
@@ -215,7 +216,7 @@ test('leaving the five-meter range stops damage but keeps the previous health lo
 });
 
 test('clean landings and medkits restore health, even with a full inventory',()=>{
-  const run=new PatrolRun(route,()=>true);
+  const run=new PatrolRun(route,()=>true,()=>true,[]);
   const kit=run.pickups.find(p=>p.type==='medkit');
   const player={...makePlayer(kit.z),x:kit.x};
   run.inventory=['boost','shield','banana'];
@@ -309,12 +310,12 @@ test('each additional ski area exposes its longest mapped run as a shareable cha
   }
 });
 
-test('the kick targets the closest regular snow visitor, then waits five seconds',()=>{
+test('the kick targets the closest regular snow visitor and uses the default cooldown',()=>{
   const kick=new SkierKick(()=>0,()=>true),player=makePlayer(100);
   const visitor={kind:'lodge',point:{x:0,z:99}},agent={x:0,z:98};
   const eligible=()=>true;
   assert.ok(kick.start(player,[agent,visitor]));
-  assert.equal(kick.cooldown,5);
+  assert.equal(kick.cooldown,4.25);
   assert.equal(kick.start(player,[agent]),false);
   assert.equal(kick.step(.1,player,eligible),null);
   assert.ok(kick.pose.amount>0);
