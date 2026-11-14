@@ -85,7 +85,7 @@ export class MountainWeather{
     snowLighting.sunDirection.value.copy(sunDirection(s));snowLighting.cloudCover.value=s.cover;this.uniforms.time.value=this.elapsed;
     this.sky.position.copy(camera.position);const shadowFocus=stableShadowTarget(focus,snowLighting.sunDirection.value,this.sun.shadow.camera.right-this.sun.shadow.camera.left,this.sun.shadow.mapSize.x);this.sun.position.copy(shadowFocus).addScaledVector(snowLighting.sunDirection.value,700);this.sun.target.position.copy(shadowFocus);this.sun.target.updateMatrixWorld();
     const shade=local?.shade??0, basin=local?.basin??0;
-    snowLighting.slopeShade.value=shade*(1-s.cover*.55);
+    snowLighting.slopeShade.value=Math.min(1,shade+(local?.pisteShade??0))*(1-s.cover*.55);
     snowLighting.slopeFocus.value.set(camera.position.x,camera.position.z);
     this.sun.color.copy(s.sun);this.sun.intensity=s.direct;this.hemisphere.color.copy(s.horizon).lerp(s.zenith,.35+shade*.14);this.hemisphere.groundColor.copy(s.ground);this.hemisphere.intensity=s.ambient;
     this.scene.fog.color.copy(s.horizon);this.scene.fog.density=s.density+basin*(.00031+s.snow*.00014);this.renderer.toneMappingExposure=s.exposure*(1-shade*(1-s.cover*.65)*.075);this.scene.environmentIntensity=.12*(1-s.cover*.4);

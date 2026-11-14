@@ -55,6 +55,12 @@ export function stepSkier(s, input, terrain, dt, snow = 'packed') {
       s.vx=vx*c+(ny*vz-nz*vy)*sn;s.vz=vz*c+(nx*vy-ny*vx)*sn;
       const changed=Math.atan2(s.vx,s.vz)-oldHeading;s.heading+=Math.atan2(Math.sin(changed),Math.cos(changed));
     }else s.heading-=s.turn*1.15*dt;
+    if(speed>3){
+      const yaw=Math.atan2(s.vx,s.vz)-s.heading;
+      const alignment=Math.atan2(Math.sin(yaw),Math.cos(yaw));
+      const settle=1-Math.exp(-dt*5*(1-Math.abs(s.turn))**2);
+      if(Math.abs(alignment)<Math.PI/2)s.heading+=alignment*settle;
+    }
   }else{
     // Do not inject yaw from Space alone. A/D sets ski attack angle for a skid.
     const pivot=Math.max(0,1-speed/6)*1.15;

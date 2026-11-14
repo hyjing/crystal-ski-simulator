@@ -27,12 +27,17 @@ export function addForest(scene,terrain,routes,landcover,texture,vegetation,stat
   const candidates=[];
   // Index all route segments once; hundreds of ways should not multiply forest startup work.
   const cells=new Map(),cellSize=100;
-  for(const route of routes)for(let i=1;i<route.points.length;i++){
-    const a=route.points[i-1],b=route.points[i],width=Math.max(5,pisteHalfWidth(route.name,route.difficulty)-2),segment={a,b,width};
-    for(let x=Math.floor((Math.min(a.x,b.x)-width)/cellSize);x<=Math.floor((Math.max(a.x,b.x)+width)/cellSize);x++)
-      for(let z=Math.floor((Math.min(a.z,b.z)-width)/cellSize);z<=Math.floor((Math.max(a.z,b.z)+width)/cellSize);z++){
-        const key=`${x},${z}`;if(!cells.has(key))cells.set(key,[]);cells.get(key).push(segment);
-      }
+  for(const route of routes){
+    let progress=0;
+    for(let i=1;i<route.points.length;i++){
+      const a=route.points[i-1],b=route.points[i],length=Math.hypot(b.x-a.x,b.z-a.z);
+      const width=route.halfWidth??Math.max(5,(route.pisteWidth?.(progress+length/2)??pisteHalfWidth(route.name,route.difficulty))-2),segment={a,b,width};
+      progress+=length;
+      for(let x=Math.floor((Math.min(a.x,b.x)-width)/cellSize);x<=Math.floor((Math.max(a.x,b.x)+width)/cellSize);x++)
+        for(let z=Math.floor((Math.min(a.z,b.z)-width)/cellSize);z<=Math.floor((Math.max(a.z,b.z)+width)/cellSize);z++){
+          const key=`${x},${z}`;if(!cells.has(key))cells.set(key,[]);cells.get(key).push(segment);
+        }
+    }
   }
   const ce=terrain.originUTM[0]+(terrain.width-1)*terrain.spacing/2,cn=terrain.originUTM[1]-(terrain.height-1)*terrain.spacing/2;
   const source=vegetation?vegetation.pixels.map(([u,v,size])=>{

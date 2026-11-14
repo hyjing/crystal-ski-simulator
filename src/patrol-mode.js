@@ -70,6 +70,11 @@ export class PatrolRun {
       const point=[0,4,-4].map(offset=>routePoint(route,d,offset)).find(clear);
       if(point)this.pickups.push({...point,type:'medkit',taken:false});
     }
+    for(const branch of route.branches??[]){
+      const point=branch.points.slice(6,11).find(clear);
+      branch.medkit=point?{...point,type:'medkit',taken:false}:null;
+      if(branch.medkit)this.pickups.push(branch.medkit);
+    }
   }
 
   get captureRemaining(){

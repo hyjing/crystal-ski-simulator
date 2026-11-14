@@ -5,8 +5,11 @@ export function recoverLook(yaw,pitch,idle,dt,active){
 }
 // Detect a convex roll-over ahead; a uniform steep slope needs no extra camera lift.
 export function crestView(terrain,player,heading){
- const dx=Math.sin(heading),dz=Math.cos(heading),h=terrain.surface(player.x,player.z),near=(h-terrain.surface(player.x+dx*5,player.z+dz*5))/5,ahead=24+Math.min(player.speed||0,20)*.4,far=terrain.surface(player.x+dx*ahead,player.z+dz*ahead),grade=(h-far)/ahead;
- return{factor:Math.max(0,Math.min(1,(grade-near-.06)*5))*Math.max(0,Math.min(1,grade/.16)),ahead,ground:far};
+ const dx=Math.sin(heading),dz=Math.cos(heading),height=d=>terrain.surface(player.x+dx*d,player.z+dz*d);
+ const ahead=24+Math.min(player.speed||0,35)*.64,far=height(ahead),near=(height(0)-height(6))/6;
+ const grades=[.45,.7,1].map(t=>{const end=ahead*t;return(height(Math.max(5,end-12))-height(end))/Math.min(12,end-5);});
+ const grade=Math.max(...grades);
+ return{factor:Math.max(0,Math.min(1,(grade-near-.07)*3.8))*Math.max(0,Math.min(1,grade/.17)),ahead,ground:far};
 }
 export function clearCameraSight(terrain,eye,target){
  let required=eye.y;

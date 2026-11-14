@@ -218,3 +218,7 @@ summary:focus-visible { outline: 3px solid #91b741; outline-offset: 3px; }
   #intro .routes{max-height:32dvh}
   #intro .start{min-height:40px}
 }
+
+#chase-direction{display:flex;align-items:center;gap:5px;font-size:11px;color:#713d35}
+#chase-arrow{display:inline-grid;place-items:center;width:15px;height:15px;font-size:15px;line-height:1}
+#chase-branch{color:#725024;font-size:10px}
