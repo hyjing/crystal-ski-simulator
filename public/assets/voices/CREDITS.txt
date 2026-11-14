@@ -1,0 +1,5 @@
+English ski-resort dialogue for Crystal Ski Simulator.
+Original lines synthesized with Kokoro-82M v1.0 using af_heart, af_bella,
+am_michael and am_fenrir. The game includes the rendered MP3 clips.
+Model and voice credits: https://huggingface.co/hexgrad/Kokoro-82M
+Apache 2.0 (model): https://www.apache.org/licenses/LICENSE-2.0

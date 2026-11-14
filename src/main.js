@@ -14,6 +14,7 @@ import {StructureWorld} from './structure-collision.js';
 import {LiftJourney} from './lift-journey.js';
 import {createStationLife} from './station-life.js';
 import {StationAudio} from './station-audio.js';
+import {CrowdVoices} from './crowd-voices.js';
 import {SlopeAudio} from './slope-audio.js';
 import {sampleSlopeConditions} from './slope-conditions.js';
 import {chairAtStation} from './lift-station-layout.js';
@@ -73,7 +74,8 @@ let weather,hemisphere,cameraHeading=null,traffic,liftPassengers,structures,gear
 let qaSlow=false;
 let demoCapture,recordedInput=null,sceneryFrom='intro',sceneryView=false,droneMode='follow',drone={},droneCamera;
 let pendingRecovery=null;
-const liftJourney=new LiftJourney();let liftClock=0,stationLife,stationAudio,challenge,challengeRenderer,challengeMode='free';
+const liftJourney=new LiftJourney();let liftClock=0,stationLife,stationAudio,crowdVoices,challenge,challengeRenderer,challengeMode='free';
+const voiceRight=new THREE.Vector3(),voiceListener=new THREE.Vector3();
 let hasSatellite=false;
 let treePositions=[], trailPoints=[], mapBackground, snowEffects, sun, powder, speedRenderer, aerialImage, mapLayer='terrain', resortUpdate=()=>{};
 const baseElevation=1200, fixedStep=1/120;
@@ -764,6 +766,18 @@ function animate(time){
   updateCamera(dt);snowEffects.update(dt,skier,mode==='running',snow,athlete.userData.poleContact,patrol?.effect?.type==='boost');snowEffects.mesh.material.opacity=snow==='soft'?.29:.65;liftPassengers?.update(liftClock,camera,gear.npcs);stationLife?.update(stationClock,skier,resortUpdate.allCarriers,gear.npcs,mode==='paused'?0:dt);stationAudio?.update(scene.userData.liftTerminals||[],mode==='drone'?camera.position:skier,soundOn&&worldActive,time/1000,liftJourney.phase==='boarding');
   if(arrivalZone){arrivalZone.visible=mode==='running';arrivalZone.children[0].material.opacity=.55+.15*Math.sin(time*.002);}
   if(mode!=='paused')traffic?.update(0,skier,worldActive&&(isCrystal||mode!=='finished'),gear.npcs,camera,dt);
+  if(crowdVoices){
+    const enabled=soundOn&&worldActive;
+    if(enabled){
+      voiceRight.set(1,0,0).applyQuaternion(camera.quaternion);
+      voiceListener.copy(mode==='drone'?camera.position:athlete.position);
+      if(mode!=='drone')voiceListener.y+=1.65;
+    }
+    const boarding=enabled&&liftJourney.phase==='boarding'?liftJourney.lower:null;
+    crowdVoices.update({enabled,time:time/1000,listener:voiceListener,right:voiceRight,
+      traffic:gear.npcs?traffic:null,stationLife:gear.npcs?stationLife:null,
+      boarding:boarding&&{id:`boarding-${boarding.id}`,point:{x:boarding.x,y:yAt(boarding.x,boarding.z)+2,z:boarding.z}}});
+  }
   updateSlopeExperience(dt,worldActive);
   weather.update(mode==='paused'?0:dt,camera,athlete.position,worldActive||mode==='paused'?slopeConditions:undefined);
   snowEffects.sprayMaterial.color.copy(weather.state.cloud).lerp(weather.state.sun,.2);
@@ -805,6 +819,8 @@ function updateSlopeExperience(dt, active){
 function enableAudio(){
   if(!audio){
     audio=new AudioContext();stationAudio=new StationAudio(audio);
+    crowdVoices=new CrowdVoices(audio,import.meta.env.BASE_URL);
+    crowdVoices.preload();
     if(isCrystal)slopeAudio=new SlopeAudio(audio);
     else {
       const buffer=audio.createBuffer(1,audio.sampleRate*2,audio.sampleRate),samples=buffer.getChannelData(0),rng=random(89);
