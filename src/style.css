@@ -119,7 +119,6 @@ summary:focus-visible { outline: 3px solid #91b741; outline-offset: 3px; }
 .menu-panel .weather-select { display: flex; padding: 4px 10px; align-items: center; justify-content: space-between; }
 .menu-panel .weather-select > span { display: inline; }
 .menu-panel select { min-height: 36px; }
-.menu-panel #weather-status { position: static; display: block; padding: 0 10px 6px; color: #49635a; }
 
 .panel { top: 76px; max-height: calc(100dvh - 88px); }
 .panel h1 { margin: 0 0 8px; font-size: 27px; letter-spacing: -.045em; }
@@ -175,5 +174,47 @@ summary:focus-visible { outline: 3px solid #91b741; outline-offset: 3px; }
 .patrol-health-row{display:flex;align-items:center;gap:7px;font-variant-numeric:tabular-nums}
 .patrol-health-row meter{flex:1;width:0;height:10px;accent-color:#b74257}
 .patrol-health-row meter::-webkit-meter-bar{background:#ead1cc;border:0;border-radius:999px}
-.patrol-health-row meter::-webkit-meter-optimum-value{background:#b74257;border-radius:999px}
-.patrol-health-row meter::-moz-meter-bar{background:#b74257;border-radius:999px}
+.patrol-health-row meter::-webkit-meter-optimum-value{background:#467f68;border-radius:999px}
+.patrol-health-row meter::-moz-meter-bar{background:#467f68;border-radius:999px}
+.patrol-health-row meter.low::-webkit-meter-optimum-value{background:#b74257}
+.patrol-health-row meter.low::-moz-meter-bar{background:#b74257}
+
+/* Mount and run selection keep the primary action in reach on short screens. */
+#intro{display:flex;flex-direction:column;gap:9px;padding:16px 17px;width:min(392px,calc(100vw - 24px));border-radius:12px;background:#f7faf2f5;backdrop-filter:none}
+#intro.hidden{display:none}
+#intro h1{margin:0;font-size:23px}
+.run-pickers{display:grid;grid-template-columns:minmax(0,1.4fr) minmax(0,1fr);gap:8px}
+.run-pickers .mountain-picker{margin:0;font-size:11px;letter-spacing:0}
+.run-pickers select{margin-top:4px;border-radius:6px;padding-inline:7px}
+#intro .route-tools summary{min-height:0;padding:5px 0}
+#intro .routes{flex:0 1 auto;min-height:0;max-height:min(36dvh,330px);margin:0;overscroll-behavior:auto}
+#intro .route{min-height:43px;margin:0;padding:6px 8px}
+#intro .route+.route{margin-top:3px}
+#intro .route.active{box-shadow:inset 3px 0 var(--route)}
+#intro .start{flex-shrink:0;position:sticky;bottom:0;border-radius:7px}
+.menu-panel .snow-row{padding:3px 10px;margin:0}
+#session{background:#f6f8f0f5;backdrop-filter:none;border-radius:10px}
+#session .session-top{font-size:11px;letter-spacing:0}
+#session #pause{font-size:14px;min-width:32px;padding:4px;line-height:1.2}
+#session .session-details{margin-top:5px}
+#session .session-details summary{min-height:0;padding:5px 0}
+#challenge-status:empty{display:none}
+#patrol-hud{margin:5px 0;padding:7px;gap:5px}
+.patrol-header{display:flex;align-items:center;justify-content:space-between;gap:4px}
+#wanted-stars{font-size:13px;letter-spacing:0;white-space:nowrap}
+#patrol-effect{color:#66382c;font-size:10px}
+#patrol-items button{display:grid;justify-items:center;align-content:center;gap:2px;min-height:36px}
+#patrol-items button kbd{font-size:9px;background:none;color:#624b47}
+#patrol-items button:disabled{opacity:.62}
+.touch-actions{position:relative}
+.touch-controls .touch-tricks{position:absolute;right:0;bottom:100%;margin:0 0 6px;width:max-content}
+.touch-controls .touch-tricks button{min-width:42px;min-height:44px}
+@media(max-width:900px),(pointer:coarse){
+  #intro .route,#patrol-items button{min-height:44px}
+  #session #pause{min-width:44px;min-height:44px}
+}
+@media(max-height:500px) and (max-width:1000px){
+  #intro{gap:5px;padding:9px 12px}
+  #intro .routes{max-height:32dvh}
+  #intro .start{min-height:40px}
+}
