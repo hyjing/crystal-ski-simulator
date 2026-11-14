@@ -222,3 +222,11 @@ summary:focus-visible { outline: 3px solid #91b741; outline-offset: 3px; }
 #chase-direction{display:flex;align-items:center;gap:5px;font-size:11px;color:#713d35}
 #chase-arrow{display:inline-grid;place-items:center;width:15px;height:15px;font-size:15px;line-height:1}
 #chase-branch{color:#725024;font-size:10px}
+
+.rider-level{display:flex;justify-content:space-between;align-items:baseline;gap:12px;font-variant-numeric:tabular-nums}
+#progress-xp,#talents small{color:#506960;font-size:12px}
+#progress-meter{width:100%;height:9px;accent-color:#467f68}
+#talents{display:grid;gap:6px;margin-bottom:12px}
+#talents button{display:flex;justify-content:space-between;align-items:center;gap:10px;margin:0;text-align:left}
+#talents button[aria-pressed="true"]{border-color:#467f68;background:#e5f0dd}
+#xp-result{color:#3c7356;font-variant-numeric:tabular-nums}

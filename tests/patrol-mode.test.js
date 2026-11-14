@@ -87,7 +87,7 @@ test('chase escalates at new sections, spawns behind, and catches a skier who st
   assert.ok(run.agents.every(agent=>agent.z<2700));
   run.agents=[{x:0,z:2700,speed:0,heading:0,bank:0}];
   const player={...makePlayer(2700),speed:0,vz:0};
-  for(let i=0;i<90&&!run.outcome;i++){
+  for(let i=0;i<240&&!run.outcome;i++){
     run.agents[0].x=player.x;
     run.agents[0].z=player.z;
     run.step(1/30,player);
@@ -185,13 +185,13 @@ test('a nearby pursuer brakes hard for a decoy and resumes chasing as soon as it
 });
 
 
-test('capture takes three uninterrupted seconds regardless of speed or patrol count',()=>{
+test('full health lasts eight uninterrupted seconds regardless of speed or patrol count',()=>{
   for(const speed of [0,20]){
     const run=new PatrolRun(route,()=>false);
     run.stars=1;
     run.agents=Array.from({length:3},()=>({x:0,z:95,heading:0,speed:0,bank:0}));
     const player={...makePlayer(100),speed};
-    for(let i=0;i<89;i++)assert.equal(run.step(1/30,player),null);
+    for(let i=0;i<239;i++)assert.equal(run.step(1/30,player),null);
     assert.ok(Math.abs(run.captureRemaining-1/30)<1e-9);
     assert.equal(run.step(1/30,player),'caught');
   }
@@ -204,13 +204,13 @@ test('leaving the five-meter range stops damage but keeps the previous health lo
   run.stars=1;
   run.agents=[agent];
   for(let i=0;i<60;i++)run.step(1/30,player);
-  assert.ok(Math.abs(run.captureRemaining-1)<1e-9);
+  assert.ok(Math.abs(run.captureRemaining-6)<1e-9);
   agent.z=94.9;
   run.step(1/30,player);
   assert.equal(run.captureRemaining,null);
-  assert.ok(Math.abs(run.health-100/3)<1e-8);
+  assert.ok(Math.abs(run.health-75)<1e-8);
   agent.z=95;
-  for(let i=0;i<29;i++)assert.equal(run.step(1/30,player),null);
+  for(let i=0;i<179;i++)assert.equal(run.step(1/30,player),null);
   assert.equal(run.step(1/30,player),'caught');
 });
 

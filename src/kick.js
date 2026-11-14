@@ -17,13 +17,14 @@ export class SkierKick {
     this.reset();
   }
 
-  reset() {
+  reset(talent=null) {
     if(this.action?.flight) delete this.action.target.launch;
     for(const target of this.burstTargets??[])delete target.launch;
     this.burstTargets=new Set();
     this.time=0;
     this.readyAt=0;
     this.charge=0;
+    this.baseCooldown=COOLDOWN-(talent==='agility'?.75:0);
     this.action=null;
   }
 
@@ -60,7 +61,7 @@ export class SkierKick {
     const point=position(target);
     const across=(point.x-player.x)*Math.cos(player.heading)-(point.z-player.z)*Math.sin(player.heading);
     this.action={target,start:this.time,side:across<0?-1:1,resolved:false};
-    this.readyAt=this.time+COOLDOWN-this.charge;
+    this.readyAt=this.time+this.baseCooldown-this.charge;
     this.charge=0;
     return true;
   }

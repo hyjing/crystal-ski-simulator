@@ -10,9 +10,8 @@ export function longestChaseRoute(routes,mountainId){
   return longest&&{...longest,id:`${mountainId}-angry-skiers`,patrolOnly:true,label:'愤怒的雪友 · 长距离'};
 }
 const CAPTURE_RADIUS = 5;
-const CAPTURE_SECONDS = 3;
 export const MAX_HEALTH = 100;
-const DAMAGE_PER_SECOND = MAX_HEALTH/CAPTURE_SECONDS;
+export const DAMAGE_PER_SECOND = 12.5;
 const MEDKIT_HEAL = 35;
 const TRAP_RADIUS = 2.1;
 const REPLACEMENT_DELAY = 1.2;
@@ -37,7 +36,7 @@ function routePoint(route, distance, offset=0) {
 }
 
 export class PatrolRun {
-  constructor(route, clear, pathClear=clear) {
+  constructor(route, clear, pathClear=clear, talent=null) {
     this.route = route;
     this.clear = clear;
     this.pathClear = pathClear;
@@ -45,6 +44,10 @@ export class PatrolRun {
     this.stars = 0;
     this.peakStars = 0;
     this.contact = 0;
+    this.damageRate=DAMAGE_PER_SECOND*(talent==='stamina'?.85:1);
+    this.medkitHeal=MEDKIT_HEAL+(talent==='recovery'?10:0);
+    this.escapeArmed=false;
+    this.escapes=0;
     this.health = MAX_HEALTH;
     this.trap = null;
     this.evadeUntil = 0;
@@ -78,7 +81,7 @@ export class PatrolRun {
   }
 
   get captureRemaining(){
-    return this.contact > 0 ? this.health/DAMAGE_PER_SECOND : null;
+    return this.contact > 0 ? this.health/this.damageRate : null;
   }
 
   heal(amount){
@@ -301,7 +304,13 @@ export class PatrolRun {
     const inReach = this.stars > 0 && contactDistance <= CAPTURE_RADIUS &&
       !player.airborne && this.time>=this.evadeUntil && this.effect?.type !== 'shield';
     this.contact = inReach ? this.contact + dt : 0;
-    if(inReach)this.health=Math.max(0,this.health-DAMAGE_PER_SECOND*dt);
+    if(inReach){
+      this.health=Math.max(0,this.health-this.damageRate*dt);
+      this.escapeArmed=true;
+    }else if(this.escapeArmed&&this.agents.every(agent=>agent.launch||agent.stunUntil>this.time||range(agent,player)>12)){
+      this.escapes++;
+      this.escapeArmed=false;
+    }
     if(this.health <= 1e-8){
       this.health=0;
       this.outcome = 'caught';
@@ -312,7 +321,7 @@ export class PatrolRun {
       const medkit=this.pickups.find(p=>p.type==='medkit'&&!p.taken&&range(p,player)<5.5);
       if(medkit&&this.health<MAX_HEALTH){
         medkit.taken=true;
-        return this.heal(MEDKIT_HEAL) ? 'medkit' : null;
+        return this.heal(this.medkitHeal) ? 'medkit' : null;
       }
       if(this.inventory.length<ITEM_CAPACITY){
         const pickup=this.pickups.find(p=>p.type!=='medkit'&&!p.taken&&range(p,player)<5.5);
