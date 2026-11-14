@@ -15,7 +15,7 @@ export function upperBodyCounterAngle(heading,fallLine,motion={}){
 }
 export async function loadHumanoid(athlete,variant='player'){
  const file=variant==='npc'?'skier-npc.glb':'skier-complete.glb';
- if(!modelSources.has(file))modelSources.set(file,new GLTFLoader().loadAsync(`${import.meta.env.BASE_URL}assets/${file}?v=boot-cuffs-6`));
+ if(!modelSources.has(file))modelSources.set(file,new GLTFLoader().loadAsync(`${import.meta.env.BASE_URL}assets/${file}?v=ski-silhouette-7`));
  const [source,clips]=await Promise.all([modelSources.get(file),loadMotionClips()]);const rig=attachHumanoid(athlete,cloneSkeleton(source.scene));if(clips)rig.motion=new SkierMotion(rig.model,clips);return rig;
 }
 function jointSolution(a,target,pole,l1,l2){
@@ -67,8 +67,9 @@ export function updateHumanoid(athlete,pose){
   if(!motionMode){
   const hip=body.localToWorld(new THREE.Vector3(pose.hipX,pose.hipY+.07,pose.shape?.hipForward||0));bones.pelvis.position.copy(bones.pelvis.parent.worldToLocal(hip));
   const attitude=(yaw,lean,bend)=>rootQ.clone().multiply(new THREE.Quaternion().setFromEuler(new THREE.Euler(bend,yaw,lean,'YXZ')));
-  worldQuaternion(bones.pelvis,attitude(pose.counter*.18,pose.lean*.16,.05).multiply(rest.get('pelvis').q));
-  for(const [name,fraction] of [['spine_01',.40],['spine_02',.72],['spine_03',1]])worldQuaternion(bones[name],attitude(pose.counter*fraction,pose.lean*.20,(pose.shape?.bend??(.16+pose.tuck*.40))+(pose.grab||0)*.20+(pose.dynamic?.pitch||0)).multiply(rest.get(name).q));
+  const angulation=pose.shape?.angulation||0;
+  worldQuaternion(bones.pelvis,attitude(pose.counter*.18,pose.lean*(.16+angulation*.44),.05).multiply(rest.get('pelvis').q));
+  for(const [name,fraction] of [['spine_01',.40],['spine_02',.72],['spine_03',1]])worldQuaternion(bones[name],attitude(pose.counter*fraction,pose.lean*(.20+angulation*(.75-fraction*.52)),(pose.shape?.bend??(.16+pose.tuck*.40))+(pose.grab||0)*.20+(pose.dynamic?.pitch||0)).multiply(rest.get(name).q));
   worldQuaternion(bones.neck_01,attitude(pose.counter+(pose.headLook||0)*.5,pose.lean*.08,pose.tuck*.12).multiply(rest.get('neck_01').q));
   worldQuaternion(bones.Head,attitude(pose.counter+(pose.headLook||0),0,pose.tuck*.08).multiply(rest.get('Head').q));
   }else{

@@ -7,7 +7,10 @@ export function skiArmOffset(motion,sign){
  const neutral=new THREE.Vector3(sign*.42,-.46,.52),tucked=new THREE.Vector3(sign*.43,-.50,.48),pushing=new THREE.Vector3(sign*.34,-.46-.12*Math.sin(phase),.35+.36*Math.cos(phase));
  neutral.lerp(tucked,tuck).lerp(pushing,pole);neutral.x+=sign*Math.abs(bank)*.05;neutral.y+=sign*bank*.08;
  neutral.lerp(new THREE.Vector3(sign*.36,-.42,.70),plant);
- const shape=motion.shape||{};neutral.y+=shape.armLift||0;neutral.x+=sign*(shape.armSpread||0);
+ const shape=motion.shape||{},reach=shape.armReach||0,inside=sign*bank<0?1:0;
+ neutral.y+=(shape.armLift||0)+reach*(inside*.56-.15);
+ neutral.x+=sign*((shape.armSpread||0)+reach*(inside?.55:1));
+ neutral.z+=reach*(inside?.55:-.28);
  return neutral.lerp(new THREE.Vector3(sign*.38,-.58,.42),clamp(shape.brace||0,0,1));
 }
 // Preserve lateral hand clearance in the moving chest frame after animation

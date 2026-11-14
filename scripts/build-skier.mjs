@@ -19,8 +19,8 @@ function profile(y,sections){
  let i=0;while(i<sections.length-2&&y>sections[i+1][0])i++;
  const a=sections[i],b=sections[i+1],t=THREE.MathUtils.smoothstep(y,a[0],b[0]);return a.slice(1).map((v,j)=>THREE.MathUtils.lerp(v,b[j+1],t));
 }
-const jacketSections=[[.87,.272,.145],[.96,.280,.158],[1.08,.250,.149],[1.19,.251,.150],[1.32,.279,.158],[1.41,.273,.148],[1.50,.190,.110]];
-const legSections=[[.19,.108,.098],[.29,.111,.103],[.37,.108,.100],[.49,.114,.112],[.60,.117,.115],[.74,.122,.126],[.87,.128,.133]];
+const jacketSections=[[.87,.286,.155],[.96,.301,.169],[1.08,.254,.153],[1.19,.251,.154],[1.32,.286,.163],[1.41,.275,.151],[1.50,.190,.110]];
+const legSections=[[.19,.108,.098],[.29,.118,.112],[.37,.116,.110],[.49,.119,.121],[.60,.122,.125],[.74,.126,.131],[.87,.128,.133]];
 const band=(value,width)=>Math.exp(-((value/width)**2));
 function field(x,y,z){
  const ax=Math.abs(x),[rx,rz]=profile(y,jacketSections),centerZ=-.025+.009*band(y-1.32,.15);

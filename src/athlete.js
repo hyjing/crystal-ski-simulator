@@ -77,7 +77,7 @@ export function updateAthletePose(athlete,s,dt,surface){
   const counterTarget=(s.airborne||s.crashRemaining>0?0:upperBodyCounterAngle(s.heading||0,s.downhillHeading??s.heading??0,s))+(s.idleShift||0)*.12;
   const counter=athlete.userData.counterYaw===undefined||dt===0?counterTarget:THREE.MathUtils.lerp(athlete.userData.counterYaw,counterTarget,1-Math.exp(-dt*8));athlete.userData.counterYaw=counter;
   const balance=s.poseAuthoring?1:THREE.MathUtils.smoothstep(s.speed||0,.4,4),targetLean=roll*balance,rate=dt>0?1-Math.exp(-dt*20):1;
-  athlete.userData.lean=THREE.MathUtils.lerp(athlete.userData.lean||0,targetLean,rate);const lean=athlete.userData.lean,hipX=-lean*.62+(s.idleShift||0)*.08+(s.poseShape?.hipShift||0);
+  athlete.userData.lean=THREE.MathUtils.lerp(athlete.userData.lean||0,targetLean,rate);const lean=athlete.userData.lean,hipX=-lean*(.62+(s.poseShape?.hipTravel||0))+(s.idleShift||0)*.08+(s.poseShape?.hipShift||0);
   body.rotation.z=0;body.position.y=-pole*.035*Math.sin(phase);pelvis.position.set(hipX,hipY-.06,shape.hipForward);
   const ride=THREE.MathUtils.clamp(Number(s.ridePose)||0,0,1);
   skiRig.position.set(0,THREE.MathUtils.lerp(grab,-.42,ride),THREE.MathUtils.lerp(grab*.9,.65,ride));
@@ -88,6 +88,10 @@ export function updateAthletePose(athlete,s,dt,surface){
   for(const leg of legs){
     const inside=Math.max(0,-leg.sign*Math.sign(roll)),hip=new THREE.Vector3(hipX+leg.sign*.23,hipY,shape.hipForward),knee=new THREE.Vector3(hipX*.55+leg.sign*(.29+weight*.12),.94-tuck*.18-inside*weight*.12,shape.knee+inside*weight*.18),ankle=new THREE.Vector3(leg.sign*.30,.45+grab,.15+grab*.9);
     const gait=walkingFoot(walkPhase+(leg.sign>0?0:Math.PI));ankle.z+=walk*gait.stride;ankle.y+=walk*gait.lift;ankle.z+=sit*.95+inside*weight*.12;ankle.x*=shape.stance;ankle.y+=shape.fold*.55;ankle.z-=shape.fold*.28;knee.z+=shape.fold*.35;knee.y-=shape.fold*.18;knee.z+=walk*.25*gait.stride+sit*.6+crouch*.35;ankle.x+=leg.sign*crouch*.14;
+    const split=(s.poseShape?.legSplit||0)*weight;
+    knee.z+=inside*split*.55;
+    ankle.z+=inside*split;
+    ankle.y+=inside*split*.35;
     ankle.y=THREE.MathUtils.lerp(ankle.y,.02,ride);ankle.z=THREE.MathUtils.lerp(ankle.z,.80,ride);
     const kick=s.kickPose;
     if(kick?.side===leg.sign){

@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 let library;
 export function loadMotionClips(){
- return library??=fetch(`${import.meta.env.BASE_URL}assets/skier-motion.json?v=8`).then(r=>{if(!r.ok)throw Error('motion library');return r.json();}).then(data=>data.clips.map(c=>THREE.AnimationClip.parse(c))).catch(error=>{console.warn('Motion clips unavailable; retaining procedural fallback',error);return null;});
+ return library??=fetch(`${import.meta.env.BASE_URL}assets/skier-motion.json?v=9`).then(r=>{if(!r.ok)throw Error('motion library');return r.json();}).then(data=>data.clips.map(c=>THREE.AnimationClip.parse(c))).catch(error=>{console.warn('Motion clips unavailable; retaining procedural fallback',error);return null;});
 }
 export class SkierMotion{
  constructor(model,clips){this.model=model;this.mixer=new THREE.AnimationMixer(model);this.actions=new Map();this.weights=new Map();this.mode=null;this.active=false;this.sampledPose=[...new Set(clips.flatMap(c=>c.tracks.map(t=>t.name.split('.')[0])))].map(n=>model.getObjectByName(n)).filter(b=>b?.isBone).map(b=>({b,q:b.quaternion.clone(),p:b.position.clone()}));const reference=clips.find(c=>c.name==='ski-glide');for(let clip of clips){if(clip.name.startsWith('ski-plant-')&&reference){clip=clip.clone();const side=clip.name.endsWith('left')?'l':'r';clip.tracks=clip.tracks.filter(t=>new RegExp(`^(clavicle|upperarm|lowerarm|hand)_${side}\\.`).test(t.name));THREE.AnimationUtils.makeClipAdditive(clip,0,reference,30);}const action=this.mixer.clipAction(clip);action.play();action.setEffectiveWeight(0);this.actions.set(clip.name,action);this.weights.set(clip.name,0);}}
@@ -31,7 +31,7 @@ export class SkierMotion{
   const link=s.plantSide>0?'ski-link-left':'ski-link-right';
   const phase=clamp(s.plantPhase||0,0,.999);
   const blend=canPlant&&this.actions.has(link)&&!s.kickPose
-   ?THREE.MathUtils.smoothstep(phase,0,.23)*(1-THREE.MathUtils.smoothstep(phase,.72,1))*(1-(s.tuck||0)*.65):0;
+   ?THREE.MathUtils.smoothstep(phase,0,.29)*(1-THREE.MathUtils.smoothstep(phase,.72,1))*(1-(s.tuck||0)*.65):0;
   if(blend){
    for(const [name,weight] of target)target.set(name,weight*(1-blend));
    set(link,blend);

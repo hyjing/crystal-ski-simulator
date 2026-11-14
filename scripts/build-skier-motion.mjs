@@ -8,13 +8,15 @@ const plant=t=>THREE.MathUtils.smoothstep(t,0,.2)*(1-THREE.MathUtils.smoothstep(
 // interpolation provides deliberate load / release and absorption timing.
 const shapeKeys=(keys,t)=>{let i=0;while(i<keys.length-2&&t>keys[i+1][0])i++;const [a,p]=keys[i],[b,q]=keys[i+1],u=THREE.MathUtils.smoothstep(t,a,b);return Object.fromEntries([...new Set([...Object.keys(p),...Object.keys(q)])].map(k=>[k,THREE.MathUtils.lerp(p[k]||0,q[k]||0,u)]));};
 const held=poseShape=>()=>({poseShape});
+const carveShape={hipForward:.075,knee:.08,hipTravel:.23,legSplit:.18,armReach:.11,angulation:.32};
+const carve=side=>({edgeRoll:side*.9,edgeAngle:.9,poseShape:carveShape});
 const linkedTurn=(side,t)=>{
  const pose=shapeKeys([
-  [0,{edgeRoll:-side*.72,hipShift:side*.10}],
-  [.22,{edgeRoll:-side*.24,flex:-.09,hipShift:side*.06}],
-  [.39,{edgeRoll:side*.10,flex:-.045,hipShift:-side*.12,hipForward:.04}],
-  [.68,{edgeRoll:side*.48,flex:.06,hipShift:-side*.14,knee:.035}],
-  [1,{edgeRoll:side*.78,hipShift:0,knee:.05}],
+  [0,{...carveShape,edgeRoll:-side*.78}],
+  [.21,{edgeRoll:-side*.27,flex:-.12,hipShift:side*.09,hipTravel:.12,armReach:.09}],
+  [.38,{edgeRoll:side*.12,flex:-.10,hipShift:-side*.14,hipForward:.065,armReach:.12}],
+  [.68,{edgeRoll:side*.57,flex:.045,hipShift:-side*.13,knee:.04,legSplit:.11,armReach:.10,angulation:.21}],
+  [1,{...carveShape,edgeRoll:side*.86}],
  ],t);
  return {edgeRoll:pose.edgeRoll,edgeAngle:Math.abs(pose.edgeRoll),poseShape:pose,
   plantPose:{side:-side,amount:plant(t)}};
@@ -25,8 +27,8 @@ const definitions=[
  ['ski-plant-left',.5,t=>({plantPose:{side:1,amount:plant(t)}})],
  ['ski-plant-right',.5,t=>({plantPose:{side:-1,amount:plant(t)}})],
  ['ski-glide',2,held({})],['ski-tuck',2,()=>({tuck:1})],
- ['ski-carve-left',2,()=>({edgeRoll:-.9,edgeAngle:.9,poseShape:{hipForward:.02,knee:.06}})],
- ['ski-carve-right',2,()=>({edgeRoll:.9,edgeAngle:.9,poseShape:{hipForward:.02,knee:.06}})],
+ ['ski-carve-left',2,()=>carve(-1)],
+ ['ski-carve-right',2,()=>carve(1)],
  ['ski-pole-push',1/1.35,t=>({poling:1,polePhase:t})],
  ['ski-release',2,held({flex:-.11,bend:-.025,hipForward:.015,knee:.02})],
  ['ski-absorb',2,held({flex:.30,bend:.045,knee:.16,hipForward:.04})],
@@ -40,7 +42,7 @@ const definitions=[
  ['ski-fall-down',2,held({flex:.40,bend:.18,fold:.22,brace:1,knee:.16})],
  ['ski-fall-rise',2,held({flex:.56,bend:.28,brace:.9,knee:.28,hipForward:.07})],
 ];
-const clips=[];for(const [name,duration,sample] of definitions){const a=createAthleteRig(new THREE.Scene()),r=attachHumanoid(a,clone(source.scene)),frames=Math.round(duration*30),times=Array.from({length:frames+1},(_,i)=>i/frames*duration),values=new Map(names.map(n=>[n,[]])),positions=[];
+const clips=[];for(const [name,duration,sample] of definitions){const a=createAthleteRig(new THREE.Scene()),r=attachHumanoid(a,clone(source.scene)),frames=Math.round(duration*(name.startsWith('ski-link-')?60:30)),times=Array.from({length:frames+1},(_,i)=>i/frames*duration),values=new Map(names.map(n=>[n,[]])),positions=[];
  for(let i=0;i<=frames;i++){const t=i/frames,s={poseAuthoring:true,speed:12,heading:0,downhillHeading:0,...sample(t)};a.userData.plant={};updateAthletePose(a,s,0,()=>0);if(duration===2)r.bones.pelvis.position.z+=.002*Math.sin(t*Math.PI*2);for(const n of names)values.get(n).push(...r.bones[n].quaternion.toArray());positions.push(...r.bones.pelvis.position.toArray());}
  const tracks=names.map(n=>new THREE.QuaternionKeyframeTrack(`${n}.quaternion`,times,values.get(n)));tracks.push(new THREE.VectorKeyframeTrack('pelvis.position',times,positions));const clip=new THREE.AnimationClip(name,duration,tracks);clips.push(duration===2?clip.optimize():clip);}
 const vendorPath=process.argv[2]?.startsWith('--')?null:process.argv[2];if(vendorPath){const vendor=await read(vendorPath),rest=new Map();vendor.scene.traverse(o=>{if(o.isBone)rest.set(o.name,{q:o.quaternion.clone(),p:o.position.clone()});});const targetRest=new Map();source.scene.traverse(o=>{if(o.isBone)targetRest.set(o.name,{q:o.quaternion.clone(),p:o.position.clone()});});
