@@ -1,10 +1,25 @@
 import test from 'node:test';import assert from 'node:assert/strict';import * as THREE from 'three';import fs from 'node:fs';
 import {CHAIR_CUSHION_Y,CHAIR_RIDER_Y,CABIN_FLOOR_Y,liftServiceStops,sampleCarrierPose} from '../src/lift-geometry.js';
 import {liftOrbit} from '../src/camera-look.js';
-import {LiftJourney,carrierSeat} from '../src/lift-journey.js';import {stationPoint,staffActivity} from '../src/lift-station-layout.js';import {RunChallenge,routeGates,practiceTerrain,practiceHeight,recordRun} from '../src/run-challenges.js';import {ChallengeRenderer} from '../src/challenge-renderer.js';import {StationLife,STATION_ACTORS} from '../src/station-life.js';import {createAthleteRig,updateAthletePose} from '../src/athlete.js';import {createTerrain,getLiftRuns} from '../src/terrain.js';import {addResort,liftExitSpawn} from '../src/resort.js';import {prepareStationTerrain,addStationStructures} from '../src/stations.js';import {MOUNTAINS,mountainAsset} from '../src/mountains.js';import {StructureWorld} from '../src/structure-collision.js';import {yieldToSkier} from '../src/traffic-brain.js';import {createSkier,stepSkier} from '../src/physics.js';import {PowderSurface} from '../src/powder.js';
+import {LiftJourney,carrierSeat,returnLiftTarget} from '../src/lift-journey.js';import {stationPoint,staffActivity} from '../src/lift-station-layout.js';import {RunChallenge,routeGates,practiceTerrain,practiceHeight,recordRun} from '../src/run-challenges.js';import {ChallengeRenderer} from '../src/challenge-renderer.js';import {StationLife,STATION_ACTORS} from '../src/station-life.js';import {createAthleteRig,updateAthletePose} from '../src/athlete.js';import {createTerrain,getLiftRuns} from '../src/terrain.js';import {addResort,liftExitSpawn} from '../src/resort.js';import {prepareStationTerrain,addStationStructures} from '../src/stations.js';import {MOUNTAINS,mountainAsset} from '../src/mountains.js';import {StructureWorld} from '../src/structure-collision.js';import {yieldToSkier} from '../src/traffic-brain.js';import {createSkier,stepSkier} from '../src/physics.js';import {PowderSurface} from '../src/powder.js';
 const lower={id:'L:lower',liftId:'L',role:'lower',x:0,z:0,heading:Math.PI},upper={...lower,id:'L:upper',role:'upper',z:100,heading:0},surface=()=>1500,route={id:'test',name:'test',length:1000,spawn:{x:0,z:130,heading:0,distance:30},points:[{x:0,z:0},{x:0,z:1000}]};
 const chair=(ascending=true)=>({liftId:'L',ascending,travelProgress:0,total:100,collider:{position:new THREE.Vector3(0,302,0),quaternion:new THREE.Quaternion()}});
 const waiting=j=>{for(let i=0;i<400&&j.phase!=='waiting';i++)j.update(.1,[],surface);assert.equal(j.phase,'waiting');};
+test('return lifts allow boarding without a connected ski run and never wait forever',()=>{
+ const stations=[{...lower,service:{...lower,progress:3.2}},{...upper,service:{...upper,progress:96.8}}];
+ const finished={...route,returnLiftId:'L'};
+ const target=returnLiftTarget(finished,[finished],stations,[chair()],lower);
+ assert.ok(target);
+ assert.equal(target.destination,undefined);
+ assert.equal(returnLiftTarget(finished,[finished],stations,[chair(false)],lower),null);
+ const j=new LiftJourney();
+ assert.ok(j.begin(target.lower,target.upper,{spawn:target.upper.service},lower));
+ waiting(j);
+ for(let i=0;i<40;i++)j.update(.1,[],surface);
+ assert.equal(j.clockRate(),5);
+ for(let i=0;i<220&&j.active;i++)j.update(.1,[],surface);
+ assert.equal(j.phase,'complete');
+});
 test('the rider waits on the load mark until the chair arrives, then stands before releasing it at the upper mark',()=>{
  const j=new LiftJourney(),c=chair(),down=chair(false);
  j.begin(lower,upper,route,{x:0,z:-20});waiting(j);

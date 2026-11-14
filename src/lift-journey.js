@@ -16,6 +16,17 @@ export function carrierSeat(carrier) {
   return riderAnchor({x:p.x,y:p.y,z:p.z,heading},carrier.cabin);
 }
 
+export function returnLiftTarget(route,routes,terminals,carriers,position){
+  const id=String(route.returnLiftId||route.liftId);
+  const lower=terminals.find(s=>s.role==='lower'&&s.liftId===id);
+  const upper=terminals.find(s=>s.role==='upper'&&s.liftId===id);
+  if(!lower?.service||!upper?.service||distance(position,lower)>75||
+    !carriers.some(c=>c.ascending&&String(c.liftId)===id))return null;
+  const available=routes.filter(r=>String(r.liftId)===id);
+  const destination=available.find(r=>r.id===route.id)||available.find(r=>!r.patrolOnly);
+  return {lower,upper,destination};
+}
+
 function snowPath(points, clear) {
   const samples = [{...points[0], distance: 0}];
   const add = point => {
@@ -85,6 +96,7 @@ export class LiftJourney {
   clockRate() {
     if (this.paused) return 0;
     if (this.phase === 'boarding'||this.phase==='dismounting') return .32;
+    if (this.phase === 'waiting') return this.age>=3?5:1;
     if (this.phase !== 'riding') return 1;
     const {travelProgress, total} = this.carrier;
     return 1 + 7 * smooth(Math.min(travelProgress - 4, total - travelProgress - 4) / 30);
@@ -125,6 +137,8 @@ export class LiftJourney {
         this.transferAge=0;
         this.phase = 'boarding';
         this.age = 0;
+      }else if(this.age>=18){
+        this.unload(surface,true);
       }
     }
 

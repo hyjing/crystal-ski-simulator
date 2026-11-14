@@ -171,3 +171,9 @@ summary:focus-visible { outline: 3px solid #91b741; outline-offset: 3px; }
 #capture-number{color:#fffc;font-size:clamp(30px,6vmin,48px);font-weight:700;font-variant-numeric:tabular-nums;text-shadow:0 1px 7px #491c2588}
 #patrol-kick{min-height:36px;width:100%;margin:0;padding:5px 7px;font-size:11px}
 @media(max-width:900px),(pointer:coarse){#patrol-kick{display:none}}
+
+.patrol-health-row{display:flex;align-items:center;gap:7px;font-variant-numeric:tabular-nums}
+.patrol-health-row meter{flex:1;width:0;height:10px;accent-color:#b74257}
+.patrol-health-row meter::-webkit-meter-bar{background:#ead1cc;border:0;border-radius:999px}
+.patrol-health-row meter::-webkit-meter-optimum-value{background:#b74257;border-radius:999px}
+.patrol-health-row meter::-moz-meter-bar{background:#b74257;border-radius:999px}

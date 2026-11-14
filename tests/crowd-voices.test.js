@@ -45,4 +45,16 @@ test('crowd chatter starts once, follows its speaker, and yields to a boarding a
   assert.equal(starts.length,2);
   tick(1.7,{enabled:false});
   assert.deepEqual(stops,[lodge,lift]);
+
+  const answer={duration:1};
+  actor.position.x=2;
+  traffic.states.push({kind:'lodge'});
+  traffic.actors.push({position:{x:-3,y:0,z:0},visible:true});
+  voices.clips.lodge=[lodge,answer];
+  tick(40);
+  assert.equal(starts.at(-1),lodge);
+  voices.active.source.onended();
+  tick(42.6);
+  assert.equal(starts.at(-1),answer);
+  assert.ok(voices.active.pan.pan.value<0);
 });

@@ -197,7 +197,7 @@ test('capture takes three uninterrupted seconds regardless of speed or patrol co
   }
 });
 
-test('leaving the five-meter range resets the countdown before re-entry',()=>{
+test('leaving the five-meter range stops damage but keeps the previous health loss',()=>{
   const run=new PatrolRun(route,()=>false);
   const player=makePlayer(100);
   const agent={x:0,z:95,heading:0,speed:0,bank:0};
@@ -208,9 +208,45 @@ test('leaving the five-meter range resets the countdown before re-entry',()=>{
   agent.z=94.9;
   run.step(1/30,player);
   assert.equal(run.captureRemaining,null);
+  assert.ok(Math.abs(run.health-100/3)<1e-8);
   agent.z=95;
-  for(let i=0;i<89;i++)assert.equal(run.step(1/30,player),null);
+  for(let i=0;i<29;i++)assert.equal(run.step(1/30,player),null);
   assert.equal(run.step(1/30,player),'caught');
+});
+
+test('clean landings and medkits restore health, even with a full inventory',()=>{
+  const run=new PatrolRun(route,()=>true);
+  const kit=run.pickups.find(p=>p.type==='medkit');
+  const player={...makePlayer(kit.z),x:kit.x};
+  run.inventory=['boost','shield','banana'];
+  assert.notEqual(run.step(.03,player),'medkit');
+  assert.equal(kit.taken,false);
+  run.health=34;
+  assert.equal(run.evadeLanding({type:'land',quality:'clean',airTime:.5,grab:true}),20);
+  assert.equal(run.step(.03,player),'medkit');
+  assert.equal(run.health,89);
+  assert.equal(run.inventory.length,3);
+  assert.equal(run.heal(35),11);
+  assert.equal(run.health,100);
+});
+
+test('banana peel trips a pursuer once and expires if nobody reaches it',()=>{
+  const run=new PatrolRun(route,()=>true);
+  const player=makePlayer(100);
+  run.inventory=['banana','banana'];
+  run.stars=1;
+  assert.ok(run.use(player));
+  assert.equal(run.use(player),false);
+  const pursuer={x:0,z:94,speed:18,heading:0,bank:0};
+  run.agents=[pursuer];
+  run.step(.1,player,()=>false);
+  assert.equal(run.trap,null);
+  assert.ok(pursuer.stunUntil>2);
+  assert.equal(run.health,100);
+  assert.ok(run.use(player));
+  run.agents=[];
+  run.step(12.1,player,()=>false);
+  assert.equal(run.trap,null);
 });
 
 test('the inventory holds three items, leaves overflow on the snow, and supports using a slot',()=>{

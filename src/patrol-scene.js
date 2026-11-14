@@ -3,7 +3,7 @@ import {createAthleteRig,updateAthletePose} from './athlete.js';
 import {loadHumanoid} from './humanoid.js';
 import {applyGear,GEAR_PRESETS} from './wardrobe.js';
 import {fallAnimation} from './npc-routines.js';
-import {PATROL_ITEMS} from './patrol-mode.js';
+import {PATROL_ITEMS,MEDKIT} from './patrol-mode.js';
 import {AVALANCHE_RADIUS,poseKickedSkier} from './kick.js';
 
 export class PatrolScene {
@@ -17,9 +17,21 @@ export class PatrolScene {
     this.phase=0;
     this.clock=0;
     this.tokenGeometry=new THREE.OctahedronGeometry(.72);
-    this.materials=Object.fromEntries(Object.entries(PATROL_ITEMS).map(([id,item])=>[
+    this.materials=Object.fromEntries(Object.entries({...PATROL_ITEMS,medkit:MEDKIT}).map(([id,item])=>[
       id,new THREE.MeshStandardMaterial({color:item.color,emissive:item.color,emissiveIntensity:.34,roughness:.4}),
     ]));
+    this.medkitGeometry=new THREE.BoxGeometry(1.15,.76,.46);
+    this.crossGeometry=new THREE.BoxGeometry(.44,.14,.04);
+    this.crossMaterial=new THREE.MeshBasicMaterial({color:'#fff8ee'});
+    this.peel=new THREE.Group();
+    const peelGeometry=new THREE.CapsuleGeometry(.085,.52,3,5);
+    for(let i=0;i<3;i++){
+      const petal=new THREE.Mesh(peelGeometry,this.materials.banana),angle=i*Math.PI*2/3;
+      petal.position.set(Math.sin(angle)*.25,.17,Math.cos(angle)*.25);
+      petal.rotation.set(Math.cos(angle)*.95,0,-Math.sin(angle)*.95);
+      this.peel.add(petal);
+    }
+    this.root.add(this.peel);
     this.beacon=new THREE.Mesh(this.tokenGeometry,this.materials.decoy);
     this.beacon.visible=false;
     this.root.add(this.beacon);
@@ -57,7 +69,13 @@ export class PatrolScene {
     this.root.visible=Boolean(run);
     for(const token of this.tokens)this.root.remove(token);
     this.tokens=run?run.pickups.map(p=>{
-      const token=new THREE.Mesh(this.tokenGeometry,this.materials[p.type]);
+      const token=new THREE.Mesh(p.type==='medkit'?this.medkitGeometry:this.tokenGeometry,this.materials[p.type]);
+      if(p.type==='medkit')for(const z of [-.24,.24]){
+        const bar=new THREE.Mesh(this.crossGeometry,this.crossMaterial),stem=bar.clone();
+        bar.position.z=stem.position.z=z;
+        stem.rotation.z=Math.PI/2;
+        token.add(bar,stem);
+      }
       this.root.add(token);
       return token;
     }):[];
@@ -68,6 +86,9 @@ export class PatrolScene {
     this.root.visible=active;
     if(!active)return;
     this.phase+=dt;
+    const trap=this.run.trap;
+    this.peel.visible=Boolean(trap);
+    if(trap)this.peel.position.set(trap.x,this.surface(trap.x,trap.z)+.12,trap.z);
     this.shield.visible=Boolean(player)&&this.run.effect?.type==='shield';
     if(this.shield.visible){
       const {x,z}=player;

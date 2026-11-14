@@ -1,6 +1,7 @@
 import {clamp, nearestOnRoute, PHYSICS} from './physics.js';
 import {pointAlongRoute} from './terrain.js';
 import {AVALANCHE_DURATION} from './kick.js';
+import {sweptContact} from './traffic-brain.js';
 
 export const PATROL_ROUTE_ID = 'crystal-angry-skiers';
 export const resolveChaseRoute = id => id === 'crystal-patrol-descent' ? PATROL_ROUTE_ID : id;
@@ -10,6 +11,10 @@ export function longestChaseRoute(routes,mountainId){
 }
 const CAPTURE_RADIUS = 5;
 const CAPTURE_SECONDS = 3;
+export const MAX_HEALTH = 100;
+const DAMAGE_PER_SECOND = MAX_HEALTH/CAPTURE_SECONDS;
+const MEDKIT_HEAL = 35;
+const TRAP_RADIUS = 2.1;
 const REPLACEMENT_DELAY = 1.2;
 export const ITEM_CAPACITY = 3;
 export const PATROL_ITEMS = {
@@ -18,7 +23,9 @@ export const PATROL_ITEMS = {
   shield: {name:'护盾',color:'#83dcff',symbol:'+',duration:1.7,radius:6,description:'阻止截停，并弹开靠近的追赶者'},
   pulse: {name:'雪浪脉冲',color:'#b0fff0',symbol:'◎',duration:.32,radius:17,description:'瞬间推开 17 米内的追赶者'},
   avalanche: {name:'雪崩弹',color:'#ff986e',symbol:'✹',duration:AVALANCHE_DURATION,description:'掀飞周围的追赶者和普通雪友'},
+  banana: {name:'香蕉皮',color:'#ffcd36',symbol:'⌣',duration:12,description:'放在身后，绊倒第一个滑过的追赶者'},
 };
+export const MEDKIT = {name:'血包',color:'#f95178'};
 const range = (a, b) => Math.hypot(a.x-b.x, a.z-b.z);
 const turnAngle = (a, b) => Math.atan2(Math.sin(b-a), Math.cos(b-a));
 
@@ -38,6 +45,8 @@ export class PatrolRun {
     this.stars = 0;
     this.peakStars = 0;
     this.contact = 0;
+    this.health = MAX_HEALTH;
+    this.trap = null;
     this.evadeUntil = 0;
     this.outcome = '';
     this.furthest = route.spawn.distance;
@@ -50,24 +59,36 @@ export class PatrolRun {
     this.effect = null;
     this.nextIncident = 0;
     this.nextAgent = 0;
-    const types = ['boost','pulse','decoy','shield','avalanche','boost','avalanche'];
+    const types = ['boost','pulse','decoy','shield','avalanche','banana','boost','banana'];
     this.pickups = [];
     for(let d=route.spawn.distance+115;d<route.length-90;d+=180){
       const side=this.pickups.length%2?1:-1;
       const point=[side*3,-side*3,0].map(offset=>routePoint(route,d,offset)).find(clear);
       if(point)this.pickups.push({...point,type:types[this.pickups.length%types.length],taken:false});
     }
+    for(let d=route.spawn.distance+225;d<route.length-55;d+=295){
+      const point=[0,4,-4].map(offset=>routePoint(route,d,offset)).find(clear);
+      if(point)this.pickups.push({...point,type:'medkit',taken:false});
+    }
   }
 
   get captureRemaining(){
-    return this.contact > 0 ? Math.max(0, CAPTURE_SECONDS - this.contact) : null;
+    return this.contact > 0 ? this.health/DAMAGE_PER_SECOND : null;
+  }
+
+  heal(amount){
+    const restored=Math.min(MAX_HEALTH-this.health,amount);
+    this.health+=restored;
+    return restored;
   }
 
   evadeLanding(event){
     if(event?.type==='land'&&event.quality==='clean'&&event.airTime>=.35){
       this.evadeUntil=this.time+.35;
       this.contact=0;
+      return this.heal(event.rotation>=180||event.grab?20:12);
     }
+    return 0;
   }
 
   reinforcement(player,progress,offscreen,surface){
@@ -114,7 +135,15 @@ export class PatrolRun {
 
   use(player,slot=0,launchAvalanche){
     const type=this.inventory[slot];
-    if(!type||this.effect||this.outcome||player.crashRemaining||player.airborne)return false;
+    if(!type||this.outcome||player.crashRemaining||player.airborne)return false;
+    if(type==='banana'){
+      const point={x:player.x-Math.sin(player.heading)*2.7,z:player.z-Math.cos(player.heading)*2.7};
+      if(this.trap||!this.clear(point))return false;
+      this.trap={...point,until:this.time+PATROL_ITEMS.banana.duration};
+      this.inventory.splice(slot,1);
+      return true;
+    }
+    if(this.effect)return false;
     if(type==='avalanche'){
       const hit=launchAvalanche?.();
       if(!hit?.size)return false;
@@ -144,6 +173,7 @@ export class PatrolRun {
   step(dt,player,offscreen=()=>true,surface=()=>0,collision=()=>null){
     if(this.outcome)return null;
     this.time+=dt;
+    if(this.trap&&this.time>=this.trap.until)this.trap=null;
     if(this.effect&&this.time>=this.effect.until){
       if(this.effect.type==='decoy')for(const agent of this.agents)agent.aimAt=0;
       this.effect=null;
@@ -220,9 +250,14 @@ export class PatrolRun {
       const turnRate=distracted?3.5:Math.min(1.6,Math.max(5,agent.speed)/16);
       const heading=agent.heading+clamp(delta,-dt*turnRate,dt*turnRate);
       const point={x:agent.x+Math.sin(heading)*step,z:agent.z+Math.cos(heading)*step};
-      const hit=step>0&&collision(agent,point);
+      const trap=this.trap;
+      const tripped=trap&&sweptContact(agent,point,trap,TRAP_RADIUS)&&
+        Math.abs(surface(trap.x,trap.z)-surface(point.x,point.z))<2;
+      if(tripped)this.trap=null;
+      const hit=tripped||step>0&&collision(agent,point);
       if(hit){
-        agent.fallDuration=agent.speed>9?2.2:1.2;
+        if(tripped)Object.assign(agent,point);
+        agent.fallDuration=tripped?2.7:agent.speed>9?2.2:1.2;
         agent.stunUntil=this.time+agent.fallDuration;
         agent.repelUntil=0;
         agent.aimAt=0;
@@ -261,15 +296,23 @@ export class PatrolRun {
     const inReach = this.stars > 0 && contactDistance <= CAPTURE_RADIUS &&
       !player.airborne && this.time>=this.evadeUntil && this.effect?.type !== 'shield';
     this.contact = inReach ? this.contact + dt : 0;
-    if(this.contact >= CAPTURE_SECONDS - 1e-9){
-      this.contact = CAPTURE_SECONDS;
+    if(inReach)this.health=Math.max(0,this.health-DAMAGE_PER_SECOND*dt);
+    if(this.health <= 1e-8){
+      this.health=0;
       this.outcome = 'caught';
       return 'caught';
     }
 
-    if(this.inventory.length<ITEM_CAPACITY&&!player.airborne&&!player.crashRemaining){
-      const pickup=this.pickups.find(p=>!p.taken&&range(p,player)<5.5);
-      if(pickup){pickup.taken=true;this.inventory.push(pickup.type);this.lastPickup=pickup.type;return 'pickup';}
+    if(!player.airborne&&!player.crashRemaining){
+      const medkit=this.pickups.find(p=>p.type==='medkit'&&!p.taken&&range(p,player)<5.5);
+      if(medkit&&this.health<MAX_HEALTH){
+        medkit.taken=true;
+        return this.heal(MEDKIT_HEAL) ? 'medkit' : null;
+      }
+      if(this.inventory.length<ITEM_CAPACITY){
+        const pickup=this.pickups.find(p=>p.type!=='medkit'&&!p.taken&&range(p,player)<5.5);
+        if(pickup){pickup.taken=true;this.inventory.push(pickup.type);this.lastPickup=pickup.type;return 'pickup';}
+      }
     }
     return null;
   }

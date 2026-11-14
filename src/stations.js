@@ -76,7 +76,8 @@ export function addStationStructures(scene,terrain,infrastructure,areas,serviceS
   const groups=[];scene.userData.liftTerminals=[];
   const {metal,wood,snow,glass,stone,dark,paint}=resortMaterials();
   const box=(group,w,h,d,x,y,z,mat)=>{const g=new THREE.BoxGeometry(w,h,d),uv=g.attributes.uv;for(let f=0;f<6;f++){const [u,v]=f<2?[d,h]:f<4?[w,d]:[w,h];for(let k=0;k<4;k++){const i=f*4+k;uv.setXY(i,uv.getX(i)*u/2,uv.getY(i)*v/2);}}const mesh=new THREE.Mesh(g,mat);mesh.position.set(x,y,z);mesh.castShadow=mesh.receiveShadow=true;mesh.userData.structureCollider=h>.4||(h>.08&&Math.min(w,d)<.3);group.add(mesh);return mesh;};
-  const terminals=infrastructure.features.filter(f=>f.geometry.type==='LineString'&&(areas.some(a=>a.liftId===String(f.id))||f.properties.name==='Mt. Rainier Gondola'));
+  const terminals=infrastructure.features.filter(f=>f.geometry.type==='LineString'&&
+    (areas.some(a=>String(a.liftId)===String(f.id))||f.properties.name==='Mt. Rainier Gondola'));
   for(const lift of terminals)for(const role of ['upper','lower']){
     let pts=lift.geometry.coordinates.map(ll=>project(terrain,ll));if(terrain.sample(pts[0].x,pts[0].z)>terrain.sample(pts.at(-1).x,pts.at(-1).z))pts.reverse();
     if(role==='lower')pts.reverse();
