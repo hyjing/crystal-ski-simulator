@@ -77,7 +77,7 @@ export function updateAthletePose(athlete,s,dt,surface){
   const counterTarget=(s.airborne||s.crashRemaining>0?0:upperBodyCounterAngle(s.heading||0,s.downhillHeading??s.heading??0,s))+(s.idleShift||0)*.12;
   const counter=athlete.userData.counterYaw===undefined||dt===0?counterTarget:THREE.MathUtils.lerp(athlete.userData.counterYaw,counterTarget,1-Math.exp(-dt*8));athlete.userData.counterYaw=counter;
   const balance=s.poseAuthoring?1:THREE.MathUtils.smoothstep(s.speed||0,.4,4),targetLean=roll*balance,rate=dt>0?1-Math.exp(-dt*20):1;
-  athlete.userData.lean=THREE.MathUtils.lerp(athlete.userData.lean||0,targetLean,rate);const lean=athlete.userData.lean,hipX=-lean*.62+(s.idleShift||0)*.08;
+  athlete.userData.lean=THREE.MathUtils.lerp(athlete.userData.lean||0,targetLean,rate);const lean=athlete.userData.lean,hipX=-lean*.62+(s.idleShift||0)*.08+(s.poseShape?.hipShift||0);
   body.rotation.z=0;body.position.y=-pole*.035*Math.sin(phase);pelvis.position.set(hipX,hipY-.06,shape.hipForward);
   const ride=THREE.MathUtils.clamp(Number(s.ridePose)||0,0,1);
   skiRig.position.set(0,THREE.MathUtils.lerp(grab,-.42,ride),THREE.MathUtils.lerp(grab*.9,.65,ride));

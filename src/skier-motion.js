@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 let library;
 export function loadMotionClips(){
- return library??=fetch(`${import.meta.env.BASE_URL}assets/skier-motion.json?v=7`).then(r=>{if(!r.ok)throw Error('motion library');return r.json();}).then(data=>data.clips.map(c=>THREE.AnimationClip.parse(c))).catch(error=>{console.warn('Motion clips unavailable; retaining procedural fallback',error);return null;});
+ return library??=fetch(`${import.meta.env.BASE_URL}assets/skier-motion.json?v=8`).then(r=>{if(!r.ok)throw Error('motion library');return r.json();}).then(data=>data.clips.map(c=>THREE.AnimationClip.parse(c))).catch(error=>{console.warn('Motion clips unavailable; retaining procedural fallback',error);return null;});
 }
 export class SkierMotion{
  constructor(model,clips){this.model=model;this.mixer=new THREE.AnimationMixer(model);this.actions=new Map();this.weights=new Map();this.mode=null;this.active=false;this.sampledPose=[...new Set(clips.flatMap(c=>c.tracks.map(t=>t.name.split('.')[0])))].map(n=>model.getObjectByName(n)).filter(b=>b?.isBone).map(b=>({b,q:b.quaternion.clone(),p:b.position.clone()}));const reference=clips.find(c=>c.name==='ski-glide');for(let clip of clips){if(clip.name.startsWith('ski-plant-')&&reference){clip=clip.clone();const side=clip.name.endsWith('left')?'l':'r';clip.tracks=clip.tracks.filter(t=>new RegExp(`^(clavicle|upperarm|lowerarm|hand)_${side}\\.`).test(t.name));THREE.AnimationUtils.makeClipAdditive(clip,0,reference,30);}const action=this.mixer.clipAction(clip);action.play();action.setEffectiveWeight(0);this.actions.set(clip.name,action);this.weights.set(clip.name,0);}}
@@ -27,7 +27,20 @@ export class SkierMotion{
    set('ski-glide',(1-carve)*ground);set(s.edgeRoll>0?'ski-carve-right':'ski-carve-left',carve*ground);set('ski-tuck',tuck*(1-pole)*(1-landing));set('ski-pole-push',pole*(1-landing));set('ski-release',release*(1-pole)*(1-landing));set('ski-absorb',absorb*(1-pole)*(1-landing));set('ski-landing-soft',landing*(1-(s.landingStrength||0)));set('ski-landing-hard',landing*(s.landingStrength||0));
    if(landing>.01)this.stage='landing';
   }
-  const canPlant=ski&&this.stage==='ski';set('ski-plant-left',canPlant&&s.plantActive&&s.plantSide>0?1:0);set('ski-plant-right',canPlant&&s.plantActive&&s.plantSide<0?1:0);
+  const canPlant=ski&&this.stage==='ski'&&s.plantActive;
+  const link=s.plantSide>0?'ski-link-left':'ski-link-right';
+  const phase=clamp(s.plantPhase||0,0,.999);
+  const blend=canPlant&&this.actions.has(link)&&!s.kickPose
+   ?THREE.MathUtils.smoothstep(phase,0,.23)*(1-THREE.MathUtils.smoothstep(phase,.72,1))*(1-(s.tuck||0)*.65):0;
+  if(blend){
+   for(const [name,weight] of target)target.set(name,weight*(1-blend));
+   set(link,blend);
+   const action=this.actions.get(link);
+   action.setEffectiveTimeScale(0);
+   action.time=phase*action.getClip().duration;
+  }
+  set('ski-plant-left',canPlant&&s.plantSide>0?1-blend:0);
+  set('ski-plant-right',canPlant&&s.plantSide<0?1-blend:0);
   if([...target].some(([n,w])=>w>0&&!this.actions.has(n))){this.active=false;return null;}
   const snap=!this.active||this.mode!==mode||dt<=0,a=snap?1:1-Math.exp(-dt*22);let total=0;
   for(const [n] of this.actions){const w=THREE.MathUtils.lerp(this.weights.get(n),target.get(n)||0,a);this.weights.set(n,w);if(!n.startsWith('ski-plant-'))total+=w;}

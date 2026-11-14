@@ -8,7 +8,20 @@ const plant=t=>THREE.MathUtils.smoothstep(t,0,.2)*(1-THREE.MathUtils.smoothstep(
 // interpolation provides deliberate load / release and absorption timing.
 const shapeKeys=(keys,t)=>{let i=0;while(i<keys.length-2&&t>keys[i+1][0])i++;const [a,p]=keys[i],[b,q]=keys[i+1],u=THREE.MathUtils.smoothstep(t,a,b);return Object.fromEntries([...new Set([...Object.keys(p),...Object.keys(q)])].map(k=>[k,THREE.MathUtils.lerp(p[k]||0,q[k]||0,u)]));};
 const held=poseShape=>()=>({poseShape});
+const linkedTurn=(side,t)=>{
+ const pose=shapeKeys([
+  [0,{edgeRoll:-side*.72,hipShift:side*.10}],
+  [.22,{edgeRoll:-side*.24,flex:-.09,hipShift:side*.06}],
+  [.39,{edgeRoll:side*.10,flex:-.045,hipShift:-side*.12,hipForward:.04}],
+  [.68,{edgeRoll:side*.48,flex:.06,hipShift:-side*.14,knee:.035}],
+  [1,{edgeRoll:side*.78,hipShift:0,knee:.05}],
+ ],t);
+ return {edgeRoll:pose.edgeRoll,edgeAngle:Math.abs(pose.edgeRoll),poseShape:pose,
+  plantPose:{side:-side,amount:plant(t)}};
+};
 const definitions=[
+ ['ski-link-left',.5,t=>linkedTurn(-1,t)],
+ ['ski-link-right',.5,t=>linkedTurn(1,t)],
  ['ski-plant-left',.5,t=>({plantPose:{side:1,amount:plant(t)}})],
  ['ski-plant-right',.5,t=>({plantPose:{side:-1,amount:plant(t)}})],
  ['ski-glide',2,held({})],['ski-tuck',2,()=>({tuck:1})],
@@ -30,10 +43,14 @@ const definitions=[
 const clips=[];for(const [name,duration,sample] of definitions){const a=createAthleteRig(new THREE.Scene()),r=attachHumanoid(a,clone(source.scene)),frames=Math.round(duration*30),times=Array.from({length:frames+1},(_,i)=>i/frames*duration),values=new Map(names.map(n=>[n,[]])),positions=[];
  for(let i=0;i<=frames;i++){const t=i/frames,s={poseAuthoring:true,speed:12,heading:0,downhillHeading:0,...sample(t)};a.userData.plant={};updateAthletePose(a,s,0,()=>0);if(duration===2)r.bones.pelvis.position.z+=.002*Math.sin(t*Math.PI*2);for(const n of names)values.get(n).push(...r.bones[n].quaternion.toArray());positions.push(...r.bones.pelvis.position.toArray());}
  const tracks=names.map(n=>new THREE.QuaternionKeyframeTrack(`${n}.quaternion`,times,values.get(n)));tracks.push(new THREE.VectorKeyframeTrack('pelvis.position',times,positions));const clip=new THREE.AnimationClip(name,duration,tracks);clips.push(duration===2?clip.optimize():clip);}
-const vendorPath=process.argv[2];if(vendorPath){const vendor=await read(vendorPath),rest=new Map();vendor.scene.traverse(o=>{if(o.isBone)rest.set(o.name,{q:o.quaternion.clone(),p:o.position.clone()});});const targetRest=new Map();source.scene.traverse(o=>{if(o.isBone)targetRest.set(o.name,{q:o.quaternion.clone(),p:o.position.clone()});});
+const vendorPath=process.argv[2]?.startsWith('--')?null:process.argv[2];if(vendorPath){const vendor=await read(vendorPath),rest=new Map();vendor.scene.traverse(o=>{if(o.isBone)rest.set(o.name,{q:o.quaternion.clone(),p:o.position.clone()});});const targetRest=new Map();source.scene.traverse(o=>{if(o.isBone)targetRest.set(o.name,{q:o.quaternion.clone(),p:o.position.clone()});});
  for(const [original,name] of [['Walk_Loop','visitor-walk'],['Idle_Loop','visitor-idle']]){const clip=vendor.animations.find(c=>c.name===original);if(!clip)throw Error(`missing ${original}`);const tracks=[];for(const t of clip.tracks){const [n,property]=t.name.split('.');if(!names.includes(n)||!rest.has(n)||!targetRest.has(n))continue;const v=t.values.slice(),from=rest.get(n),to=targetRest.get(n);if(property==='quaternion'){for(let i=0;i<v.length;i+=4){const q=to.q.clone().multiply(from.q.clone().invert()).multiply(new THREE.Quaternion().fromArray(v,i)).normalize();q.toArray(v,i);}tracks.push(new THREE.QuaternionKeyframeTrack(t.name,t.times,v));}else if(n==='pelvis'&&property==='position'){const ratio=to.p.z/from.p.z;for(let i=0;i<v.length;i+=3){v[i]=to.p.x+(v[i]-from.p.x)*ratio;v[i+1]=to.p.y+(v[i+1]-from.p.y)*ratio;v[i+2]=to.p.z+(v[i+2]-from.p.z)*ratio;}tracks.push(new THREE.VectorKeyframeTrack(t.name,t.times,v));}}
  clips.push(new THREE.AnimationClip(name,clip.duration,tracks));}
 }
-const json={schema:1,source:'Eighteen authored ski clips on native skeleton; visitor walk/idle from Quaternius Universal Animation Library Standard, CC0',vendorSource:'https://quaternius.itch.io/universal-animation-library',clips:clips.map(THREE.AnimationClip.toJSON)};fs.writeFileSync(new URL('public/assets/skier-motion.json',root),JSON.stringify(json));console.log(clips.map(c=>`${c.name}: ${c.duration.toFixed(2)}s / ${c.tracks.length} tracks`).join('\n'));
+else {
+ const existing=JSON.parse(fs.readFileSync(new URL('public/assets/skier-motion.json',root),'utf8'));
+ clips.push(...existing.clips.filter(clip=>clip.name.startsWith('visitor-')).map(clip=>THREE.AnimationClip.parse(clip)));
+}
+const json={schema:1,source:'Authored ski clips on native skeleton; visitor walk/idle from Quaternius Universal Animation Library Standard, CC0',vendorSource:'https://quaternius.itch.io/universal-animation-library',clips:clips.map(THREE.AnimationClip.toJSON)};fs.writeFileSync(new URL('public/assets/skier-motion.json',root),JSON.stringify(json));console.log(clips.map(c=>`${c.name}: ${c.duration.toFixed(2)}s / ${c.tracks.length} tracks`).join('\n'));
 
 const previewIndex=process.argv.indexOf('--preview');if(previewIndex>=0){const output=process.argv[previewIndex+1];if(!output)throw Error('Pass --preview output.glb');const {GLTFExporter}=await import('three/addons/exporters/GLTFExporter.js');globalThis.FileReader=class{readAsArrayBuffer(blob){blob.arrayBuffer().then(v=>{this.result=v;this.onloadend?.();});}readAsDataURL(blob){blob.arrayBuffer().then(v=>{this.result=`data:${blob.type};base64,${Buffer.from(v).toString('base64')}`;this.onloadend?.();});}};const preview=clone(source.scene);preview.traverse(o=>{if(o.isMesh&&o.material){o.material=o.material.clone();o.material.map=null;o.material.bumpMap=null;}});const bytes=await new GLTFExporter().parseAsync(preview,{binary:true,animations:clips});fs.writeFileSync(output,Buffer.from(bytes));console.log(`Editable preview GLB: ${bytes.byteLength} bytes`);}

@@ -3,6 +3,29 @@ import {createSkier,stepSkier} from '../src/physics.js';import {createAthleteRig
 const bytes=fs.readFileSync(new URL('../public/assets/skier-complete.glb',import.meta.url)),source=new GLTFLoader().parseAsync(bytes.buffer.slice(bytes.byteOffset,bytes.byteOffset+bytes.byteLength),''),clips=JSON.parse(fs.readFileSync(new URL('../public/assets/skier-motion.json',import.meta.url))).clips.map(c=>THREE.AnimationClip.parse(c));
 async function fresh(animated=true){const a=createAthleteRig(new THREE.Scene()),rig=attachHumanoid(a,clone((await source).scene));if(animated)rig.motion=new SkierMotion(rig.model,clips);return{a,rig};}
 function assertAttached(a){a.updateMatrixWorld(true);for(const arm of a.userData.arms){const grip=arm.palmSocket.getWorldPosition(new THREE.Vector3()),shaftStart=arm.pole.localToWorld(new THREE.Vector3(0,-.5,0)),shaftTip=arm.pole.localToWorld(new THREE.Vector3(0,.5,0)),wrist=arm.palmSocket.parent.getWorldPosition(new THREE.Vector3());assert.ok(grip.distanceTo(shaftStart)<1e-7,`pole separated from palm by ${grip.distanceTo(shaftStart)}`);assert.ok(grip.distanceTo(wrist)>.05,'socket must be inside the palm, not at the wrist joint');assert.ok(Math.abs(shaftTip.distanceTo(shaftStart)-2.65*.52)<1e-7);assert.ok(arm.pole.getObjectByName('Ski pole grip'));}}
+test('linked turns drive both full-body clips without breaking grips or boot bindings',async()=>{
+ const {a,rig}=await fresh(),s={...createSkier({x:0,z:0},{x:0,z:1}),vz:13,speed:13};
+ const peak={left:0,right:0};
+ let lastHip;
+ for(let i=0;i<270;i++){
+  stepSkier(s,{steer:i<70?-1:i<150?1:-1},{gradient:()=>({x:0,z:0})},1/120);
+  a.position.set(s.x,0,s.z);a.rotation.y=s.heading;
+  updateAthletePose(a,{...s,downhillHeading:0},1/120,()=>0);
+  for(const side of ['left','right']){
+   const action=rig.motion.actions.get(`ski-link-${side}`);
+   peak[side]=Math.max(peak[side],action.getEffectiveWeight());
+  }
+  const hip=rig.bones.pelvis.getWorldPosition(new THREE.Vector3());
+  if(lastHip)assert.ok(hip.distanceTo(lastHip)<.24);
+  lastHip=hip;
+  assertAttached(a);
+  for(const {ski,boot,soleY} of rig.bindings){
+   const contact=boot.worldToLocal(ski.getWorldPosition(new THREE.Vector3()));
+   assert.ok(contact.distanceTo(new THREE.Vector3(0,soleY-.004,-.114))<1e-6);
+  }
+ }
+ assert.ok(peak.left>.7&&peak.right>.7);
+});
 test('shaft and visible grip stay at the palm through every double-pole frame, turn and tuck blend',async()=>{
  for(const animated of [false,true]){const {a}=await fresh(animated);a.position.set(90,30,-200);a.rotation.set(.25,1.3,-.2);for(let i=0;i<360;i++){updateAthletePose(a,{speed:12,poling:1,polePhase:i/90%1,tuck:(1-Math.cos(i/70))*.5,edgeRoll:Math.sin(i/90)*.7},1/120,()=>30);assertAttached(a);}}
 });
