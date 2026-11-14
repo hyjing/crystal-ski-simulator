@@ -230,3 +230,11 @@ summary:focus-visible { outline: 3px solid #91b741; outline-offset: 3px; }
 #talents button{display:flex;justify-content:space-between;align-items:center;gap:10px;margin:0;text-align:left}
 #talents button[aria-pressed="true"]{border-color:#467f68;background:#e5f0dd}
 #xp-result{color:#3c7356;font-variant-numeric:tabular-nums}
+
+#chase-feedback{position:fixed;inset:0;z-index:4;pointer-events:none}
+#chase-feedback::before,#chase-feedback::after{content:"";position:absolute;inset:0;transition:opacity .16s linear}
+#chase-feedback::before{background:radial-gradient(ellipse at center,transparent 56%,#ad28474d 100%);opacity:var(--damage,0)}
+#chase-feedback::after{background:radial-gradient(ellipse at center,transparent 59%,#59be7761 100%);opacity:var(--heal,0)}
+@media(prefers-reduced-motion:reduce){
+  #chase-feedback{display:none}
+}

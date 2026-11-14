@@ -181,6 +181,7 @@ export class PatrolRun {
 
   step(dt,player,offscreen=()=>true,surface=()=>0,collision=()=>null){
     if(this.outcome)return null;
+    this.lastTrip=null;
     this.time+=dt;
     if(this.trap&&this.time>=this.trap.until)this.trap=null;
     if(this.effect&&this.time>=this.effect.until){
@@ -262,7 +263,7 @@ export class PatrolRun {
       const trap=this.trap;
       const tripped=trap&&sweptContact(agent,point,trap,TRAP_RADIUS)&&
         Math.abs(surface(trap.x,trap.z)-surface(point.x,point.z))<2;
-      if(tripped)this.trap=null;
+      if(tripped){this.lastTrip=trap;this.trap=null;}
       const hit=tripped||step>0&&collision(agent,point);
       if(hit){
         if(tripped)Object.assign(agent,point);
