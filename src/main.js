@@ -3,7 +3,7 @@ import {RunGhost,ghostKey,readGhost,ghostPosition} from './run-ghost.js';
 import {TALENTS,RunExperience,levelProgress,readProgress,saveProgress} from './progression.js';
 import {LUCKY_SECTORS,luckyWidth,luckyShade,routeBranchCandidates,chaseDirection} from './route-experience.js';
 import {mapProjection} from './minimap.js';
-import {PatrolRun,PATROL_ITEMS,MEDKIT,MAX_HEALTH,ITEM_CAPACITY,resolveChaseRoute,longestChaseRoute} from './patrol-mode.js';
+import {PatrolRun,PATROL_ITEMS,ITEM_UPGRADES,MEDKIT,MAX_HEALTH,ITEM_CAPACITY,resolveChaseRoute,longestChaseRoute} from './patrol-mode.js';
 import {SkierKick,KICK_RANGE} from './kick.js';
 import {PatrolScene} from './patrol-scene.js';
 import * as THREE from 'three';
@@ -340,7 +340,7 @@ function resetPosition(full=false){
     terrain.setPractice(features);powder?.setPractice(features);
     challenge=new RunChallenge(route,challengeMode);
     challengeRenderer?.configure(challenge,features);
-    patrol=challengeMode==='patrol'&&route.patrolOnly?new PatrolRun(route,patrolSpawnClear,patrolPathClear,riderProgress.talents):null;
+    patrol=challengeMode==='patrol'&&route.patrolOnly?new PatrolRun(route,patrolSpawnClear,patrolPathClear,riderProgress.talents,levelProgress(riderProgress.xp).level):null;
     kick.reset(riderProgress.talents);
     runExperience=new RunExperience();
     patrolStep=0;
@@ -414,7 +414,8 @@ function finishRun(caught=false){
   if(earned)saveProgress(progressStorage,riderProgress);
   const after=levelProgress(riderProgress.xp).level;
   $('xp-result').hidden=!earned;
-  $('xp-result').textContent=`+${earned} XP · 等级 ${after}${after>before?' · 升级':''}`;
+  const unlock=Object.values(ITEM_UPGRADES).some(([level])=>before<level&&after>=level);
+  $('xp-result').textContent=`+${earned} XP · 等级 ${after}${unlock?' · 道具强化已解锁':after>before?' · 升级':''}`;
   $('progress-after-run').hidden=!earned;
   if(patrol&&!caught)patrol.outcome='escaped';
   $('result-title').textContent=patrol?(caught?'被愤怒的雪友追上':'成功抵达终点'):'Nice line.';
@@ -490,7 +491,7 @@ function updatePhysics(dt){
     patrolStep+=dt;
     if(patrolStep>=1/30){
       const health=patrol.health,escapes=patrol.escapes;
-      const event=patrol.step(patrolStep,skier,patrolOffscreen,yAt,patrolCollision);
+      const event=patrol.step(patrolStep,skier,patrolOffscreen,yAt,patrolCollision,detonateChaseBomb);
       if(escapes!==patrol.escapes){runExperience.escape();toast('成功脱身');}
       if(patrol.health<health)damageEffect=elapsed+.34;
       if(patrol.lastTrip){
@@ -741,7 +742,7 @@ function drawMap(){
   dot(route.points.at(-1),'#996027',8,'F');
   if(patrol){
     for(const p of patrol.pickups)if(!p.taken)dot(p,p.type==='medkit'?MEDKIT.color:PATROL_ITEMS[p.type].color,p.type==='medkit'?6:4.5,p.type==='medkit'?'+':null);
-    if(patrol.trap)dot(patrol.trap,PATROL_ITEMS.banana.color,4);
+    for(const trap of patrol.traps)dot(trap,PATROL_ITEMS.banana.color,4);
     for(const agent of patrol.agents)if(!agent.launch)dot(agent,'#b4213a',5.4);
   }
   const m=point(skier),front=point({x:skier.x+Math.sin(skier.heading)*10,z:skier.z+Math.cos(skier.heading)*10});
@@ -807,15 +808,15 @@ function updateUI(){
     }
     const branch=route.branches?.find(b=>b.medkit&&!b.medkit.taken&&patrol.furthest>=b.lo-35&&patrol.furthest<b.lo+75);
     $('chase-branch').hidden=!branch||mode!=='running';
-    const active=patrol.effect;
-    $('patrol-effect').hidden=!active;
-    if(active)$('patrol-effect').textContent=`${PATROL_ITEMS[active.type].name} · ${Math.max(0,active.until-patrol.time).toFixed(1)}s`;
+    const active=Object.values(patrol.effects);
+    $('patrol-effect').hidden=!active.length;
+    $('patrol-effect').textContent=active.map(effect=>`${PATROL_ITEMS[effect.type].name} ${Math.max(0,effect.until-patrol.time).toFixed(1)}s`).join(' · ');
     for(const button of $('patrol-items').children){
       const slot=Number(button.dataset.slot),item=PATROL_ITEMS[patrol.inventory[slot]];
       const labelText=item?.name??'空';
       if(button.lastElementChild.textContent!==labelText)button.lastElementChild.textContent=labelText;
       button.style.setProperty('--item-color',item?.color??'transparent');
-      button.disabled=!item||mode!=='running'||(item===PATROL_ITEMS.banana?Boolean(patrol.trap):Boolean(patrol.effect));
+      button.disabled=!item||mode!=='running'||Boolean(skier.crashRemaining);
       const label=`${slot+1} · ${item?.name??'空槽'}`;
       button.setAttribute('aria-label',label);
       button.title=item?`${label} · ${item.duration} 秒 · ${item.description}`:label;
@@ -927,7 +928,7 @@ function animate(time){
   const replay=ghostEnabled&&mode==='running'?ghostPosition(bestGhost,elapsed):null;
   ghostMesh.visible=Boolean(replay);
   if(replay)ghostMesh.position.set(replay.x,replay.y+.52,replay.z);
-  updateCamera(dt);snowEffects.update(dt,skier,mode==='running',snow,athlete.userData.poleContact,patrol?.effect?.type==='boost');snowEffects.mesh.material.opacity=snow==='soft'?.29:.65;liftPassengers?.update(liftClock,camera,gear.npcs);stationLife?.update(stationClock,skier,resortUpdate.allCarriers,gear.npcs,mode==='paused'?0:dt);stationAudio?.update(scene.userData.liftTerminals||[],mode==='drone'?camera.position:skier,soundOn&&worldActive,time/1000,liftJourney.phase==='boarding');
+  updateCamera(dt);snowEffects.update(dt,skier,mode==='running',snow,athlete.userData.poleContact,Boolean(patrol?.effects.boost));snowEffects.mesh.material.opacity=snow==='soft'?.29:.65;liftPassengers?.update(liftClock,camera,gear.npcs);stationLife?.update(stationClock,skier,resortUpdate.allCarriers,gear.npcs,mode==='paused'?0:dt);stationAudio?.update(scene.userData.liftTerminals||[],mode==='drone'?camera.position:skier,soundOn&&worldActive,time/1000,liftJourney.phase==='boarding');
   if(arrivalZone){arrivalZone.visible=mode==='running';arrivalZone.children[0].material.opacity=.55+.15*Math.sin(time*.002);}
   if(mode!=='paused')traffic?.update(0,skier,worldActive&&(isCrystal||mode!=='finished'),gear.npcs,camera,dt);
   if(crowdVoices){
@@ -1021,6 +1022,11 @@ function openProgress(fromResult=false){
   $('progress-xp').textContent=`${stats.xp} / ${stats.needed} XP`;
   $('progress-meter').max=stats.needed;
   $('progress-meter').value=stats.xp;
+  const itemUpgrades=$('item-upgrades');
+  for(const row of itemUpgrades.children){
+    const [level,description]=ITEM_UPGRADES[row.dataset.item];
+    row.textContent=`${PATROL_ITEMS[row.dataset.item].name} · ${description} · ${stats.level>=level?'已解锁':level+' 级解锁'}`;
+  }
   $('talent-note').textContent='天赋默认全开，可分别切换，下趟生效。';
   for(const button of $('talents').querySelectorAll('button')){
     button.title=TALENTS[button.dataset.talent].description;
@@ -1120,18 +1126,16 @@ $('challenge').addEventListener('change',e=>{
 function usePatrolItem(slot=0){
   const type=patrol?.inventory[slot];
   if(mode!=='running'||!type)return;
-  if(patrol.use(skier,slot,()=>kick.avalanche(skier,[
-    ...patrol.agents,...(gear.npcs?traffic?.states.filter(state=>traffic.canBeKicked(state))??[]:[]),
-  ]))){
-    if(type==='avalanche'||type==='pulse'){
-      const {x,z}=skier;
-      snowEffects.snowBurst(x,yAt(x,z),z,type==='avalanche'?96:42,type==='avalanche'?1:.68);
-    }
-    toast(`${PATROL_ITEMS[type].name}已启用`);
-    updateUI();
-  }
-  else if(type==='pulse'&&!patrol.effect&&!skier.airborne&&!skier.crashRemaining)toast('附近没有愤怒的雪友，雪浪脉冲已保留');
-  else if(type==='avalanche'&&!patrol.effect&&!skier.airborne&&!skier.crashRemaining)toast('附近没有雪友，雪崩弹已保留');
+  if(!patrol.use(skier,slot))return;
+  if(type==='pulse')snowEffects.snowBurst(skier.x,yAt(skier.x,skier.z),skier.z,42,.68);
+  toast(type==='avalanche'?'雪崩弹已向后抛出':`${PATROL_ITEMS[type].name}已释放`);
+  updateUI();
+}
+function detonateChaseBomb(blast){
+  const {x,z,radius}=blast;
+  snowEffects.snowBurst(x,yAt(x,z),z,radius>20?120:96,radius/20);
+  const visitors=gear.npcs?traffic?.states.filter(state=>traffic.canBeKicked(state))??[]:[];
+  return kick.avalanche(blast,[...patrol.agents,...visitors],radius);
 }
 function playLaunchLanding({end,toY,heading}){
   snowEffects.kickBurst(end.x,toY,end.z,heading,true);

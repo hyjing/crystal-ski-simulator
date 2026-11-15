@@ -106,7 +106,7 @@ test('pickups are one-use, boost increases speed, and shield stops capture progr
   assert.ok(player.speed>20);
   assert.equal(run.use(player),false);
   assert.ok(p.taken);
-  run.effect=null;run.inventory.push('shield');run.contact=1;
+  delete run.effects.boost;run.inventory.push('shield');run.contact=1;
   assert.ok(run.use(player));
   assert.equal(run.contact,0);
   run.agents.push({x:player.x,z:player.z,speed:0,heading:0,bank:0});
@@ -125,25 +125,37 @@ test('the Crystal pursuit itinerary is a long downhill route ending at Quicksilv
   assert.ok(pointAlongRoute(r,1500).distance===1500);
 });
 
-test('snow pulse is kept out of range, pushes away nearby patrol, and interrupts capture',()=>{
+test('snow pulse releases before a pursuer enters range and can overlap other items',()=>{
   const run=new PatrolRun(route,()=>true),player=makePlayer(100);
-  run.inventory.push('pulse');
-  run.contact=1;
-  assert.equal(run.use(player),false);
-  assert.deepEqual(run.inventory,['pulse']);
-  const close={x:0,z:96,speed:15,heading:0,bank:0};
-  const far={x:0,z:74,speed:15,heading:0,bank:0};
+  run.inventory=['pulse','shield','boost'];
+  assert.ok(run.use(player));
+  assert.ok(run.use(player));
+  assert.ok(run.use(player));
+  assert.deepEqual(run.inventory,[]);
+  assert.ok(run.effects.shield&&run.effects.boost);
+  const close={x:0,z:93,speed:15,heading:0,bank:0};
+  const far={x:0,z:70,speed:15,heading:0,bank:0};
   run.agents=[close,far];
   run.stars=1;
-  assert.equal(run.use(player),true);
-  assert.equal(run.contact,0);
-  assert.deepEqual(run.inventory,[]);
-  assert.ok(close.stunUntil<1);
+  run.step(.16,player,()=>false);
+  assert.ok(close.z<91);
   assert.equal(far.stunUntil,undefined);
-  run.step(.1,player);
-  assert.ok(close.z<93);
-  assert.ok(far.z>74);
+  const stun=close.stunUntil;
+  run.step(.08,player,()=>false);
+  assert.equal(close.stunUntil,stun);
   assert.equal(run.contact,0);
+});
+
+test('levelled buffs start immediately and repeated boosts extend their remaining time',()=>{
+  const run=new PatrolRun(route,()=>true,()=>true,[],2),player=makePlayer(100);
+  run.inventory=['boost','boost','shield','decoy'];
+  assert.ok(run.use(player));
+  assert.ok(run.use(player));
+  assert.ok(run.use(player));
+  assert.ok(run.use(player));
+  assert.ok(Math.abs(run.effects.boost.until-2.2)<1e-8);
+  assert.ok(Math.abs(run.effects.shield.until-2.4)<1e-8);
+  assert.equal(run.effects.decoy.until,3);
 });
 
 test('boost delivers a short burst, then the shield repels pursuers and expires',()=>{
@@ -156,7 +168,7 @@ test('boost delivers a short burst, then the shield repels pursuers and expires'
     run.step(.01,player,()=>false);
   }
   assert.ok(player.speed>34);
-  assert.equal(run.effect,null);
+  assert.deepEqual(run.effects,{});
   const speed=player.speed;
   run.boost(player,.1);
   assert.equal(player.speed,speed);
@@ -168,7 +180,7 @@ test('boost delivers a short burst, then the shield repels pursuers and expires'
   assert.ok(close.z<92);
   assert.equal(run.captureRemaining,null);
   run.step(PATROL_ITEMS.shield.duration,player,()=>false);
-  assert.equal(run.effect,null);
+  assert.deepEqual(run.effects,{});
 });
 
 test('a nearby pursuer brakes hard for a decoy and resumes chasing as soon as it expires',()=>{
@@ -181,7 +193,7 @@ test('a nearby pursuer brakes hard for a decoy and resumes chasing as soon as it
   assert.ok(close.speed<3);
   assert.equal(run.captureRemaining,null);
   run.step(2.05,player);
-  assert.equal(run.effect,null);
+  assert.deepEqual(run.effects,{});
   assert.ok(run.captureRemaining>0);
 });
 
@@ -231,23 +243,24 @@ test('clean landings and medkits restore health, even with a full inventory',()=
   assert.equal(run.health,100);
 });
 
-test('banana peel trips a pursuer once and expires if nobody reaches it',()=>{
-  const run=new PatrolRun(route,()=>true);
-  const player=makePlayer(100);
+test('upgraded banana casts two traps per item, can overlap and each expires or trips once',()=>{
+  const player=makePlayer(100),run=new PatrolRun(route,()=>true,()=>true,[],2);
   run.inventory=['banana','banana'];
   run.stars=1;
   assert.ok(run.use(player));
-  assert.equal(run.use(player),false);
-  const pursuer={x:0,z:94,speed:18,heading:0,bank:0};
+  assert.equal(run.traps.length,2);
+  assert.notEqual(run.traps[0].x,run.traps[1].x);
+  assert.ok(run.use({...player,z:115,airborne:true}));
+  assert.equal(run.traps.length,4);
+  const spot=run.traps[0];
+  const pursuer={x:spot.x,z:spot.z-2.5,speed:18,heading:0,bank:0};
   run.agents=[pursuer];
   run.step(.1,player,()=>false);
-  assert.equal(run.trap,null);
+  assert.equal(run.traps.length,3);
   assert.ok(pursuer.stunUntil>2);
-  assert.equal(run.health,100);
-  assert.ok(run.use(player));
   run.agents=[];
   run.step(12.1,player,()=>false);
-  assert.equal(run.trap,null);
+  assert.equal(run.traps.length,0);
 });
 
 test('the inventory holds three items, leaves overflow on the snow, and supports using a slot',()=>{
@@ -259,27 +272,31 @@ test('the inventory holds three items, leaves overflow on the snow, and supports
   const fourth=run.pickups[3],player={...makePlayer(fourth.z),x:fourth.x};
   assert.equal(run.step(.03,player),null);
   assert.equal(fourth.taken,false);
-  assert.equal(run.use(player,1),false);
   assert.ok(run.use(player,2));
-  assert.equal(run.effect.type,'decoy');
+  assert.ok(run.effects.decoy);
   assert.equal(run.step(.03,player),'pickup');
   assert.deepEqual(run.inventory,['boost','pulse','shield']);
 });
 
-test('an avalanche launches nearby skiers in all directions and preserves the item without targets',()=>{
-  const run=new PatrolRun(route,()=>true),player=makePlayer(100);
+test('an avalanche is thrown immediately and detonates later around its landing point',()=>{
+  const run=new PatrolRun(route,()=>true,()=>true,[],3),player=makePlayer(100);
   const kick=new SkierKick(x=>x===5?14:0,()=>true);
-  const pursuer={x:-6,z:100},visitor={point:{x:0,z:118}};
-  const far={x:0,z:121},above={x:5,z:100};
-  run.agents=[pursuer];run.inventory=['avalanche'];run.contact=2;
-  assert.ok(run.pickups.some(p=>p.type==='avalanche'));
-  assert.equal(run.use(player,0,()=>kick.avalanche(player,[far,above])),false);
-  assert.deepEqual(run.inventory,['avalanche']);
-  assert.equal(run.contact,2);
-  assert.ok(run.use(player,0,()=>kick.avalanche(player,[pursuer,visitor,far,above])));
+  const pursuer={x:-6,z:88},visitor={point:{x:0,z:110}};
+  const far={x:0,z:114},above={x:5,z:88};
+  run.inventory=['avalanche','avalanche'];
+  assert.ok(run.use(player));
+  assert.ok(run.use({...player,airborne:true,airClearance:3}));
   assert.deepEqual(run.inventory,[]);
-  assert.equal(run.contact,0);
-  assert.equal(run.effect.type,'avalanche');
+  assert.equal(run.bombs.length,2);
+  assert.equal(run.bombs[1].height,3);
+  const blasts=[];
+  const detonate=blast=>{blasts.push(blast);return kick.avalanche(blast,[pursuer,visitor,far,above],blast.radius);};
+  run.step(.3,player,()=>false,()=>0,()=>null,detonate);
+  assert.equal(blasts.length,0);
+  run.step(.13,player,()=>false,()=>0,()=>null,detonate);
+  assert.equal(blasts.length,2);
+  assert.equal(blasts[0].z,88);
+  assert.equal(blasts[0].radius,25);
   assert.ok(pursuer.launch.end.x<pursuer.x-15);
   assert.ok(visitor.launch.end.z>visitor.point.z+12);
   assert.equal(far.launch,undefined);

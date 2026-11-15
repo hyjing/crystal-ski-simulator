@@ -76,14 +76,14 @@ export class SkierKick {
       toY:this.surface(end.x,end.z),heading,at:this.time,progress:0,height:0,lift,duration};
   }
 
-  avalanche(player,targets){
+  avalanche(player,targets,radius=AVALANCHE_RADIUS){
     const ground=this.surface(player.x,player.z);
     const hit=new Set();
     for(const target of targets){
       const point=position(target),range=distance(point,player);
-      if(target.launch||range>AVALANCHE_RADIUS||
+      if(target.launch||range>radius||
         Math.abs(this.surface(point.x,point.z)-ground)>10)continue;
-      const force=1-range/AVALANCHE_RADIUS;
+      const force=1-range/radius;
       const heading=range>.1?Math.atan2(point.x-player.x,point.z-player.z):player.heading;
       this.launch(target,heading,12+force*10,3.5+force*2.5,1.05);
       this.burstTargets.add(target);

@@ -4,7 +4,7 @@ import {loadHumanoid} from './humanoid.js';
 import {applyGear,GEAR_PRESETS} from './wardrobe.js';
 import {fallAnimation} from './npc-routines.js';
 import {PATROL_ITEMS,MEDKIT} from './patrol-mode.js';
-import {AVALANCHE_RADIUS,poseKickedSkier} from './kick.js';
+import {poseKickedSkier} from './kick.js';
 
 export class PatrolScene {
   constructor(scene,surface,gradient){
@@ -31,20 +31,14 @@ export class PatrolScene {
       petal.rotation.set(Math.cos(angle)*.95,0,-Math.sin(angle)*.95);
       this.peel.add(petal);
     }
-    this.root.add(this.peel);
+    this.peels=[];
+    this.projectiles=[];
     this.beacon=new THREE.Mesh(this.tokenGeometry,this.materials.decoy);
     this.beacon.visible=false;
     this.root.add(this.beacon);
-    this.pulse=new THREE.Mesh(new THREE.RingGeometry(.92,1,48),new THREE.MeshBasicMaterial({
-      color:PATROL_ITEMS.pulse.color,side:THREE.DoubleSide,transparent:true,depthWrite:false,
-    }));
-    this.pulse.geometry.rotateX(-Math.PI/2);
-    const positions=this.pulse.geometry.attributes.position;
-    this.pulseShape=positions.array.slice();
-    positions.setUsage(THREE.DynamicDrawUsage);
-    this.pulse.frustumCulled=false;
-    this.pulse.visible=false;
-    this.root.add(this.pulse);
+    this.rings=[];
+    this.ringGeometry=new THREE.RingGeometry(.92,1,48).rotateX(-Math.PI/2);
+    this.pulseShape=this.ringGeometry.attributes.position.array;
     this.shield=new THREE.Mesh(new THREE.SphereGeometry(1.05,20,12),
       new THREE.MeshBasicMaterial({color:PATROL_ITEMS.shield.color,wireframe:true,transparent:true,opacity:.25,depthWrite:false}));
     this.root.add(this.shield);
@@ -81,49 +75,71 @@ export class PatrolScene {
     }):[];
   }
 
+  updateInstances(pool,items,create,update){
+    for(let i=0;i<items.length;i++){
+      if(!pool[i]){pool[i]=create();this.root.add(pool[i]);}
+      pool[i].visible=true;
+      update(pool[i],items[i]);
+    }
+    for(let i=items.length;i<pool.length;i++)pool[i].visible=false;
+  }
+
   update(dt,active,player){
     if(!this.run)return;
     this.root.visible=active;
     if(!active)return;
     this.phase+=dt;
-    const trap=this.run.trap;
-    this.peel.visible=Boolean(trap);
-    if(trap)this.peel.position.set(trap.x,this.surface(trap.x,trap.z)+.12,trap.z);
-    this.shield.visible=Boolean(player)&&this.run.effect?.type==='shield';
+    const {traps,bombs,blasts,waves,effects,time}=this.run;
+    this.updateInstances(this.peels,traps,()=>this.peel.clone(),(mesh,trap)=>{
+      mesh.position.set(trap.x,this.surface(trap.x,trap.z)+.12,trap.z);
+    });
+    this.updateInstances(this.projectiles,bombs,()=>new THREE.Mesh(this.tokenGeometry,this.materials.avalanche),(mesh,bomb)=>{
+      const t=THREE.MathUtils.clamp((time-bomb.start)/(bomb.until-bomb.start),0,1);
+      const x=THREE.MathUtils.lerp(bomb.x,bomb.end.x,t),z=THREE.MathUtils.lerp(bomb.z,bomb.end.z,t);
+      mesh.position.set(x,this.surface(x,z)+.24+(1-t)*(bomb.height+1.2+10*t),z);
+      mesh.rotation.set(t*6,0,t*3);
+      mesh.scale.setScalar(.6);
+    });
+    this.shield.visible=Boolean(player&&effects.shield);
     if(this.shield.visible){
       const {x,z}=player;
-      const remaining=(this.run.effect.until-this.run.time)/PATROL_ITEMS.shield.duration;
-      this.shield.position.set(x,this.surface(x,z)+.83,z);
+      const remaining=(effects.shield.until-time)/effects.shield.duration;
+      this.shield.position.set(x,this.surface(x,z)+.83+(player.airborne?player.airClearance||0:0),z);
       this.shield.rotation.y=this.phase*6;
       this.shield.scale.setScalar(1+.18*Math.sin(this.phase*19));
       this.shield.material.opacity=.45*Math.min(1,remaining*5);
     }
-    this.beacon.visible=this.run.effect?.type==='decoy';
+    this.beacon.visible=Boolean(effects.decoy);
     if(this.beacon.visible){
-      const {x,z}=this.run.effect;
+      const {x,z}=effects.decoy;
       this.beacon.position.set(x,this.surface(x,z)+1.3,z);
       this.beacon.rotation.y=this.phase*8;
       this.beacon.scale.setScalar(1.35+.3*Math.sin(this.phase*16));
     }
-    const blast=this.run.effect?.type==='avalanche';
-    this.pulse.visible=blast||this.run.effect?.type==='pulse';
-    if(this.pulse.visible){
-      const {x,z,until}=this.run.effect;
-      const duration=PATROL_ITEMS[this.run.effect.type].duration;
-      const progress=1-THREE.MathUtils.clamp((until-this.run.time)/duration,0,1);
-      const maxRadius=blast?AVALANCHE_RADIUS:PATROL_ITEMS.pulse.radius;
-      const radius=1+(maxRadius-1)*(1-(1-progress)**2);
+    this.updateInstances(this.rings,[...waves,...blasts],()=>{
+      const geometry=this.ringGeometry.clone();
+      geometry.attributes.position.setUsage(THREE.DynamicDrawUsage);
+      const ring=new THREE.Mesh(geometry,new THREE.MeshBasicMaterial({
+        side:THREE.DoubleSide,transparent:true,depthWrite:false,
+      }));
+      ring.frustumCulled=false;
+      return ring;
+    },(ring,wave)=>{
+      const blast=wave.type!=='pulse';
+      const {x,z,radius:maxRadius,duration,start}=wave;
+      const progress=THREE.MathUtils.clamp((time-start)/duration,0,1);
+      const radius=maxRadius*(blast?1-(1-progress)**2:progress);
       const ground=this.surface(x,z);
-      this.pulse.position.set(x,ground,z);
-      const positions=this.pulse.geometry.attributes.position;
+      ring.position.set(x,ground,z);
+      const positions=ring.geometry.attributes.position;
       for(let i=0;i<positions.count;i++){
         const dx=this.pulseShape[i*3]*radius,dz=this.pulseShape[i*3+2]*radius;
         positions.setXYZ(i,dx,this.surface(x+dx,z+dz)-ground+.16,dz);
       }
       positions.needsUpdate=true;
-      this.pulse.material.color.set(blast?'#fff1d2':PATROL_ITEMS.pulse.color);
-      this.pulse.material.opacity=(1-progress)*(blast?.95:.75);
-    }
+      ring.material.color.set(blast?'#fff1d2':PATROL_ITEMS.pulse.color);
+      ring.material.opacity=(1-progress)*(blast?.95:.75);
+    });
     this.clock+=dt;
     const pose=this.clock>=.05;
     if(pose)this.clock=0;
