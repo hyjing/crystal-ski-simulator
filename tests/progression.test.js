@@ -21,16 +21,14 @@ test('clean landings and escapes earn capped XP and a run only settles once',()=
   assert.equal(new RunExperience().settle(profile,false,true),0);
 });
 
-test('new profiles and legacy saves enable all talents while explicit choices persist',()=>{
+test('legacy multi-talent saves migrate to one talent and preserve experience',()=>{
   const values=new Map();
   const storage={getItem:key=>values.get(key),setItem:(key,value)=>values.set(key,value)};
-  assert.deepEqual(readProgress(null),{xp:0,talents:DEFAULT_TALENTS});
-  saveProgress(storage,{xp:120,talent:'agility'});
-  assert.deepEqual(readProgress(storage),{xp:120,talents:DEFAULT_TALENTS});
-  saveProgress(storage,{xp:59,talents:['recovery','unknown','recovery']});
-  assert.deepEqual(readProgress(storage),{xp:59,talents:['recovery']});
-  saveProgress(storage,{xp:59,talents:[]});
-  assert.deepEqual(readProgress(storage),{xp:59,talents:[]});
+  assert.deepEqual(readProgress(null),{xp:0,talent:'stamina',specialty:'duration'});
+  saveProgress(storage,{xp:120,talents:['recovery','agility','stamina']});
+  assert.deepEqual(readProgress(storage),{xp:120,talent:'recovery',specialty:'duration'});
+  saveProgress(storage,{xp:120,talent:'agility',specialty:'power'});
+  assert.deepEqual(readProgress(storage),{xp:120,talent:'agility',specialty:'power'});
 });
 
 test('selected talents affect damage, medkit healing, and the next run kick cooldown',()=>{
@@ -45,12 +43,13 @@ test('selected talents affect damage, medkit healing, and the next run kick cool
   assert.equal(run.escapes,1);
   run.step(.2,{...player,z:120});
   assert.equal(run.escapes,1);
-  const recovery=new PatrolRun(route,()=>true,()=>false);
+  const recovery=new PatrolRun(route,()=>true,()=>false,['recovery']);
   const kit=recovery.pickups.find(p=>p.type==='medkit');
   recovery.health=30;
   assert.equal(recovery.step(.1,{...player,x:kit.x,z:kit.z}),'medkit');
   assert.equal(recovery.health,75);
   const kick=new SkierKick(()=>0,()=>true);
+  kick.reset(['agility']);
   assert.ok(kick.start(player,[{x:0,z:98}]));
   assert.equal(kick.cooldown,4.25);
 });

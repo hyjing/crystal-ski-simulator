@@ -137,7 +137,7 @@ test('snow pulse releases before a pursuer enters range and can overlap other it
   const far={x:0,z:70,speed:15,heading:0,bank:0};
   run.agents=[close,far];
   run.stars=1;
-  run.step(.16,player,()=>false);
+  run.step(.25,player,()=>false);
   assert.ok(close.z<91);
   assert.equal(far.stunUntil,undefined);
   const stun=close.stunUntil;
@@ -153,9 +153,9 @@ test('levelled buffs start immediately and repeated boosts extend their remainin
   assert.ok(run.use(player));
   assert.ok(run.use(player));
   assert.ok(run.use(player));
-  assert.ok(Math.abs(run.effects.boost.until-2.2)<1e-8);
-  assert.ok(Math.abs(run.effects.shield.until-2.4)<1e-8);
-  assert.equal(run.effects.decoy.until,3);
+  assert.ok(Math.abs(run.effects.boost.until-2.3)<1e-8);
+  assert.ok(Math.abs(run.effects.shield.until-2.5)<1e-8);
+  assert.equal(run.effects.decoy.until,3.1);
 });
 
 test('boost delivers a short burst, then the shield repels pursuers and expires',()=>{
@@ -244,7 +244,7 @@ test('clean landings and medkits restore health, even with a full inventory',()=
 });
 
 test('upgraded banana casts two traps per item, can overlap and each expires or trips once',()=>{
-  const player=makePlayer(100),run=new PatrolRun(route,()=>true,()=>true,[],2);
+  const player=makePlayer(100),run=new PatrolRun(route,()=>true,()=>true,[],2,'quantity');
   run.inventory=['banana','banana'];
   run.stars=1;
   assert.ok(run.use(player));
@@ -279,10 +279,10 @@ test('the inventory holds three items, leaves overflow on the snow, and supports
 });
 
 test('an avalanche is thrown immediately and detonates later around its landing point',()=>{
-  const run=new PatrolRun(route,()=>true,()=>true,[],3),player=makePlayer(100);
-  const kick=new SkierKick(x=>x===5?14:0,()=>true);
+  const run=new PatrolRun(route,()=>true,()=>true,[],3,'power'),player=makePlayer(100);
+  const kick=new SkierKick(x=>x===5?40:0,()=>true);
   const pursuer={x:-6,z:88},visitor={point:{x:0,z:110}};
-  const far={x:0,z:114},above={x:5,z:88};
+  const far={x:0,z:125},above={x:5,z:88};
   run.inventory=['avalanche','avalanche'];
   assert.ok(run.use(player));
   assert.ok(run.use({...player,airborne:true,airClearance:3}));
@@ -295,8 +295,8 @@ test('an avalanche is thrown immediately and detonates later around its landing 
   assert.equal(blasts.length,0);
   run.step(.13,player,()=>false,()=>0,()=>null,detonate);
   assert.equal(blasts.length,2);
-  assert.equal(blasts[0].z,88);
-  assert.equal(blasts[0].radius,25);
+  assert.equal(blasts[0].z,91);
+  assert.equal(blasts[0].radius,29);
   assert.ok(pursuer.launch.end.x<pursuer.x-15);
   assert.ok(visitor.launch.end.z>visitor.point.z+12);
   assert.equal(far.launch,undefined);
@@ -307,6 +307,38 @@ test('an avalanche is thrown immediately and detonates later around its landing 
   kick.step(.3,player,()=>false,flight=>landings.push(flight));
   assert.equal(landings.length,2);
   assert.ok(pursuer.launch.finished&&visitor.launch.finished);
+});
+
+test('high heat telegraphs a pursuer dash and mist cancels it and stops close damage',()=>{
+  const run=new PatrolRun(route,()=>true,()=>false),player=makePlayer(100);
+  const pursuer={x:0,z:85,speed:18,heading:0,bank:0};
+  run.stars=3;run.agents=[pursuer];run.time=7;
+  run.step(.05,player,()=>false);
+  assert.equal(run.dash.agent,pursuer);
+  assert.ok(run.dash.at-run.time>.8);
+  run.step(.9,player,()=>false);
+  assert.ok(pursuer.speed>28);
+  const chargingSpeed=pursuer.speed;
+  run.inventory=['mist'];
+  assert.ok(run.use(player));
+  pursuer.z=97;
+  run.step(.05,player,()=>false);
+  assert.equal(run.dash,null);
+  assert.equal(run.health,100);
+  assert.ok(pursuer.speed<chargingSpeed);
+});
+
+test('the quantity specialty throws two snowballs that slow pursuers without launching them',()=>{
+  const run=new PatrolRun(route,()=>true,()=>false,[],2,'quantity'),player=makePlayer(100);
+  const pursuer={x:3,z:86,speed:15,heading:0,bank:0};
+  run.stars=1;
+  run.agents=[pursuer];run.inventory=['snowball'];
+  assert.ok(run.use(player));
+  assert.equal(run.bombs.length,2);
+  run.step(.3,player,()=>false);
+  assert.equal(run.bombs.length,0);
+  assert.ok(pursuer.slowUntil>2);
+  assert.equal(pursuer.launch,undefined);
 });
 
 test('each additional ski area exposes its longest mapped run as a shareable chase',()=>{
@@ -332,7 +364,7 @@ test('the kick targets the closest regular snow visitor and uses the default coo
   const visitor={kind:'lodge',point:{x:0,z:99}},agent={x:0,z:98};
   const eligible=()=>true;
   assert.ok(kick.start(player,[agent,visitor]));
-  assert.equal(kick.cooldown,4.25);
+  assert.equal(kick.cooldown,5);
   assert.equal(kick.start(player,[agent]),false);
   assert.equal(kick.step(.1,player,eligible),null);
   assert.ok(kick.pose.amount>0);
@@ -342,7 +374,7 @@ test('the kick targets the closest regular snow visitor and uses the default coo
   assert.ok(visitor.launch.x>4&&visitor.launch.z<93);
   assert.equal(kick.step(.44,player,eligible).type,'land');
   assert.equal(visitor.launch.height,0);
-  kick.step(4,player,eligible);
+  kick.step(4.2,player,eligible);
   assert.ok(visitor.launch.finished);
   assert.ok(kick.start(player,[agent,visitor]));
 });

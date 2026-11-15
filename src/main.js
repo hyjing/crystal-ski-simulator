@@ -1,9 +1,9 @@
 import {qualityScale,adaptQuality} from './render-quality.js';
 import {RunGhost,ghostKey,readGhost,ghostPosition} from './run-ghost.js';
-import {TALENTS,RunExperience,levelProgress,readProgress,saveProgress} from './progression.js';
+import {ITEM_SPECIALTIES,TALENTS,RunExperience,levelProgress,readProgress,saveProgress} from './progression.js';
 import {LUCKY_SECTORS,luckyWidth,luckyShade,routeBranchCandidates,chaseDirection} from './route-experience.js';
 import {mapProjection} from './minimap.js';
-import {PatrolRun,PATROL_ITEMS,ITEM_UPGRADES,MEDKIT,MAX_HEALTH,ITEM_CAPACITY,resolveChaseRoute,longestChaseRoute} from './patrol-mode.js';
+import {PatrolRun,PATROL_ITEMS,ITEM_UPGRADE_LEVEL,MEDKIT,MAX_HEALTH,ITEM_CAPACITY,resolveChaseRoute,longestChaseRoute} from './patrol-mode.js';
 import {SkierKick,KICK_RANGE} from './kick.js';
 import {PatrolScene} from './patrol-scene.js';
 import * as THREE from 'three';
@@ -340,8 +340,8 @@ function resetPosition(full=false){
     terrain.setPractice(features);powder?.setPractice(features);
     challenge=new RunChallenge(route,challengeMode);
     challengeRenderer?.configure(challenge,features);
-    patrol=challengeMode==='patrol'&&route.patrolOnly?new PatrolRun(route,patrolSpawnClear,patrolPathClear,riderProgress.talents,levelProgress(riderProgress.xp).level):null;
-    kick.reset(riderProgress.talents);
+    patrol=challengeMode==='patrol'&&route.patrolOnly?new PatrolRun(route,patrolSpawnClear,patrolPathClear,[riderProgress.talent],levelProgress(riderProgress.xp).level,riderProgress.specialty):null;
+    kick.reset([riderProgress.talent]);
     runExperience=new RunExperience();
     patrolStep=0;
     damageEffect=healEffect=0;
@@ -414,7 +414,7 @@ function finishRun(caught=false){
   if(earned)saveProgress(progressStorage,riderProgress);
   const after=levelProgress(riderProgress.xp).level;
   $('xp-result').hidden=!earned;
-  const unlock=Object.values(ITEM_UPGRADES).some(([level])=>before<level&&after>=level);
+  const unlock=before<ITEM_UPGRADE_LEVEL&&after>=ITEM_UPGRADE_LEVEL;
   $('xp-result').textContent=`+${earned} XP · 等级 ${after}${unlock?' · 道具强化已解锁':after>before?' · 升级':''}`;
   $('progress-after-run').hidden=!earned;
   if(patrol&&!caught)patrol.outcome='escaped';
@@ -801,6 +801,9 @@ function updateUI(){
       : patrol.stars?'雪友赶来中':'安全';
     camera.getWorldDirection(mapForward);
     const threat=chaseDirection(skier,patrol.agents,Math.atan2(mapForward.x,mapForward.z),patrol.time);
+    const dash=patrol.dash;
+    $('chase-counter').hidden=!dash||mode!=='running';
+    if(dash)$('chase-counter').textContent=patrol.time<dash.at?'雪友即将冲刺 · 护盾或信标可打断':'雪友冲刺中';
     $('chase-direction').hidden=!threat||mode!=='running';
     if(threat){
       $('chase-direction-label').textContent=`${threat.label} · ${threat.distance} m`;
@@ -1022,15 +1025,13 @@ function openProgress(fromResult=false){
   $('progress-xp').textContent=`${stats.xp} / ${stats.needed} XP`;
   $('progress-meter').max=stats.needed;
   $('progress-meter').value=stats.xp;
-  const itemUpgrades=$('item-upgrades');
-  for(const row of itemUpgrades.children){
-    const [level,description]=ITEM_UPGRADES[row.dataset.item];
-    row.textContent=`${PATROL_ITEMS[row.dataset.item].name} · ${description} · ${stats.level>=level?'已解锁':level+' 级解锁'}`;
-  }
-  $('talent-note').textContent='天赋默认全开，可分别切换，下趟生效。';
+  $('talent-note').textContent='各选一项，下趟生效。道具强化从 2 级起生效。';
+  $('item-upgrades').disabled=stats.level<ITEM_UPGRADE_LEVEL;
+  $('item-upgrades').value=riderProgress.specialty;
+  $('specialty-description').textContent=ITEM_SPECIALTIES[riderProgress.specialty].description;
   for(const button of $('talents').querySelectorAll('button')){
     button.title=TALENTS[button.dataset.talent].description;
-    button.setAttribute('aria-pressed',String(riderProgress.talents.includes(button.dataset.talent)));
+    button.setAttribute('aria-pressed',String(riderProgress.talent===button.dataset.talent));
   }
   dialog.dataset.result=String(fromResult);
   if(fromResult)$('result').close();
@@ -1049,10 +1050,18 @@ $('progress-dialog').addEventListener('close',()=>{
 $('talents').addEventListener('click',event=>{
   const button=event.target.closest('[data-talent]');
   if(!button||!Object.hasOwn(TALENTS,button.dataset.talent))return;
-  const talent=button.dataset.talent,enabled=riderProgress.talents.includes(talent);
-  riderProgress.talents=enabled?riderProgress.talents.filter(choice=>choice!==talent):[...riderProgress.talents,talent];
+  riderProgress.talent=button.dataset.talent;
+  for(const choice of $('talents').querySelectorAll('button')){
+    choice.setAttribute('aria-pressed',String(choice===button));
+  }
   saveProgress(progressStorage,riderProgress);
-  button.setAttribute('aria-pressed',String(!enabled));
+});
+$('item-upgrades').addEventListener('change',event=>{
+  const specialty=event.target.value;
+  if(!Object.hasOwn(ITEM_SPECIALTIES,specialty))return;
+  riderProgress.specialty=specialty;
+  $('specialty-description').textContent=ITEM_SPECIALTIES[specialty].description;
+  saveProgress(progressStorage,riderProgress);
 });
 $('mountain').addEventListener('change',e=>{const url=new URL(location.href);url.searchParams.set('mountain',resolveMountain(e.target.value));url.searchParams.delete('visual-qa');url.searchParams.delete('record-demo');location.assign(url.href);});
 $('start').addEventListener('click',startRun);$('again').addEventListener('click',startRun);$('choose').addEventListener('click',goIntro);
@@ -1127,15 +1136,21 @@ function usePatrolItem(slot=0){
   const type=patrol?.inventory[slot];
   if(mode!=='running'||!type)return;
   if(!patrol.use(skier,slot))return;
-  if(type==='pulse')snowEffects.snowBurst(skier.x,yAt(skier.x,skier.z),skier.z,42,.68);
+  if(type==='pulse'||type==='mist')snowEffects.snowBurst(skier.x,yAt(skier.x,skier.z),skier.z,64,type==='pulse'?.85:.43);
   toast(type==='avalanche'?'雪崩弹已向后抛出':`${PATROL_ITEMS[type].name}已释放`);
   updateUI();
 }
 function detonateChaseBomb(blast){
   const {x,z,radius}=blast;
-  snowEffects.snowBurst(x,yAt(x,z),z,radius>20?120:96,radius/20);
+  if(blast.type==='snowball'){
+    snowEffects.snowBurst(x,yAt(x,z),z,42,.58);
+    return null;
+  }
+  snowEffects.snowBurst(x,yAt(x,z),z,120,radius/20);
   const visitors=gear.npcs?traffic?.states.filter(state=>traffic.canBeKicked(state))??[]:[];
-  return kick.avalanche(blast,[...patrol.agents,...visitors],radius);
+  const hit=kick.avalanche(blast,[...patrol.agents,...visitors],radius);
+  toast(hit.size?`雪崩弹 · 掀飞 ${hit.size} 人`:'雪崩弹已引爆 · 落点附近无人');
+  return hit;
 }
 function playLaunchLanding({end,toY,heading}){
   snowEffects.kickBurst(end.x,toY,end.z,heading,true);

@@ -55,7 +55,7 @@
       <div class="metrics"><div><span id="altitude">—</span><small>海拔 M</small></div><div><span id="slope">—</span><small>坡度 °</small></div><div><span id="timer">0:00</span><small>滑行时间</small></div></div>
       <div class="stance-row"><span id="stance">直滑</span><small id="performance">— FPS</small></div><div id="freestyle" class="freestyle-line">特技 0 分</div><div class="session-foot"><span id="distance">0 m</span></div>
       </details>
-      <div id="challenge-status" class="freestyle-line"></div><div id="patrol-hud" hidden><div class="patrol-header"><small id="patrol-threat"></small><div id="wanted-stars" aria-label="追逐热度 0 星">☆☆☆☆☆</div></div><div class="patrol-health-row"><meter id="patrol-health" min="0" max="100" value="100" aria-label="生命值"></meter><small id="patrol-health-value">100/100</small></div><small id="chase-direction" hidden><span id="chase-arrow" aria-hidden="true">↑</span><span id="chase-direction-label"></span></small><small id="chase-branch" hidden>岔路 · 橙色虚线通往血包</small><small id="patrol-effect" hidden></small><div id="patrol-items" role="group" aria-label="道具栏"><button class="secondary" data-slot="0" disabled><kbd>1</kbd><span>空</span></button><button class="secondary" data-slot="1" disabled><kbd>2</kbd><span>空</span></button><button class="secondary" data-slot="2" disabled><kbd>3</kbd><span>空</span></button></div></div><button id="patrol-kick" class="secondary" hidden>踢开 · K</button><button id="board-lift" class="secondary" hidden>排队乘缆车 <kbd>B</kbd></button><div id="lift-controls" hidden><p id="lift-status" role="status"></p><small>拖动环视 · ↑ / ↓ 调整俯仰</small><button id="skip-lift" class="secondary">跳过行程，到上站</button><button id="cancel-lift" class="secondary">结束乘车，返回选线</button></div>
+      <div id="challenge-status" class="freestyle-line"></div><div id="patrol-hud" hidden><div class="patrol-header"><small id="patrol-threat"></small><div id="wanted-stars" aria-label="追逐热度 0 星">☆☆☆☆☆</div></div><div class="patrol-health-row"><meter id="patrol-health" min="0" max="100" value="100" aria-label="生命值"></meter><small id="patrol-health-value">100/100</small></div><small id="chase-direction" hidden><span id="chase-arrow" aria-hidden="true">↑</span><span id="chase-direction-label"></span></small><small id="chase-counter" role="status" hidden></small><small id="chase-branch" hidden>岔路 · 橙色虚线通往血包</small><small id="patrol-effect" hidden></small><div id="patrol-items" role="group" aria-label="道具栏"><button class="secondary" data-slot="0" disabled><kbd>1</kbd><span>空</span></button><button class="secondary" data-slot="1" disabled><kbd>2</kbd><span>空</span></button><button class="secondary" data-slot="2" disabled><kbd>3</kbd><span>空</span></button></div></div><button id="patrol-kick" class="secondary" hidden>踢开 · K</button><button id="board-lift" class="secondary" hidden>排队乘缆车 <kbd>B</kbd></button><div id="lift-controls" hidden><p id="lift-status" role="status"></p><small>拖动环视 · ↑ / ↓ 调整俯仰</small><button id="skip-lift" class="secondary">跳过行程，到上站</button><button id="cancel-lift" class="secondary">结束乘车，返回选线</button></div>
     </section>
     <div id="chase-feedback" aria-hidden="true" hidden></div>
     <div id="capture-clock" hidden aria-label="被追上倒计时"><b id="capture-number">3</b></div>
@@ -86,13 +86,13 @@
     <p id="talent-note"></p>
     <div id="talents" aria-label="天赋">
       <button type="button" class="secondary" data-talent="stamina" aria-pressed="true"><strong>耐力</strong><small>追逐伤害 −15%</small></button>
-      <button type="button" class="secondary" data-talent="recovery" aria-pressed="true"><strong>恢复</strong><small>血包回复 +10</small></button>
-      <button type="button" class="secondary" data-talent="agility" aria-pressed="true"><strong>敏捷</strong><small>踢开冷却 −0.75 秒</small></button>
+      <button type="button" class="secondary" data-talent="recovery" aria-pressed="false"><strong>恢复</strong><small>血包回复 +10</small></button>
+      <button type="button" class="secondary" data-talent="agility" aria-pressed="false"><strong>敏捷</strong><small>踢开冷却 −0.75 秒</small></button>
     </div>
-    <details><summary>道具强化</summary><ul id="item-upgrades">
-      <li data-item="banana"></li><li data-item="shield"></li><li data-item="boost"></li>
-      <li data-item="decoy"></li><li data-item="pulse"></li><li data-item="avalanche"></li>
-    </ul></details>
+    <label class="mountain-picker">道具强化<select id="item-upgrades">
+      <option value="duration">持续时间</option><option value="quantity">数量</option><option value="power">威力</option>
+    </select></label>
+    <p id="specialty-description"></p>
     <button id="progress-close" class="start">完成</button>
   </dialog>
   <dialog id="pause-dialog"><h2>已暂停</h2><button id="resume" class="start">继续滑行 ↗</button><button id="pause-restart" class="secondary">从起点重新开始</button><button id="pause-exit" class="secondary">返回选线</button></dialog>

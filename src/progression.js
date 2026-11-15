@@ -5,7 +5,13 @@ export const TALENTS={
   recovery:{name:'恢复',description:'血包额外回复 10 点生命'},
   agility:{name:'敏捷',description:'踢开基础冷却缩短 0.75 秒'},
 };
-export const DEFAULT_TALENTS=Object.freeze(Object.keys(TALENTS));
+export const DEFAULT_TALENTS=Object.freeze(['stamina']);
+
+export const ITEM_SPECIALTIES={
+  duration:{name:'持续时间',description:'延长增益与雪雾'},
+  quantity:{name:'数量',description:'香蕉皮和雪球各多投一个'},
+  power:{name:'威力',description:'扩大雪浪与雪崩范围，雪球减速更久'},
+};
 
 export function levelProgress(xp){
   let level=1,needed=60;
@@ -17,9 +23,11 @@ export function readProgress(storage){
   try{
     const saved=JSON.parse(storage?.getItem(KEY));
     const xp=Number.isFinite(saved?.xp)?Math.max(0,Math.min(1_000_000,Math.floor(saved.xp))):0;
-    const talents=DEFAULT_TALENTS.filter(talent=>!Array.isArray(saved?.talents)||saved.talents.includes(talent));
-    return {xp,talents};
-  }catch{return {xp:0,talents:[...DEFAULT_TALENTS]};}
+    const talent=Object.hasOwn(TALENTS,saved?.talent)?saved.talent
+      :Array.isArray(saved?.talents)&&saved.talents.find(talent=>Object.hasOwn(TALENTS,talent));
+    const specialty=Object.hasOwn(ITEM_SPECIALTIES,saved?.specialty)?saved.specialty:'duration';
+    return {xp,talent:talent||DEFAULT_TALENTS[0],specialty};
+  }catch{return {xp:0,talent:DEFAULT_TALENTS[0],specialty:'duration'};}
 }
 
 export function saveProgress(storage,profile){

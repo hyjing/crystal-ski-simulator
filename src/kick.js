@@ -82,7 +82,7 @@ export class SkierKick {
     for(const target of targets){
       const point=position(target),range=distance(point,player);
       if(target.launch||range>radius||
-        Math.abs(this.surface(point.x,point.z)-ground)>10)continue;
+        Math.abs(this.surface(point.x,point.z)-ground)>14+range*.35)continue;
       const force=1-range/radius;
       const heading=range>.1?Math.atan2(point.x-player.x,point.z-player.z):player.heading;
       this.launch(target,heading,12+force*10,3.5+force*2.5,1.05);

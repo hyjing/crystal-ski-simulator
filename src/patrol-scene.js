@@ -37,8 +37,20 @@ export class PatrolScene {
     this.beacon.visible=false;
     this.root.add(this.beacon);
     this.rings=[];
-    this.ringGeometry=new THREE.RingGeometry(.92,1,48).rotateX(-Math.PI/2);
+    this.ringGeometry=new THREE.RingGeometry(.78,1,64,2).rotateX(-Math.PI/2);
     this.pulseShape=this.ringGeometry.attributes.position.array;
+    const size=32, pixels=new Uint8Array(size*size*4);
+    for(let y=0;y<size;y++)for(let x=0;x<size;x++){
+      const i=(y*size+x)*4,edge=Math.hypot(x-15.5,y-15.5)/15.5;
+      pixels.set([255,255,255,Math.round(255*Math.max(0,1-edge)**2)],i);
+    }
+    const mistTexture=new THREE.DataTexture(pixels,size,size);
+    mistTexture.needsUpdate=true;
+    this.mistPuffs=Array.from({length:9},()=>{
+      const puff=new THREE.Sprite(new THREE.SpriteMaterial({map:mistTexture,color:'#d5e4ff',transparent:true,depthWrite:false}));
+      this.root.add(puff);
+      return puff;
+    });
     this.shield=new THREE.Mesh(new THREE.SphereGeometry(1.05,20,12),
       new THREE.MeshBasicMaterial({color:PATROL_ITEMS.shield.color,wireframe:true,transparent:true,opacity:.25,depthWrite:false}));
     this.root.add(this.shield);
@@ -98,7 +110,8 @@ export class PatrolScene {
       const x=THREE.MathUtils.lerp(bomb.x,bomb.end.x,t),z=THREE.MathUtils.lerp(bomb.z,bomb.end.z,t);
       mesh.position.set(x,this.surface(x,z)+.24+(1-t)*(bomb.height+1.2+10*t),z);
       mesh.rotation.set(t*6,0,t*3);
-      mesh.scale.setScalar(.6);
+      mesh.scale.setScalar(bomb.type==='snowball'?.42:.69);
+      mesh.material=this.materials[bomb.type];
     });
     this.shield.visible=Boolean(player&&effects.shield);
     if(this.shield.visible){
@@ -116,11 +129,21 @@ export class PatrolScene {
       this.beacon.rotation.y=this.phase*8;
       this.beacon.scale.setScalar(1.35+.3*Math.sin(this.phase*16));
     }
+    const mist=effects.mist;
+    this.mistPuffs.forEach((puff,i)=>{
+      puff.visible=Boolean(mist);
+      if(!mist)return;
+      const age=time-mist.start,angle=i*2.4;
+      const offset=(i%4)*2.7;
+      puff.position.set(mist.x+Math.cos(angle)*offset+age*.75,this.surface(mist.x,mist.z)+1.7+i%3*.7,mist.z+Math.sin(angle)*offset);
+      puff.scale.set(10+age*2,5+age,1);
+      puff.material.opacity=.83*Math.min(1,(mist.until-time)*3);
+    });
     this.updateInstances(this.rings,[...waves,...blasts],()=>{
       const geometry=this.ringGeometry.clone();
       geometry.attributes.position.setUsage(THREE.DynamicDrawUsage);
       const ring=new THREE.Mesh(geometry,new THREE.MeshBasicMaterial({
-        side:THREE.DoubleSide,transparent:true,depthWrite:false,
+        side:THREE.DoubleSide,transparent:true,depthWrite:false,toneMapped:false,
       }));
       ring.frustumCulled=false;
       return ring;
@@ -134,11 +157,11 @@ export class PatrolScene {
       const positions=ring.geometry.attributes.position;
       for(let i=0;i<positions.count;i++){
         const dx=this.pulseShape[i*3]*radius,dz=this.pulseShape[i*3+2]*radius;
-        positions.setXYZ(i,dx,this.surface(x+dx,z+dz)-ground+.16,dz);
+        positions.setXYZ(i,dx,this.surface(x+dx,z+dz)-ground+.55+(1-progress)*.48,dz);
       }
       positions.needsUpdate=true;
-      ring.material.color.set(blast?'#fff1d2':PATROL_ITEMS.pulse.color);
-      ring.material.opacity=(1-progress)*(blast?.95:.75);
+      ring.material.color.set(wave.type==='avalanche'?'#fff1d2':'#65deff');
+      ring.material.opacity=(1-progress)*.85+.11;
     });
     this.clock+=dt;
     const pose=this.clock>=.05;
@@ -150,7 +173,12 @@ export class PatrolScene {
       actor.visible=Boolean(agent);
       if(!agent)continue;
       const {x,z,heading,speed,bank,launch}=agent;
-      actor.userData.chaseMarker.visible=!launch;
+      const marker=actor.userData.chaseMarker;
+      marker.visible=!launch;
+      const charging=this.run.dash?.agent===agent;
+      marker.material.color.set(charging?'#ffb34e':agent.slowUntil>time?'#67ddff':'#f03652');
+      const scale=charging?1.55+.25*Math.sin(this.phase*21):1;
+      marker.scale.set(.25*scale,.34*scale,.25*scale);
       if(launch){
         const t=launch.progress;
         poseKickedSkier(actor,launch,this.surface);

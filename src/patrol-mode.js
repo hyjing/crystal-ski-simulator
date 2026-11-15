@@ -15,15 +15,19 @@ export const MAX_HEALTH = 100;
 export const DAMAGE_PER_SECOND = 12.5;
 const MEDKIT_HEAL = 35;
 const TRAP_RADIUS = 2.1;
-export const ITEM_UPGRADES={banana:[2,'一次丢两片'],shield:[2,'护盾延长 0.7 秒'],boost:[2,'加速延长 0.25 秒'],decoy:[2,'信标延长 0.9 秒'],pulse:[3,'雪浪半径增加 4 米'],avalanche:[3,'爆炸半径增加 5 米']};
+export const ITEM_UPGRADE_LEVEL=2;
+export const DASH_WARNING=.85;
+const DASH_DURATION=.85;
 const REPLACEMENT_DELAY = 1.2;
 export const ITEM_CAPACITY = 3;
 export const PATROL_ITEMS = {
   boost: {name:'加速充能',color:'#ffe16d',symbol:'»',duration:.85,description:'短时间猛冲，最高额外加速约 55 km/h'},
   decoy: {name:'幻影信标',color:'#c9a4ff',symbol:'◇',duration:2.1,radius:120,description:'120 米内的追赶者立即急刹，转向信标'},
   shield: {name:'护盾',color:'#83dcff',symbol:'+',duration:1.7,radius:6,description:'阻止截停，并弹开靠近的追赶者'},
-  pulse: {name:'雪浪脉冲',color:'#b0fff0',symbol:'◎',duration:.32,radius:17,description:'释放向外扩散的雪浪'},
+  pulse: {name:'雪浪脉冲',color:'#b0fff0',symbol:'◎',duration:.62,radius:19,description:'释放向外扩散的雪浪'},
   avalanche: {name:'雪崩弹',color:'#ff986e',symbol:'✹',duration:AVALANCHE_DURATION,description:'抛向身后，落地掀飞附近雪友'},
+  snowball: {name:'冰雪球',color:'#8cd9ff',symbol:'●',duration:.65,description:'向后投掷，减速落点附近的追赶者'},
+  mist: {name:'雪雾弹',color:'#e3e6f7',symbol:'☁',duration:1.8,radius:13,description:'留下一团雪雾，暂时切断追踪'},
   banana: {name:'香蕉皮',color:'#ffcd36',symbol:'⌣',duration:12,description:'放在身后，绊倒第一个滑过的追赶者'},
 };
 export const MEDKIT = {name:'血包',color:'#f95178'};
@@ -38,7 +42,7 @@ function routePoint(route, distance, offset=0) {
 }
 
 export class PatrolRun {
-  constructor(route, clear, pathClear=clear, talents=DEFAULT_TALENTS,level=1) {
+  constructor(route, clear, pathClear=clear, talents=DEFAULT_TALENTS,level=1,specialty='duration') {
     this.route = route;
     this.clear = clear;
     this.pathClear = pathClear;
@@ -55,7 +59,9 @@ export class PatrolRun {
     this.bombs=[];
     this.blasts=[];
     this.waves=[];
-    this.level=level;
+    this.specialty=level>=ITEM_UPGRADE_LEVEL?specialty:null;
+    this.nextDash=7;
+    this.dash=null;
     this.evadeUntil = 0;
     this.outcome = '';
     this.furthest = route.spawn.distance;
@@ -68,9 +74,9 @@ export class PatrolRun {
     this.effects={};
     this.nextIncident = 0;
     this.nextAgent = 0;
-    const types = ['boost','pulse','decoy','shield','avalanche','banana','boost','banana'];
+    const types = ['boost','pulse','decoy','shield','avalanche','banana','snowball','mist','boost'];
     this.pickups = [];
-    for(let d=route.spawn.distance+115;d<route.length-90;d+=180){
+    for(let d=route.spawn.distance+115;d<route.length-90;d+=155){
       const side=this.pickups.length%2?1:-1;
       const point=[side*3,-side*3,0].map(offset=>routePoint(route,d,offset)).find(clear);
       if(point)this.pickups.push({...point,type:types[this.pickups.length%types.length],taken:false});
@@ -151,25 +157,30 @@ export class PatrolRun {
     const type=this.inventory[slot];
     if(!type||this.outcome||player.crashRemaining)return false;
     this.inventory.splice(slot,1);
-    const upgraded=this.level>=ITEM_UPGRADES[type][0];
+    const quantity=this.specialty==='quantity',power=this.specialty==='power';
     const {x,z,heading}=player;
     const travel=Math.hypot(player.vx,player.vz)>2?Math.atan2(player.vx,player.vz):heading;
     const behind=(distance,offset=0)=>({x:x-Math.sin(travel)*distance+Math.cos(travel)*offset,
       z:z-Math.cos(travel)*distance-Math.sin(travel)*offset});
     if(type==='banana'){
-      const spots=upgraded?[[3,-1.55],[6,1.55]]:[[3,0]];
+      const spots=quantity?[[3,-1.55],[6,1.55]]:[[3,0]];
       for(const [distance,offset] of spots){
         const point=[behind(distance,offset),behind(distance*.55,offset),{x,z}].find(this.clear)??{x,z};
         this.traps.push({...point,until:this.time+PATROL_ITEMS.banana.duration});
       }
-    }else if(type==='avalanche'){
-      const end=[behind(12),behind(8),behind(4),{x,z}].find(this.clear)??{x,z};
-      this.bombs.push({x,z,end,start:this.time,until:this.time+.42,
-        height:player.airborne?Math.max(0,player.airClearance||0):0,radius:AVALANCHE_RADIUS+(upgraded?5:0),heading:travel});
+    }else if(type==='avalanche'||type==='snowball'){
+      const icy=type==='snowball';
+      const offsets=icy&&quantity?[-3,3]:[0];
+      for(const offset of offsets){
+        const end=[behind(icy?14:9,offset),behind(6,offset),behind(3),{x,z}].find(this.clear)??{x,z};
+        this.bombs.push({type,x,z,end,start:this.time,until:this.time+(icy?.26:.35),
+          height:player.airborne?Math.max(0,player.airClearance||0):0,
+          radius:icy?9:AVALANCHE_RADIUS+4+(power?5:0),heading:travel,slow:power?3.1:2.2});
+      }
     }else{
-      const duration=PATROL_ITEMS[type].duration+(upgraded?({boost:.25,decoy:.9,shield:.7}[type]??0):0);
+      const duration=PATROL_ITEMS[type].duration+(this.specialty==='duration'?({boost:.3,decoy:1,shield:.8,mist:1}[type]??0):0);
       const effect={type,start:this.time,until:this.time+duration,duration,x,z,heading};
-      if(type==='pulse')this.waves.push({...effect,radius:PATROL_ITEMS.pulse.radius+(upgraded?4:0),hit:new Set()});
+      if(type==='pulse')this.waves.push({...effect,radius:PATROL_ITEMS.pulse.radius+(power?5:0),hit:new Set()});
       else{
         if(type!=='decoy'&&this.effects[type])effect.until=this.effects[type].until+duration;
         this.effects[type]=effect;
@@ -197,17 +208,27 @@ export class PatrolRun {
       const bomb=this.bombs[i];
       if(this.time<bomb.until){i++;continue;}
       this.bombs.splice(i,1);
-      const blast={...bomb.end,heading:bomb.heading,radius:bomb.radius,start:this.time,
-        until:this.time+AVALANCHE_DURATION,duration:AVALANCHE_DURATION};
+      const duration=PATROL_ITEMS[bomb.type].duration;
+      const blast={...bomb.end,type:bomb.type,heading:bomb.heading,radius:bomb.radius,start:this.time,
+        until:this.time+duration,duration};
       this.blasts.push(blast);
+      if(bomb.type==='snowball'){
+        for(const agent of this.agents){
+          if(!agent.launch&&range(agent,blast)<=blast.radius&&Math.abs(surface(agent.x,agent.z)-surface(blast.x,blast.z))<8){
+            agent.slowUntil=this.time+bomb.slow;
+            agent.speed*=.65;
+          }
+        }
+      }
       const hit=detonate(blast);
       if(hit&&this.agents.some(agent=>hit.has(agent)))this.contact=0;
     }
     for(const wave of this.waves){
       const radius=wave.radius*clamp((this.time-wave.start)/wave.duration,0,1);
       for(const agent of this.agents){
-        if(agent.launch||wave.hit.has(agent)||range(agent,wave)>radius||
-          Math.abs(surface(agent.x,agent.z)-surface(wave.x,wave.z))>7)continue;
+        const gap=range(agent,wave);
+        if(agent.launch||wave.hit.has(agent)||gap>radius||
+          Math.abs(surface(agent.x,agent.z)-surface(wave.x,wave.z))>7+gap*.4)continue;
         wave.hit.add(agent);
         this.repel(agent,wave,.9,36,wave.duration);
         if(range(agent,player)<=CAPTURE_RADIUS)this.contact=0;
@@ -251,6 +272,23 @@ export class PatrolRun {
 
     const lure=this.effects.decoy;
     const shield=Boolean(this.effects.shield);
+    const mist=this.effects.mist;
+    const obscured=mist&&range(mist,player)<PATROL_ITEMS.mist.radius;
+    const dash=this.dash;
+    if(dash&&(this.time>=dash.until||shield||obscured||lure||dash.agent.launch||
+      dash.agent.stunUntil>this.time||dash.agent.slowUntil>this.time||!this.agents.includes(dash.agent)))this.dash=null;
+    if(!this.dash&&this.stars>=3&&this.time>=this.nextDash&&!shield&&!obscured&&!lure){
+      const agent=this.agents.find(agent=>{
+        const gap=range(agent,player);
+        return gap>=7&&gap<=25&&!agent.launch&&!(agent.stunUntil>this.time)&&!(agent.slowUntil>this.time)&&
+          Math.abs(surface(agent.x,agent.z)-surface(player.x,player.z))<8;
+      });
+      if(agent){
+        const at=this.time+DASH_WARNING;
+        this.dash={agent,at,until:at+DASH_DURATION};
+        this.nextDash=this.time+8;
+      }
+    }
     let threat=Infinity,contactDistance=Infinity;
     const playerHeight=surface(player.x,player.z);
     for(const agent of this.agents){
@@ -286,7 +324,10 @@ export class PatrolRun {
       const dx=target.x-agent.x,dz=target.z-agent.z;
       const aim=Math.atan2(dx,dz);
       const delta=turnAngle(agent.heading,aim);
-      const pace=distracted?(lureDistance<7?0:12):clamp(4+this.stars*1.45+player.speed*.78,12,49);
+      const charging=this.dash?.agent===agent&&this.time>=this.dash.at;
+      const normal=clamp(4+this.stars*1.45+player.speed*.78,12,49);
+      const pace=distracted?(lureDistance<7?0:12):obscured?normal*.58
+        :agent.slowUntil>this.time?normal*.46:charging?Math.min(54,normal+12):normal;
       agent.speed+=(pace-agent.speed)*Math.min(1,dt*(distracted?9:1.7));
       const step=agent.speed*dt;
       const turnRate=distracted?3.5:Math.min(1.6,Math.max(5,agent.speed)/16);
@@ -336,7 +377,7 @@ export class PatrolRun {
       }
     }
     const inReach = this.stars > 0 && contactDistance <= CAPTURE_RADIUS &&
-      !player.airborne && this.time>=this.evadeUntil && !shield;
+      !player.airborne && this.time>=this.evadeUntil && !shield && !obscured;
     this.contact = inReach ? this.contact + dt : 0;
     if(inReach){
       this.health=Math.max(0,this.health-this.damageRate*dt);
