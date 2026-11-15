@@ -240,3 +240,11 @@ summary:focus-visible { outline: 3px solid #91b741; outline-offset: 3px; }
 }
 
 #chase-counter{color:#793c0f;font-size:11px;font-weight:700}
+
+#chase-hit{position:fixed;z-index:7;pointer-events:none;left:50%;top:calc(50% + clamp(40px,9vmin,68px));transform:translateX(-50%);display:grid;justify-items:center;gap:5px;color:#f9fbff;white-space:nowrap}
+#chase-hit[data-result="down"]{color:#ffd188}
+.chase-hit-cross{width:24px;height:24px;position:relative;filter:drop-shadow(0 0 3px #182334)}
+.chase-hit-cross::before,.chase-hit-cross::after{content:"";position:absolute;top:11px;left:1px;width:22px;height:3px;background:linear-gradient(90deg,currentColor 0 36%,transparent 36% 64%,currentColor 64% 100%)}
+.chase-hit-cross::before{transform:rotate(45deg)}
+.chase-hit-cross::after{transform:rotate(-45deg)}
+#chase-hit-label{padding:4px 10px;border:1px solid currentColor;border-radius:4px;background:#182334dd;font-size:12px;letter-spacing:.05em}

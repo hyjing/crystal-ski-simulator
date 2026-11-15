@@ -201,6 +201,7 @@ export class PatrolRun {
   step(dt,player,offscreen=()=>true,surface=()=>0,collision=()=>null,detonate=()=>null){
     if(this.outcome)return null;
     this.lastTrip=null;
+    this.skillHits={pulse:0,snowball:0,shield:0};
     this.time+=dt;
     this.traps=this.traps.filter(trap=>this.time<trap.until);
     this.blasts=this.blasts.filter(blast=>this.time<blast.until);
@@ -217,6 +218,7 @@ export class PatrolRun {
           if(!agent.launch&&range(agent,blast)<=blast.radius&&Math.abs(surface(agent.x,agent.z)-surface(blast.x,blast.z))<8){
             agent.slowUntil=this.time+bomb.slow;
             agent.speed*=.65;
+            this.skillHits.snowball++;
           }
         }
       }
@@ -230,6 +232,7 @@ export class PatrolRun {
         if(agent.launch||wave.hit.has(agent)||gap>radius||
           Math.abs(surface(agent.x,agent.z)-surface(wave.x,wave.z))>7+gap*.4)continue;
         wave.hit.add(agent);
+        this.skillHits.pulse++;
         this.repel(agent,wave,.9,36,wave.duration);
         if(range(agent,player)<=CAPTURE_RADIUS)this.contact=0;
       }
@@ -297,6 +300,7 @@ export class PatrolRun {
       if(shield&&separation<=PATROL_ITEMS.shield.radius&&(agent.stunUntil??0)<=this.time&&
         Math.abs(surface(agent.x,agent.z)-playerHeight)<2){
         this.repel(agent,player,.55,32,.28);
+        this.skillHits.shield++;
       }
       if(agent.stunUntil>this.time){
         if(agent.repelUntil>this.time){

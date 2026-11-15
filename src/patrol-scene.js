@@ -6,6 +6,20 @@ import {fallAnimation} from './npc-routines.js';
 import {PATROL_ITEMS,MEDKIT} from './patrol-mode.js';
 import {poseKickedSkier} from './kick.js';
 
+function statusIcon(symbol,color){
+  const canvas=document.createElement('canvas');
+  canvas.width=canvas.height=64;
+  const ctx=canvas.getContext('2d');
+  ctx.fillStyle='#142639';
+  ctx.beginPath();ctx.arc(32,32,26,0,Math.PI*2);ctx.fill();
+  ctx.strokeStyle=color;ctx.lineWidth=3;ctx.stroke();
+  ctx.fillStyle=color;ctx.textAlign='center';ctx.textBaseline='middle';
+  ctx.font='bold 30px system-ui';ctx.fillText(symbol,32,33);
+  const texture=new THREE.CanvasTexture(canvas);
+  texture.colorSpace=THREE.SRGBColorSpace;
+  return texture;
+}
+
 export class PatrolScene {
   constructor(scene,surface,gradient){
     this.root=new THREE.Group();
@@ -54,6 +68,10 @@ export class PatrolScene {
     this.shield=new THREE.Mesh(new THREE.SphereGeometry(1.05,20,12),
       new THREE.MeshBasicMaterial({color:PATROL_ITEMS.shield.color,wireframe:true,transparent:true,opacity:.25,depthWrite:false}));
     this.root.add(this.shield);
+    this.statusIcons={
+      chase:statusIcon('◆','#ff8192'),dash:statusIcon('!', '#ffc26c'),
+      slow:statusIcon('❄','#92e6ff'),stunned:statusIcon('×','#fff4ad'),down:statusIcon('KO','#ff9d87'),
+    };
     for(let i=0;i<5;i++){
       const actor=createAthleteRig(this.root);
       actor.visible=false;
@@ -62,10 +80,9 @@ export class PatrolScene {
         applyGear(actor,{...GEAR_PRESETS.rust,jacket:'#bd243d',pants:'#202938',helmet:'#f2f2ef'});
         actor.traverse(o=>{if(o.isMesh)o.castShadow=false;});
       }).catch(()=>{});
-      const tag=new THREE.Mesh(this.tokenGeometry,new THREE.MeshBasicMaterial({color:'#f03652'}));
-      tag.position.set(0,3.65,0);
-      tag.scale.set(.25,.34,.25);
-      actor.add(tag);
+      const tag=new THREE.Sprite(new THREE.SpriteMaterial({map:this.statusIcons.chase,depthWrite:false,toneMapped:false}));
+      tag.visible=false;
+      this.root.add(tag);
       actor.userData.chaseMarker=tag;
     }
   }
@@ -171,14 +188,18 @@ export class PatrolScene {
       const appeared=actor.userData.chaseAgent!==agent;
       actor.userData.chaseAgent=agent;
       actor.visible=Boolean(agent);
+      const marker=actor.userData.chaseMarker;
+      marker.visible=Boolean(agent);
       if(!agent)continue;
       const {x,z,heading,speed,bank,launch}=agent;
-      const marker=actor.userData.chaseMarker;
-      marker.visible=!launch;
       const charging=this.run.dash?.agent===agent;
-      marker.material.color.set(charging?'#ffb34e':agent.slowUntil>time?'#67ddff':'#f03652');
-      const scale=charging?1.55+.25*Math.sin(this.phase*21):1;
-      marker.scale.set(.25*scale,.34*scale,.25*scale);
+      const stunned=agent.stunUntil>time;
+      const status=launch||stunned&&agent.fallDuration?'down':stunned?'stunned':charging?'dash':agent.slowUntil>time?'slow':'chase';
+      marker.material.map=this.statusIcons[status];
+      const scale=charging?1.05+.15*Math.sin(this.phase*21):status==='chase'?.58:.85;
+      marker.scale.setScalar(scale);
+      const anchor=launch??agent;
+      marker.position.set(anchor.x,this.surface(anchor.x,anchor.z)+(launch?.height??0)+(status==='down'?1.55:2.35),anchor.z);
       if(launch){
         const t=launch.progress;
         poseKickedSkier(actor,launch,this.surface);

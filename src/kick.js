@@ -6,6 +6,7 @@ export const AVALANCHE_RADIUS = 20;
 export const AVALANCHE_DURATION = .95;
 const COOLDOWN = 5;
 const WINDUP = .16;
+const RECOVERY = .57;
 const FLIGHT = .86;
 const SETTLE = .22;
 const position = target => target.point ?? target;
@@ -19,33 +20,32 @@ export class SkierKick {
   }
 
   reset(talents=DEFAULT_TALENTS) {
-    if(this.action?.flight) delete this.action.target.launch;
-    for(const target of this.burstTargets??[])delete target.launch;
-    this.burstTargets=new Set();
+    for(const target of this.flights?.keys()??[])delete target.launch;
+    this.flights=new Map();
     this.time=0;
     this.readyAt=0;
+    this.recoverAt=0;
     this.charge=0;
     this.baseCooldown=COOLDOWN-(talents.includes('agility')?.75:0);
     this.action=null;
   }
 
-  get cooldown(){return Math.max(0,this.readyAt-this.time);}
+  get cooldown(){return this.charge?0:Math.max(0,this.readyAt-this.time);}
+  get ready(){return !this.cooldown&&this.time>=this.recoverAt;}
 
   chargeLanding(event){
     if(event?.type!=='land'||event.quality!=='clean'||!(event.airTime>=.35))return 0;
     const earned=event.rotation>=180||event.grab?2:1;
-    const applied=Math.min(earned,this.cooldown);
-    this.readyAt-=applied;
-    const stored=Math.min(3-this.charge,earned-applied);
+    const stored=Math.min(3-this.charge,earned);
     this.charge+=stored;
-    return applied+stored;
+    return stored;
   }
 
   get pose(){
     if(!this.action)return null;
     const age=this.time-this.action.start;
-    if(age>=.57)return null;
-    const amount=age<WINDUP?age/WINDUP:Math.max(0,1-(age-WINDUP)/.41);
+    if(age>=RECOVERY)return null;
+    const amount=age<WINDUP?age/WINDUP:Math.max(0,1-(age-WINDUP)/(RECOVERY-WINDUP));
     return {side:this.action.side,amount:amount*amount*(3-2*amount)};
   }
 
@@ -55,15 +55,16 @@ export class SkierKick {
   }
 
   start(player,targets){
-    if(this.cooldown||player.airborne||player.crashRemaining)return false;
+    if(!this.ready||player.airborne||player.crashRemaining)return false;
     const target=targets.filter(agent=>!agent.launch&&this.inReach(player,position(agent),KICK_RANGE))
       .sort((a,b)=>distance(position(a),player)-distance(position(b),player))[0];
     if(!target)return false;
     const point=position(target);
     const across=(point.x-player.x)*Math.cos(player.heading)-(point.z-player.z)*Math.sin(player.heading);
     this.action={target,start:this.time,side:across<0?-1:1,resolved:false};
-    this.readyAt=this.time+this.baseCooldown-this.charge;
-    this.charge=0;
+    if(this.charge)this.charge--;
+    this.recoverAt=this.time+RECOVERY;
+    this.readyAt=this.charge?0:this.time+this.baseCooldown;
     return true;
   }
 
@@ -72,8 +73,10 @@ export class SkierKick {
     const end=[1,.8,.58,.36].map(scale=>({
       x:x+Math.sin(heading)*reach*scale,z:z+Math.cos(heading)*reach*scale,
     })).find(this.clear)??start;
-    return target.launch={start,end,x,z,fromY:this.surface(x,z),
+    const flight=target.launch={start,end,x,z,fromY:this.surface(x,z),
       toY:this.surface(end.x,end.z),heading,at:this.time,progress:0,height:0,lift,duration};
+    this.flights.set(target,flight);
+    return flight;
   }
 
   avalanche(player,targets,radius=AVALANCHE_RADIUS){
@@ -86,18 +89,16 @@ export class SkierKick {
       const force=1-range/radius;
       const heading=range>.1?Math.atan2(point.x-player.x,point.z-player.z):player.heading;
       this.launch(target,heading,12+force*10,3.5+force*2.5,1.05);
-      this.burstTargets.add(target);
       hit.add(target);
     }
     return hit;
   }
 
-  step(dt,player,eligible,onBurstLand=()=>{}){
+  step(dt,player,eligible,onLand=()=>{}){
     this.time+=dt;
-    for(const target of this.burstTargets){
-      const flight=target.launch;
-      if(flight&&this.advanceFlight(flight))onBurstLand(flight);
-      if(!flight||flight.finished)this.burstTargets.delete(target);
+    for(const [target,flight] of this.flights){
+      if(this.advanceFlight(flight))onLand(flight);
+      if(flight.finished)this.flights.delete(target);
     }
     const action=this.action;
     if(!action)return null;
@@ -111,11 +112,9 @@ export class SkierKick {
       const dx=point.x-player.x,dz=point.z-player.z,r=Math.hypot(dx,dz);
       const heading=r>.1?Math.atan2(dx+Math.cos(player.heading)*side*r*.7,
         dz-Math.sin(player.heading)*side*r*.7):player.heading+side*Math.PI/2;
-      action.flight=this.launch(target,heading);
-      return {type:'hit',target,flight:action.flight};
+      return {type:'hit',target,flight:this.launch(target,heading)};
     }
-    const flight=action.flight;
-    return flight&&this.advanceFlight(flight)?{type:'land',flight}:null;
+    return null;
   }
 
   advanceFlight(flight){

@@ -63,20 +63,34 @@ test('airtime resets capture and a clean landing grants a brief grace period',()
   assert.ok(run.captureRemaining>2.8);
 });
 
-test('clean landings bank charge or shorten an active kick cooldown',()=>{
+test('stored charges pay for separate kicks and preserve an earlier target’s flight',()=>{
   const kick=new SkierKick(()=>0,()=>true),player=makePlayer(100);
   kick.reset([]);
   const landing={type:'land',quality:'clean',airTime:.6};
+  const first={x:1,z:98},second={x:-1,z:98},eligible=()=>true;
   assert.equal(kick.chargeLanding({...landing,quality:'recover'}),0);
   assert.equal(kick.chargeLanding({...landing,airTime:.2}),0);
-  assert.equal(kick.chargeLanding(landing),1);
   assert.equal(kick.chargeLanding({...landing,grab:true}),2);
-  assert.equal(kick.chargeLanding(landing),0);
-  assert.ok(kick.start(player,[{x:1,z:98}]));
-  assert.equal(kick.cooldown,2);
-  assert.equal(kick.charge,0);
-  assert.equal(kick.chargeLanding({...landing,rotation:180}),2);
+  assert.equal(kick.start(player,[]),false);
+  assert.equal(kick.charge,2);
+  assert.ok(kick.start(player,[first]));
+  assert.equal(kick.charge,1);
   assert.equal(kick.cooldown,0);
+  assert.equal(kick.start(player,[second]),false);
+  assert.equal(kick.step(.17,player,eligible).target,first);
+  kick.step(.42,player,eligible);
+  assert.ok(kick.start(player,[second]));
+  assert.equal(kick.charge,0);
+  assert.equal(kick.cooldown,5);
+  assert.equal(kick.step(.17,player,eligible).target,second);
+  assert.ok(first.launch.progress<1&&second.launch.progress===0);
+  const landings=[];
+  kick.step(1.2,player,eligible,flight=>landings.push(flight));
+  assert.deepEqual(landings,[first.launch,second.launch]);
+  assert.equal(kick.chargeLanding(landing),1);
+  assert.ok(kick.ready);
+  assert.equal(kick.chargeLanding({...landing,rotation:180}),2);
+  assert.equal(kick.chargeLanding(landing),0);
 });
 
 test('chase escalates at new sections, spawns behind, and catches a skier who stays in reach',()=>{
@@ -372,7 +386,9 @@ test('the kick targets the closest regular snow visitor and uses the default coo
   assert.equal(kick.step(.43,player,eligible),null);
   assert.ok(visitor.launch.height>3.5);
   assert.ok(visitor.launch.x>4&&visitor.launch.z<93);
-  assert.equal(kick.step(.44,player,eligible).type,'land');
+  const landings=[];
+  kick.step(.44,player,eligible,flight=>landings.push(flight));
+  assert.deepEqual(landings,[visitor.launch]);
   assert.equal(visitor.launch.height,0);
   kick.step(4.2,player,eligible);
   assert.ok(visitor.launch.finished);
