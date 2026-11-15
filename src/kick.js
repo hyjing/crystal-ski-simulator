@@ -79,13 +79,14 @@ export class SkierKick {
     return flight;
   }
 
-  avalanche(player,targets,radius=AVALANCHE_RADIUS){
+  avalanche(player,targets,radius=AVALANCHE_RADIUS,blocked=()=>false){
     const ground=this.surface(player.x,player.z);
     const hit=new Set();
     for(const target of targets){
       const point=position(target),range=distance(point,player);
       if(target.launch||range>radius||
         Math.abs(this.surface(point.x,point.z)-ground)>14+range*.35)continue;
+      if(blocked(target))continue;
       const force=1-range/radius;
       const heading=range>.1?Math.atan2(point.x-player.x,point.z-player.z):player.heading;
       this.launch(target,heading,12+force*10,3.5+force*2.5,1.05);
@@ -94,7 +95,7 @@ export class SkierKick {
     return hit;
   }
 
-  step(dt,player,eligible,onLand=()=>{}){
+  step(dt,player,eligible,onLand=()=>{},blocked=()=>false){
     this.time+=dt;
     for(const [target,flight] of this.flights){
       if(this.advanceFlight(flight))onLand(flight);
@@ -109,6 +110,7 @@ export class SkierKick {
       if(player.airborne||player.crashRemaining||!eligible(target)||!this.inReach(player,point,KICK_RANGE+.5)){
         return {type:'miss'};
       }
+      if(blocked(target))return {type:'blocked'};
       const dx=point.x-player.x,dz=point.z-player.z,r=Math.hypot(dx,dz);
       const heading=r>.1?Math.atan2(dx+Math.cos(player.heading)*side*r*.7,
         dz-Math.sin(player.heading)*side*r*.7):player.heading+side*Math.PI/2;

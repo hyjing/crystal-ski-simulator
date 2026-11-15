@@ -1,9 +1,9 @@
 import {qualityScale,adaptQuality} from './render-quality.js';
 import {RunGhost,ghostKey,readGhost,ghostPosition} from './run-ghost.js';
-import {ITEM_SPECIALTIES,TALENTS,RunExperience,levelProgress,readProgress,saveProgress} from './progression.js';
+import {ITEM_UPGRADES,ITEM_CAPACITY,ITEM_STACK_LIMIT,itemStacks,canStoreItem,KNOCKDOWN_XP,KNOCKDOWN_COINS,TALENTS,RunExperience,levelProgress,upgradePoints,chooseUpgrade,buyItem,readProgress,saveProgress} from './progression.js';
 import {LUCKY_SECTORS,luckyWidth,luckyShade,routeBranchCandidates,chaseDirection} from './route-experience.js';
 import {mapProjection} from './minimap.js';
-import {PatrolRun,PATROL_ITEMS,ITEM_UPGRADE_LEVEL,MEDKIT,MAX_HEALTH,ITEM_CAPACITY,resolveChaseRoute,longestChaseRoute} from './patrol-mode.js';
+import {PatrolRun,PATROL_ITEMS,MEDKIT,MAX_HEALTH,resolveChaseRoute,longestChaseRoute} from './patrol-mode.js';
 import {SkierKick,KICK_RANGE} from './kick.js';
 import {PatrolScene} from './patrol-scene.js';
 import * as THREE from 'three';
@@ -341,8 +341,8 @@ function resetPosition(full=false){
     terrain.setPractice(features);powder?.setPractice(features);
     challenge=new RunChallenge(route,challengeMode);
     challengeRenderer?.configure(challenge,features);
-    patrol=challengeMode==='patrol'&&route.patrolOnly?new PatrolRun(route,patrolSpawnClear,patrolPathClear,[riderProgress.talent],levelProgress(riderProgress.xp).level,riderProgress.specialty):null;
-    kick.reset([riderProgress.talent]);
+    patrol=challengeMode==='patrol'&&route.patrolOnly?new PatrolRun(route,patrolSpawnClear,patrolPathClear,riderProgress.upgrades,riderProgress.upgrades):null;
+    kick.reset(riderProgress.upgrades);
     runExperience=new RunExperience();
     patrolStep=0;
     damageEffect=healEffect=0;
@@ -381,7 +381,15 @@ function startRun(reset=true){
   $('intro').classList.add('hidden');$('session').classList.remove('hidden');$('touch').classList.add('active');
   $('overview').innerHTML='俯瞰 <kbd>O</kbd>';
   $('game-menu').open=false;
-  if(patrol)toast('愤怒的雪友 · 沿标记滑到终点 · K 踢开 · L 使用道具');
+  if(patrol){
+    const count=riderProgress.supplies.length;
+    if(count){
+      patrol.inventory.push(...riderProgress.supplies.splice(0));
+      saveProgress(progressStorage,riderProgress);
+      updateUI();
+    }
+    toast(count?`已带入 ${count} 件商店道具 · L 使用`:'愤怒的雪友 · 沿标记滑到终点 · K 踢开 · L 使用道具');
+  }
   else toast(touchDevice?'长按左侧转弯 · 右侧撑杖起步 · 拖动场景环视':'上站缓坡出发 · 按住 Shift 撑杖 · 沿雪道滑到下站光圈');
   if(soundOn) enableAudio();
   soundtrack.refresh();
@@ -411,14 +419,15 @@ function resumeRun(){
 }
 function liftView(){return mode==='lift'||(mode==='paused'&&pauseOrigin==='lift');}
 function finishRun(caught=false){
-  const before=levelProgress(riderProgress.xp).level;
   const earned=runExperience.settle(riderProgress,!caught,Boolean(patrol));
-  if(earned)saveProgress(progressStorage,riderProgress);
-  const after=levelProgress(riderProgress.xp).level;
-  $('xp-result').hidden=!earned;
-  const unlock=before<ITEM_UPGRADE_LEVEL&&after>=ITEM_UPGRADE_LEVEL;
-  $('xp-result').textContent=`+${earned} XP · 等级 ${after}${unlock?' · 道具强化已解锁':after>before?' · 升级':''}`;
-  $('progress-after-run').hidden=!earned;
+  if(earned.xp||earned.coins)saveProgress(progressStorage,riderProgress);
+  const after=levelProgress(riderProgress.xp).level,points=upgradePoints(riderProgress);
+  $('xp-result').hidden=!earned.xp&&!earned.coins;
+  $('xp-result').textContent=[
+    `+${earned.xp} XP`,earned.coins?`+${earned.coins} 金币`:'',
+    earned.knockdowns?`击倒 ${earned.knockdowns} 人`:'',`等级 ${after}`,points?`${points} 点强化可选`:'',
+  ].filter(Boolean).join(' · ');
+  $('progress-after-run').hidden=!earned.xp&&!earned.coins&&!points&&!riderProgress.coins;
   if(patrol&&!caught)patrol.outcome='escaped';
   $('result-title').textContent=patrol?(caught?'被愤怒的雪友追上':'成功抵达终点'):'Nice line.';
   $('result-copy').textContent=patrol?(caught?'生命值耗尽。可以重开同一条路线。':`完成了 ${route.name} 追逐。`):'已到下站登乘区。可以返回山顶，再滑一趟。';
@@ -480,12 +489,12 @@ function updatePhysics(dt){
   if(skier.airEvent?.type==='jump-blocked')toast('起跳需要至少 18 km/h · 先撑杖或顺坡加速');
   if(skier.airEvent?.type==='land'&&skier.airEvent.quality==='recover')toast('落地稍偏 · 屈膝缓冲、搓雪恢复');
   if(skier.airEvent?.type==='crash'){const reasons={impact:'触地冲击过大',crossed:'高速横板落地',combined:'横板与冲击叠加',rotation:'空中旋转尚未收住'};toast(`落地摔倒：${reasons[skier.airEvent.reason]||'失去支撑'} · 正在起身`);}elapsed+=dt;peakSpeed=Math.max(peakSpeed,skier.speed);totalDistance=skier.distance;
-  const kickEvent=kick.step(dt,skier,canBeKicked,playLaunchLanding);
+  const kickEvent=kick.step(dt,skier,canBeKicked,playLaunchLanding,blockChaseAttack);
   if(kickEvent?.type==='hit'){
     if(patrol?.agents.includes(kickEvent.target))patrol.contact=0;
     const {start,fromY,heading}=kickEvent.flight;
     snowEffects.kickBurst(start.x,fromY,start.z,heading);
-    if(patrol)confirmChaseHit('踹开',1,true);
+    if(patrol)confirmChaseKnockdown('踹开',[kickEvent.target]);
     else toast('踹飞了！');
   }else if(kickEvent?.type==='miss')toast('雪友已滑出踢击范围');
   if(patrol){
@@ -493,19 +502,23 @@ function updatePhysics(dt){
     if(patrolStep>=1/30){
       const health=patrol.health,escapes=patrol.escapes;
       const event=patrol.step(patrolStep,skier,patrolOffscreen,yAt,patrolCollision,detonateChaseBomb);
+      if(patrol.guardBlocks){
+        patrol.guardBlocks=0;
+        toast('已击破雪友护盾 · 趁现在进攻');
+      }
       for(const [type,count] of Object.entries(patrol.skillHits)){
         if(count)confirmChaseHit(PATROL_ITEMS[type].name,count);
       }
       if(escapes!==patrol.escapes){runExperience.escape();toast('成功脱身');}
       if(patrol.health<health)damageEffect=elapsed+.34;
-      if(patrol.lastTrip){
-        const {x,z}=patrol.lastTrip;
+      for(const {trap,agent} of patrol.trips){
+        const {x,z}=trap;
         snowEffects.snowBurst(x,yAt(x,z),z,24,.31);
-        confirmChaseHit('香蕉皮',1,true);
+        confirmChaseKnockdown('香蕉皮',[agent]);
       }
       patrolStep=0;
       if(event==='caught'){finishRun(true);return;}
-      if(event==='pickup')toast(`拾取 ${PATROL_ITEMS[patrol.lastPickup].name} · ${patrol.inventory.length}/${ITEM_CAPACITY}`);
+      if(event==='pickup')toast(`拾取 ${PATROL_ITEMS[patrol.lastPickup].name} · ${patrol.stacks.find(stack=>stack.type===patrol.lastPickup).count}/${ITEM_STACK_LIMIT}`);
       if(event==='medkit'){
         healEffect=elapsed+.65;
         snowEffects.snowBurst(skier.x,yAt(skier.x,skier.z),skier.z,22,.23);
@@ -747,7 +760,7 @@ function drawMap(){
   if(patrol){
     for(const p of patrol.pickups)if(!p.taken)dot(p,p.type==='medkit'?MEDKIT.color:PATROL_ITEMS[p.type].color,p.type==='medkit'?6:4.5,p.type==='medkit'?'+':null);
     for(const trap of patrol.traps)dot(trap,PATROL_ITEMS.banana.color,4);
-    for(const agent of patrol.agents)if(!agent.launch)dot(agent,'#b4213a',5.4);
+    for(const agent of patrol.agents)if(!agent.launch)dot(agent,agent.guardUntil>patrol.time?'#83dcff':'#b4213a',5.4);
   }
   const m=point(skier),front=point({x:skier.x+Math.sin(skier.heading)*10,z:skier.z+Math.cos(skier.heading)*10});
   ctx.save();
@@ -818,15 +831,18 @@ function updateUI(){
     const active=Object.values(patrol.effects);
     $('patrol-effect').hidden=!active.length;
     $('patrol-effect').textContent=active.map(effect=>`${PATROL_ITEMS[effect.type].name} ${Math.max(0,effect.until-patrol.time).toFixed(1)}s`).join(' · ');
+    const stacks=patrol.stacks;
     for(const button of $('patrol-items').children){
-      const slot=Number(button.dataset.slot),item=PATROL_ITEMS[patrol.inventory[slot]];
-      const labelText=item?.name??'空';
+      const slot=Number(button.dataset.slot),stack=stacks[slot];
+      const item=PATROL_ITEMS[stack?.type];
+      const labelText=item?`${item.name} ×${stack.count}`:'空';
       if(button.lastElementChild.textContent!==labelText)button.lastElementChild.textContent=labelText;
       button.style.setProperty('--item-color',item?.color??'transparent');
       button.disabled=!item||mode!=='running'||Boolean(skier.crashRemaining);
-      const label=`${slot+1} · ${item?.name??'空槽'}`;
+      const label=`${slot+1} · ${item?labelText:'空槽'}`;
       button.setAttribute('aria-label',label);
-      button.title=item?`${label} · ${item.duration} 秒 · ${item.description}`:label;
+      const upgrade=patrol.itemUpgrades.has(stack?.type)?` · 已强化：${ITEM_UPGRADES[stack.type].description}`:'';
+      button.title=item?`${label} · ${item.description}${upgrade}`:label;
     }
   }
   const boarding=mode==='running'&&!patrol&&boardingTarget()&&skier.speed<3.5;$('board-lift').hidden=!boarding;$('lift-controls').hidden=!liftView();
@@ -1024,20 +1040,53 @@ for(const k of ['jacket','pants','helmet','skis','board','npcs'])$(`gear-${k}`).
 for(const b of document.querySelectorAll('[data-gear-view]'))b.addEventListener('click',()=>{lookYaw=Number(b.dataset.gearView);lookPitch=0;});
 for(const b of document.querySelectorAll('[data-gear-preset]'))b.addEventListener('click',()=>{gear={...GEAR_PRESETS[b.dataset.gearPreset],npcs:gear.npcs};syncGearForm();updateGear();});
 $('gear-close').addEventListener('click',closeGear);$('gear-done').addEventListener('click',closeGear);$('gear-dialog').addEventListener('cancel',e=>{e.preventDefault();closeGear();});
-function openProgress(fromResult=false){
-  const dialog=$('progress-dialog'),stats=levelProgress(riderProgress.xp);
+function renderProgress(){
+  const stats=levelProgress(riderProgress.xp),points=upgradePoints(riderProgress);
   $('progress-level').textContent=`等级 ${stats.level}`;
   $('progress-xp').textContent=`${stats.xp} / ${stats.needed} XP`;
   $('progress-meter').max=stats.needed;
   $('progress-meter').value=stats.xp;
-  $('talent-note').textContent='各选一项，下趟生效。道具强化从 2 级起生效。';
-  $('item-upgrades').disabled=stats.level<ITEM_UPGRADE_LEVEL;
-  $('item-upgrades').value=riderProgress.specialty;
-  $('specialty-description').textContent=ITEM_SPECIALTIES[riderProgress.specialty].description;
-  for(const button of $('talents').querySelectorAll('button')){
-    button.title=TALENTS[button.dataset.talent].description;
-    button.setAttribute('aria-pressed',String(riderProgress.talent===button.dataset.talent));
-  }
+  $('talent-note').textContent=points?`有 ${points} 点强化可用。每点选一条，下趟生效。`:'每次升级获得 1 点，可选属性或强化单件道具。';
+  const groups=[
+    ['属性',Object.entries(TALENTS).map(([id,v])=>[id,v.name,v.description])],
+    ['道具',Object.entries(ITEM_UPGRADES).map(([id,v])=>[id,PATROL_ITEMS[id].name,`${v.kind} · ${v.description}`])],
+  ];
+  $('upgrade-choice').innerHTML=groups.map(([group,options])=>`<optgroup label="${group}">${options.map(([id,name,detail])=>{
+    const owned=riderProgress.upgrades.includes(id);
+    return `<option value="${id}"${owned?' disabled':''}>${name} · ${owned?'已强化':detail}</option>`;
+  }).join('')}</optgroup>`).join('');
+  const available=groups.flatMap(([,options])=>options).find(([id])=>!riderProgress.upgrades.includes(id));
+  $('upgrade-choice').value=available?.[0]??'';
+  $('choose-upgrade').disabled=!points||!available;
+  $('shop-coins').textContent=`${riderProgress.coins} 金币`;
+  const supplies=itemStacks(riderProgress.supplies);
+  $('shop-supplies').textContent=supplies.length
+    ?`下一趟追逐 · ${supplies.map(({type,count})=>PATROL_ITEMS[type].name+' ×'+count).join('、')} · ${supplies.length}/${ITEM_CAPACITY} 格`
+    :`买到的道具会带进下一趟追逐。共 ${ITEM_CAPACITY} 格，每种最多 ${ITEM_STACK_LIMIT} 件。`;
+  const prior=$('shop-item').value;
+  $('shop-item').innerHTML=Object.entries(ITEM_UPGRADES)
+    .map(([id,item])=>`<option value="${id}">${PATROL_ITEMS[id].name} · ${item.price} 金币</option>`).join('');
+  if(prior)$('shop-item').value=prior;
+  updateShopButton();
+}
+function updateShopButton(){
+  const id=$('shop-item').value;
+  const full=!canStoreItem(riderProgress.supplies,id);
+  const affordable=riderProgress.coins>=ITEM_UPGRADES[id].price;
+  const upgrade=riderProgress.upgrades.includes(id)?` · 已强化：${ITEM_UPGRADES[id].description}`:'';
+  $('shop-description').textContent=PATROL_ITEMS[id].description+upgrade;
+  const button=$('buy-supply');
+  button.disabled=full||!affordable;
+  button.textContent=full?'该道具放不下':affordable?'购买':'金币不足';
+}
+$('shop-item').addEventListener('change',()=>{
+  $('shop-status').textContent='';
+  updateShopButton();
+});
+function openProgress(fromResult=false){
+  const dialog=$('progress-dialog');
+  $('shop-status').textContent='';
+  renderProgress();
   dialog.dataset.result=String(fromResult);
   if(fromResult)$('result').close();
   keys.clear();
@@ -1052,21 +1101,20 @@ $('progress-close').addEventListener('click',()=>$('progress-dialog').close());
 $('progress-dialog').addEventListener('close',()=>{
   if($('progress-dialog').dataset.result==='true')$('result').showModal();
 });
-$('talents').addEventListener('click',event=>{
-  const button=event.target.closest('[data-talent]');
-  if(!button||!Object.hasOwn(TALENTS,button.dataset.talent))return;
-  riderProgress.talent=button.dataset.talent;
-  for(const choice of $('talents').querySelectorAll('button')){
-    choice.setAttribute('aria-pressed',String(choice===button));
+$('choose-upgrade').addEventListener('click',()=>{
+  if(!chooseUpgrade(riderProgress,$('upgrade-choice').value))return;
+  saveProgress(progressStorage,riderProgress);
+  renderProgress();
+});
+$('buy-supply').addEventListener('click',()=>{
+  const id=$('shop-item').value;
+  if(!buyItem(riderProgress,id)){
+    updateShopButton();
+    return;
   }
   saveProgress(progressStorage,riderProgress);
-});
-$('item-upgrades').addEventListener('change',event=>{
-  const specialty=event.target.value;
-  if(!Object.hasOwn(ITEM_SPECIALTIES,specialty))return;
-  riderProgress.specialty=specialty;
-  $('specialty-description').textContent=ITEM_SPECIALTIES[specialty].description;
-  saveProgress(progressStorage,riderProgress);
+  renderProgress();
+  $('shop-status').textContent=`已买入 ${PATROL_ITEMS[id].name}`;
 });
 $('mountain').addEventListener('change',e=>{const url=new URL(location.href);url.searchParams.set('mountain',resolveMountain(e.target.value));url.searchParams.delete('visual-qa');url.searchParams.delete('record-demo');location.assign(url.href);});
 $('start').addEventListener('click',startRun);$('again').addEventListener('click',startRun);$('choose').addEventListener('click',goIntro);
@@ -1138,7 +1186,7 @@ $('challenge').addEventListener('change',e=>{
   weather?.prepareMaterials();
 });
 function usePatrolItem(slot=0){
-  const type=patrol?.inventory[slot];
+  const type=patrol?.stacks[slot]?.type;
   if(mode!=='running'||!type)return;
   if(!patrol.use(skier,slot))return;
   if(type==='pulse'||type==='mist')snowEffects.snowBurst(skier.x,yAt(skier.x,skier.z),skier.z,64,type==='pulse'?.85:.43);
@@ -1153,12 +1201,18 @@ function detonateChaseBomb(blast){
   }
   snowEffects.snowBurst(x,yAt(x,z),z,120,radius/20);
   const visitors=gear.npcs?traffic?.states.filter(state=>traffic.canBeKicked(state))??[]:[];
-  const hit=kick.avalanche(blast,[...patrol.agents,...visitors],radius);
-  if(hit.size)confirmChaseHit('雪崩弹',hit.size,true);
-  else toast('雪崩弹已引爆 · 落点附近无人');
+  const priorBlocks=patrol.guardBlocks;
+  const hit=kick.avalanche(blast,[...patrol.agents,...visitors],radius,blockChaseAttack);
+  if(hit.size)confirmChaseKnockdown('雪崩弹',hit);
+  else if(patrol.guardBlocks===priorBlocks)toast('雪崩弹已引爆 · 落点附近无人');
   return hit;
 }
-function confirmChaseHit(source,count,down=false){
+function confirmChaseKnockdown(source,targets){
+  let count=0,paid=0;
+  for(const target of targets){count++;if(runExperience.knockdown(target))paid++;}
+  confirmChaseHit(source,count,true,paid);
+}
+function confirmChaseHit(source,count,down=false,paid=0){
   const marker=$('chase-hit');
   const active=!marker.hidden&&elapsed<hitUntil;
   if(active&&marker.dataset.result==='down'&&!down)return;
@@ -1167,7 +1221,9 @@ function confirmChaseHit(source,count,down=false){
   marker.dataset.result=down?'down':'hit';
   marker.dataset.source=source;
   marker.dataset.count=String(total);
-  $('chase-hit-label').textContent=`${source} · ${down?'击倒':'命中'}${total>1?' ×'+total:''}`;
+  const rewards=paid+(same?Number(marker.dataset.rewardCount):0);
+  marker.dataset.rewardCount=String(rewards);
+  $('chase-hit-label').textContent=`${source} · ${down?'击倒':'命中'}${total>1?' ×'+total:''}${rewards?` · +${rewards*KNOCKDOWN_XP} XP · +${rewards*KNOCKDOWN_COINS} 金币`:''}`;
   hitUntil=elapsed+(down?1.2:.68);
   marker.hidden=false;
 }
@@ -1178,6 +1234,9 @@ $('patrol-items').addEventListener('click',event=>{
   const slot=event.target.closest('[data-slot]');
   if(slot)usePatrolItem(Number(slot.dataset.slot));
 });
+function blockChaseAttack(target){
+  return Boolean(patrol?.agents.includes(target)&&patrol.blockAttack(target));
+}
 function canBeKicked(target){
   if(patrol?.agents.includes(target))return !target.launch&&!(target.stunUntil>patrol.time);
   return Boolean(gear.npcs&&traffic?.states.includes(target)&&traffic.canBeKicked(target));

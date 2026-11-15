@@ -2,7 +2,7 @@ import {clamp, nearestOnRoute, PHYSICS} from './physics.js';
 import {pointAlongRoute} from './terrain.js';
 import {AVALANCHE_DURATION,AVALANCHE_RADIUS} from './kick.js';
 import {sweptContact} from './traffic-brain.js';
-import {DEFAULT_TALENTS} from './progression.js';
+import {DEFAULT_TALENTS,canStoreItem,itemStacks} from './progression.js';
 
 export const PATROL_ROUTE_ID = 'crystal-angry-skiers';
 export const resolveChaseRoute = id => id === 'crystal-patrol-descent' ? PATROL_ROUTE_ID : id;
@@ -15,11 +15,10 @@ export const MAX_HEALTH = 100;
 export const DAMAGE_PER_SECOND = 12.5;
 const MEDKIT_HEAL = 35;
 const TRAP_RADIUS = 2.1;
-export const ITEM_UPGRADE_LEVEL=2;
 export const DASH_WARNING=.85;
 const DASH_DURATION=.85;
 const REPLACEMENT_DELAY = 1.2;
-export const ITEM_CAPACITY = 3;
+const GUARD_DURATION=2;
 export const PATROL_ITEMS = {
   boost: {name:'加速充能',color:'#ffe16d',symbol:'»',duration:.85,description:'短时间猛冲，最高额外加速约 55 km/h'},
   decoy: {name:'幻影信标',color:'#c9a4ff',symbol:'◇',duration:2.1,radius:120,description:'120 米内的追赶者立即急刹，转向信标'},
@@ -42,7 +41,7 @@ function routePoint(route, distance, offset=0) {
 }
 
 export class PatrolRun {
-  constructor(route, clear, pathClear=clear, talents=DEFAULT_TALENTS,level=1,specialty='duration') {
+  constructor(route, clear, pathClear=clear, talents=DEFAULT_TALENTS,itemUpgrades=[]) {
     this.route = route;
     this.clear = clear;
     this.pathClear = pathClear;
@@ -59,7 +58,7 @@ export class PatrolRun {
     this.bombs=[];
     this.blasts=[];
     this.waves=[];
-    this.specialty=level>=ITEM_UPGRADE_LEVEL?specialty:null;
+    this.itemUpgrades=new Set(itemUpgrades);
     this.nextDash=7;
     this.dash=null;
     this.evadeUntil = 0;
@@ -71,12 +70,13 @@ export class PatrolRun {
     this.agents = [];
     this.inventory = [];
     this.lastPickup = null;
+    this.guardBlocks=0;
     this.effects={};
     this.nextIncident = 0;
     this.nextAgent = 0;
     const types = ['boost','pulse','decoy','shield','avalanche','banana','snowball','mist','boost'];
     this.pickups = [];
-    for(let d=route.spawn.distance+115;d<route.length-90;d+=155){
+    for(let d=route.spawn.distance+115;d<route.length-90;d+=225){
       const side=this.pickups.length%2?1:-1;
       const point=[side*3,-side*3,0].map(offset=>routePoint(route,d,offset)).find(clear);
       if(point)this.pickups.push({...point,type:types[this.pickups.length%types.length],taken:false});
@@ -90,6 +90,16 @@ export class PatrolRun {
       branch.medkit=point?{...point,type:'medkit',taken:false}:null;
       if(branch.medkit)this.pickups.push(branch.medkit);
     }
+  }
+
+  get stacks(){return itemStacks(this.inventory);}
+
+  blockAttack(agent){
+    if(!(agent.guardUntil>this.time))return false;
+    agent.guardUntil=0;
+    agent.guardFlashUntil=this.time+.4;
+    this.guardBlocks++;
+    return true;
   }
 
   get captureRemaining(){
@@ -154,33 +164,33 @@ export class PatrolRun {
   }
 
   use(player,slot=0){
-    const type=this.inventory[slot];
+    const type=this.stacks[slot]?.type;
     if(!type||this.outcome||player.crashRemaining)return false;
-    this.inventory.splice(slot,1);
-    const quantity=this.specialty==='quantity',power=this.specialty==='power';
+    this.inventory.splice(this.inventory.lastIndexOf(type),1);
+    const upgraded=this.itemUpgrades.has(type);
     const {x,z,heading}=player;
     const travel=Math.hypot(player.vx,player.vz)>2?Math.atan2(player.vx,player.vz):heading;
     const behind=(distance,offset=0)=>({x:x-Math.sin(travel)*distance+Math.cos(travel)*offset,
       z:z-Math.cos(travel)*distance-Math.sin(travel)*offset});
     if(type==='banana'){
-      const spots=quantity?[[3,-1.55],[6,1.55]]:[[3,0]];
+      const spots=upgraded?[[3,-1.55],[6,1.55]]:[[3,0]];
       for(const [distance,offset] of spots){
         const point=[behind(distance,offset),behind(distance*.55,offset),{x,z}].find(this.clear)??{x,z};
         this.traps.push({...point,until:this.time+PATROL_ITEMS.banana.duration});
       }
     }else if(type==='avalanche'||type==='snowball'){
       const icy=type==='snowball';
-      const offsets=icy&&quantity?[-3,3]:[0];
+      const offsets=icy&&upgraded?[-3,3]:[0];
       for(const offset of offsets){
         const end=[behind(icy?14:9,offset),behind(6,offset),behind(3),{x,z}].find(this.clear)??{x,z};
         this.bombs.push({type,x,z,end,start:this.time,until:this.time+(icy?.26:.35),
           height:player.airborne?Math.max(0,player.airClearance||0):0,
-          radius:icy?9:AVALANCHE_RADIUS+4+(power?5:0),heading:travel,slow:power?3.1:2.2});
+          radius:icy?9:AVALANCHE_RADIUS+4+(upgraded?5:0),heading:travel,slow:2.2});
       }
     }else{
-      const duration=PATROL_ITEMS[type].duration+(this.specialty==='duration'?({boost:.3,decoy:1,shield:.8,mist:1}[type]??0):0);
+      const duration=PATROL_ITEMS[type].duration+(upgraded?({boost:.3,decoy:1,shield:.8,mist:1}[type]??0):0);
       const effect={type,start:this.time,until:this.time+duration,duration,x,z,heading};
-      if(type==='pulse')this.waves.push({...effect,radius:PATROL_ITEMS.pulse.radius+(power?5:0),hit:new Set()});
+      if(type==='pulse')this.waves.push({...effect,radius:PATROL_ITEMS.pulse.radius+(upgraded?5:0),hit:new Set()});
       else{
         if(type!=='decoy'&&this.effects[type])effect.until=this.effects[type].until+duration;
         this.effects[type]=effect;
@@ -200,9 +210,19 @@ export class PatrolRun {
 
   step(dt,player,offscreen=()=>true,surface=()=>0,collision=()=>null,detonate=()=>null){
     if(this.outcome)return null;
-    this.lastTrip=null;
+    this.trips=[];
     this.skillHits={pulse:0,snowball:0,shield:0};
     this.time+=dt;
+    if(this.stars>=2){
+      for(const agent of this.agents){
+        const gap=range(agent,player);
+        if(agent.id%3===1&&!agent.guardUsed&&!agent.launch&&!(agent.stunUntil>this.time)&&
+          gap<=21&&Math.abs(surface(agent.x,agent.z)-surface(player.x,player.z))<8){
+          agent.guardUsed=true;
+          agent.guardUntil=this.time+GUARD_DURATION;
+        }
+      }
+    }
     this.traps=this.traps.filter(trap=>this.time<trap.until);
     this.blasts=this.blasts.filter(blast=>this.time<blast.until);
     for(let i=0;i<this.bombs.length;){
@@ -216,6 +236,7 @@ export class PatrolRun {
       if(bomb.type==='snowball'){
         for(const agent of this.agents){
           if(!agent.launch&&range(agent,blast)<=blast.radius&&Math.abs(surface(agent.x,agent.z)-surface(blast.x,blast.z))<8){
+            if(this.blockAttack(agent))continue;
             agent.slowUntil=this.time+bomb.slow;
             agent.speed*=.65;
             this.skillHits.snowball++;
@@ -232,6 +253,7 @@ export class PatrolRun {
         if(agent.launch||wave.hit.has(agent)||gap>radius||
           Math.abs(surface(agent.x,agent.z)-surface(wave.x,wave.z))>7+gap*.4)continue;
         wave.hit.add(agent);
+        if(this.blockAttack(agent))continue;
         this.skillHits.pulse++;
         this.repel(agent,wave,.9,36,wave.duration);
         if(range(agent,player)<=CAPTURE_RADIUS)this.contact=0;
@@ -339,8 +361,9 @@ export class PatrolRun {
       const point={x:agent.x+Math.sin(heading)*step,z:agent.z+Math.cos(heading)*step};
       const trapIndex=this.traps.findIndex(trap=>sweptContact(agent,point,trap,TRAP_RADIUS)&&
         Math.abs(surface(trap.x,trap.z)-surface(point.x,point.z))<2);
-      const tripped=trapIndex>=0;
-      if(tripped)this.lastTrip=this.traps.splice(trapIndex,1)[0];
+      const trap=trapIndex>=0?this.traps.splice(trapIndex,1)[0]:null;
+      const tripped=trap&&!this.blockAttack(agent);
+      if(tripped)this.trips.push({trap,agent});
       const hit=tripped||step>0&&collision(agent,point);
       if(hit){
         if(tripped)Object.assign(agent,point);
@@ -402,10 +425,9 @@ export class PatrolRun {
         medkit.taken=true;
         return this.heal(this.medkitHeal) ? 'medkit' : null;
       }
-      if(this.inventory.length<ITEM_CAPACITY){
-        const pickup=this.pickups.find(p=>p.type!=='medkit'&&!p.taken&&range(p,player)<5.5);
-        if(pickup){pickup.taken=true;this.inventory.push(pickup.type);this.lastPickup=pickup.type;return 'pickup';}
-      }
+      const pickup=this.pickups.find(p=>p.type!=='medkit'&&!p.taken&&range(p,player)<5.5&&
+        canStoreItem(this.inventory,p.type));
+      if(pickup){pickup.taken=true;this.inventory.push(pickup.type);this.lastPickup=pickup.type;return 'pickup';}
     }
     return null;
   }

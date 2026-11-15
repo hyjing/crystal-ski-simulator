@@ -70,6 +70,7 @@ export class PatrolScene {
     this.root.add(this.shield);
     this.statusIcons={
       chase:statusIcon('◆','#ff8192'),dash:statusIcon('!', '#ffc26c'),
+      guard:statusIcon('⬡','#83dcff'),blocked:statusIcon('⬡','#fff4ad'),
       slow:statusIcon('❄','#92e6ff'),stunned:statusIcon('×','#fff4ad'),down:statusIcon('KO','#ff9d87'),
     };
     for(let i=0;i<5;i++){
@@ -84,6 +85,10 @@ export class PatrolScene {
       tag.visible=false;
       this.root.add(tag);
       actor.userData.chaseMarker=tag;
+      const guard=this.shield.clone();
+      guard.visible=false;
+      this.root.add(guard);
+      actor.userData.guard=guard;
     }
   }
 
@@ -190,11 +195,18 @@ export class PatrolScene {
       actor.visible=Boolean(agent);
       const marker=actor.userData.chaseMarker;
       marker.visible=Boolean(agent);
+      const guard=actor.userData.guard;
+      guard.visible=Boolean(agent&&!agent.launch&&(agent.guardUntil>time||agent.guardFlashUntil>time));
       if(!agent)continue;
       const {x,z,heading,speed,bank,launch}=agent;
+      const blocked=agent.guardFlashUntil>time;
+      if(guard.visible){
+        guard.position.set(x,this.surface(x,z)+1,z);
+        guard.scale.setScalar(blocked?1.28:1);
+      }
       const charging=this.run.dash?.agent===agent;
       const stunned=agent.stunUntil>time;
-      const status=launch||stunned&&agent.fallDuration?'down':stunned?'stunned':charging?'dash':agent.slowUntil>time?'slow':'chase';
+      const status=launch||stunned&&agent.fallDuration?'down':stunned?'stunned':blocked?'blocked':guard.visible?'guard':charging?'dash':agent.slowUntil>time?'slow':'chase';
       marker.material.map=this.statusIcons[status];
       const scale=charging?1.05+.15*Math.sin(this.phase*21):status==='chase'?.58:.85;
       marker.scale.setScalar(scale);

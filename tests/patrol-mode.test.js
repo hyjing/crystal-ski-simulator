@@ -161,7 +161,7 @@ test('snow pulse releases before a pursuer enters range and can overlap other it
 });
 
 test('levelled buffs start immediately and repeated boosts extend their remaining time',()=>{
-  const run=new PatrolRun(route,()=>true,()=>true,[],2),player=makePlayer(100);
+  const run=new PatrolRun(route,()=>true,()=>true,[],['boost','shield']),player=makePlayer(100);
   run.inventory=['boost','boost','shield','decoy'];
   assert.ok(run.use(player));
   assert.ok(run.use(player));
@@ -169,7 +169,7 @@ test('levelled buffs start immediately and repeated boosts extend their remainin
   assert.ok(run.use(player));
   assert.ok(Math.abs(run.effects.boost.until-2.3)<1e-8);
   assert.ok(Math.abs(run.effects.shield.until-2.5)<1e-8);
-  assert.equal(run.effects.decoy.until,3.1);
+  assert.equal(run.effects.decoy.until,2.1);
 });
 
 test('boost delivers a short burst, then the shield repels pursuers and expires',()=>{
@@ -258,7 +258,7 @@ test('clean landings and medkits restore health, even with a full inventory',()=
 });
 
 test('upgraded banana casts two traps per item, can overlap and each expires or trips once',()=>{
-  const player=makePlayer(100),run=new PatrolRun(route,()=>true,()=>true,[],2,'quantity');
+  const player=makePlayer(100),run=new PatrolRun(route,()=>true,()=>true,[],['banana']);
   run.inventory=['banana','banana'];
   run.stars=1;
   assert.ok(run.use(player));
@@ -277,7 +277,7 @@ test('upgraded banana casts two traps per item, can overlap and each expires or 
   assert.equal(run.traps.length,0);
 });
 
-test('the inventory holds three items, leaves overflow on the snow, and supports using a slot',()=>{
+test('the inventory holds three stacks, leaves overflow on the snow, and consumes one item',()=>{
   const run=new PatrolRun(route,()=>true);
   for(const p of run.pickups.slice(0,3)){
     assert.equal(run.step(.03,{...makePlayer(p.z),x:p.x}),'pickup');
@@ -286,14 +286,24 @@ test('the inventory holds three items, leaves overflow on the snow, and supports
   const fourth=run.pickups[3],player={...makePlayer(fourth.z),x:fourth.x};
   assert.equal(run.step(.03,player),null);
   assert.equal(fourth.taken,false);
+  const moreBoost={...fourth,type:'boost'};
+  const anotherBoost={...moreBoost};
+  const overflow={...moreBoost};
+  run.pickups.push(moreBoost,anotherBoost,overflow);
+  assert.equal(run.step(.03,player),'pickup');
+  assert.equal(run.step(.03,player),'pickup');
+  assert.equal(run.step(.03,player),null);
+  assert.equal(overflow.taken,false);
+  assert.ok(run.use(player,0));
+  assert.deepEqual(run.stacks.map(v=>v.count),[2,1,1]);
   assert.ok(run.use(player,2));
   assert.ok(run.effects.decoy);
   assert.equal(run.step(.03,player),'pickup');
-  assert.deepEqual(run.inventory,['boost','pulse','shield']);
+  assert.deepEqual(run.stacks,[{type:'boost',count:2},{type:'pulse',count:1},{type:'shield',count:1}]);
 });
 
 test('an avalanche is thrown immediately and detonates later around its landing point',()=>{
-  const run=new PatrolRun(route,()=>true,()=>true,[],3,'power'),player=makePlayer(100);
+  const run=new PatrolRun(route,()=>true,()=>true,[],['avalanche']),player=makePlayer(100);
   const kick=new SkierKick(x=>x===5?40:0,()=>true);
   const pursuer={x:-6,z:88},visitor={point:{x:0,z:110}};
   const far={x:0,z:125},above={x:5,z:88};
@@ -343,7 +353,7 @@ test('high heat telegraphs a pursuer dash and mist cancels it and stops close da
 });
 
 test('the quantity specialty throws two snowballs that slow pursuers without launching them',()=>{
-  const run=new PatrolRun(route,()=>true,()=>false,[],2,'quantity'),player=makePlayer(100);
+  const run=new PatrolRun(route,()=>true,()=>false,[],['snowball']),player=makePlayer(100);
   const pursuer={x:3,z:86,speed:15,heading:0,bank:0};
   run.stars=1;
   run.agents=[pursuer];run.inventory=['snowball'];
@@ -456,4 +466,37 @@ test('patrol steering is radius limited and collisions interrupt the capture cou
   assert.equal(agent.speed,0);
   assert.equal(run.contact,0);
   assert.equal(run.outcome,'');
+});
+
+test('an armored pursuer telegraphs a guard, blocks one attack, and can then be knocked down',()=>{
+  const run=new PatrolRun(route,()=>true),player=makePlayer(100);
+  const pursuer={id:1,x:0,z:97,heading:0,speed:0,bank:0};
+  run.agents=[pursuer];
+  run.stars=2;
+  run.step(.03,player,()=>false);
+  assert.ok(pursuer.guardUntil>run.time);
+  const kick=new SkierKick(()=>0,()=>true);
+  assert.ok(kick.start(player,[pursuer]));
+  const blocked=target=>run.blockAttack(target);
+  assert.equal(kick.step(.17,player,()=>true,()=>{},blocked).type,'blocked');
+  assert.equal(pursuer.launch,undefined);
+  assert.equal(run.guardBlocks,1);
+  run.step(.03,player,()=>false);
+  assert.equal(pursuer.guardUntil,0);
+  assert.deepEqual(kick.avalanche(player,[pursuer],20,blocked),new Set([pursuer]));
+});
+
+test('one guarded banana trip spends the trap without counting a knockdown',()=>{
+  const run=new PatrolRun(route,()=>true),player=makePlayer(100);
+  const pursuer={id:1,x:0,z:97,heading:0,speed:0,bank:0};
+  run.agents=[pursuer];
+  run.stars=2;
+  run.traps=[{x:0,z:97,until:3}];
+  run.step(.03,player,()=>false);
+  assert.equal(run.traps.length,0);
+  assert.equal(run.trips.length,0);
+  assert.equal(run.guardBlocks,1);
+  run.traps=[{x:0,z:97,until:3}];
+  run.step(.03,player,()=>false);
+  assert.equal(run.trips[0].agent,pursuer);
 });
