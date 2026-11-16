@@ -47,6 +47,26 @@ export class PatrolScene {
     }
     this.peels=[];
     this.projectiles=[];
+    this.allies=[];
+    this.shotMeshes=[];
+    this.shotGeometry=new THREE.SphereGeometry(.16,8,5);
+    this.allyMaterial=new THREE.MeshStandardMaterial({
+      color:'#53cdb1',emissive:'#21856d',emissiveIntensity:.7,roughness:.7,
+    });
+    const wingGeometry=new THREE.BufferGeometry();
+    wingGeometry.setAttribute('position',new THREE.Float32BufferAttribute([
+      0,0,.5,-2.7,.25,-.95,-.85,-.10,-.72,0,-.15,-1.02,
+      0,0,.5,2.7,.25,-.95,.85,-.10,-.72,0,-.15,-1.02,
+    ],3));
+    wingGeometry.setIndex([0,1,2,0,2,3,4,6,5,4,7,6]);
+    this.glider=new THREE.Mesh(wingGeometry,new THREE.MeshBasicMaterial({
+      color:PATROL_ITEMS.glider.color,side:THREE.DoubleSide,transparent:true,opacity:.72,depthWrite:false,
+    }));
+    const ribs=new THREE.LineSegments(new THREE.EdgesGeometry(wingGeometry),
+      new THREE.LineBasicMaterial({color:'#e5fff3',transparent:true,opacity:.8}));
+    this.glider.add(ribs);
+    this.glider.visible=false;
+    this.root.add(this.glider);
     this.beacon=new THREE.Mesh(this.tokenGeometry,this.materials.decoy);
     this.beacon.visible=false;
     this.root.add(this.beacon);
@@ -111,6 +131,7 @@ export class PatrolScene {
   select(run){
     this.run=run;
     this.shield.visible=false;
+    this.glider.visible=false;
     for(const actor of this.actors)actor.userData.guard.visible=false;
     this.root.visible=Boolean(run);
     for(const token of this.tokens)this.root.remove(token);
@@ -141,7 +162,7 @@ export class PatrolScene {
     this.root.visible=active;
     if(!active)return;
     this.phase+=dt;
-    const {traps,bombs,blasts,waves,effects,time}=this.run;
+    const {traps,bombs,blasts,waves,effects,time,allies,shots}=this.run;
     this.updateInstances(this.peels,traps,()=>this.peel.clone(),(mesh,trap)=>{
       mesh.position.set(trap.x,this.surface(trap.x,trap.z)+.12,trap.z);
     });
@@ -153,6 +174,33 @@ export class PatrolScene {
       mesh.scale.setScalar(bomb.type==='snowball'?.42:.69);
       mesh.material=this.materials[bomb.type];
     });
+    this.updateInstances(this.shotMeshes,shots,()=>new THREE.Mesh(this.shotGeometry,this.materials.autofrost),(mesh,shot)=>{
+      const p=THREE.MathUtils.clamp((time-shot.start)/(shot.until-shot.start),0,1),end=shot.end;
+      mesh.position.set(THREE.MathUtils.lerp(shot.x,end.x,p),THREE.MathUtils.lerp(shot.y,end.y,p),THREE.MathUtils.lerp(shot.z,end.z,p));
+      mesh.lookAt(end.x,end.y,end.z);
+      mesh.scale.set(1,1,3.5);
+    });
+    this.updateInstances(this.allies,allies,()=>{
+      const actor=createAthleteRig(this.root);
+      actor.traverse(mesh=>{
+        if(mesh.isMesh){mesh.material=this.allyMaterial;mesh.castShadow=false;}
+      });
+      return actor;
+    },(actor,ally)=>{
+      actor.visible=ally.until>time;
+      actor.position.set(ally.x,this.surface(ally.x,ally.z)-.08,ally.z);
+      actor.rotation.set(0,ally.heading,.25*Math.sin(this.phase*2+ally.x));
+      if(this.clock+dt>=.05||actor.userData.ally!==ally){
+        actor.userData.ally=ally;
+        updateAthletePose(actor,{speed:ally.speed,heading:ally.heading,tuck:.32},.05,this.surface);
+      }
+    });
+    this.glider.visible=Boolean(player?.airborne&&player.gliderRemaining>0);
+    if(this.glider.visible){
+      this.glider.position.set(player.x,player.airY-1200+1.25,player.z);
+      this.glider.rotation.set(0,player.heading,.35*(player.steerInput||0));
+      this.glider.scale.set(THREE.MathUtils.clamp(player.gliderRemaining*4,.15,1),1,1);
+    }
     this.shield.visible=Boolean(player&&effects.shield);
     if(this.shield.visible){
       const {x,z}=player;
@@ -174,9 +222,10 @@ export class PatrolScene {
       puff.visible=Boolean(mist);
       if(!mist)return;
       const age=time-mist.start,angle=i*2.4;
-      const offset=(i%4)*2.7;
+      const size=mist.radius/PATROL_ITEMS.mist.radius;
+      const offset=(i%4)*2.7*size;
       puff.position.set(mist.x+Math.cos(angle)*offset+age*.75,this.surface(mist.x,mist.z)+1.7+i%3*.7,mist.z+Math.sin(angle)*offset);
-      puff.scale.set(10+age*2,5+age,1);
+      puff.scale.set((10+age*2)*size,(5+age)*Math.sqrt(size),1);
       puff.material.opacity=.83*Math.min(1,(mist.until-time)*3);
     });
     this.updateInstances(this.rings,[...waves,...blasts],()=>{

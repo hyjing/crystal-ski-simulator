@@ -10,14 +10,17 @@ export const TALENTS={
 export const DEFAULT_TALENTS=Object.freeze(['stamina']);
 
 export const ITEM_UPGRADES={
-  boost:{bonuses:[.3,.6,.9],describe:amount=>`加速延长 ${amount} 秒`,price:12},
-  decoy:{bonuses:[1,2,3],describe:amount=>`信标延长 ${amount} 秒`,price:14},
-  shield:{bonuses:[.8,1.6,2.4],describe:amount=>`护盾延长 ${amount} 秒`,price:18},
-  mist:{bonuses:[1,2,3],describe:amount=>`雪雾延长 ${amount} 秒`,price:16},
-  banana:{bonuses:[1,2,3],describe:amount=>`一次丢 ${amount+1} 片香蕉皮`,price:12},
-  snowball:{bonuses:[1,2,3],describe:amount=>`一次投 ${amount+1} 个冰雪球`,price:14},
-  pulse:{bonuses:[5,10,15],describe:amount=>`雪浪半径增加 ${amount} 米`,price:20},
-  avalanche:{bonuses:[5,10,15],describe:amount=>`雪崩半径增加 ${amount} 米`,price:54},
+  boost:{bonuses:[.45,.95,1.55],extra:[6,12,18],describe:(time,thrust)=>`加速延长 ${time} 秒，推力 +${thrust}`,price:12},
+  decoy:{bonuses:[1,2.5,4],extra:[20,40,60],describe:(time,radius)=>`信标延长 ${time} 秒，范围 +${radius} 米`,price:14},
+  shield:{bonuses:[.8,1.8,3],extra:[1.5,3,4.5],describe:(time,radius)=>`护盾延长 ${time} 秒，击退范围 +${radius} 米`,price:18},
+  mist:{bonuses:[1,2.5,4],extra:[3,6,9],describe:(time,radius)=>`雪雾延长 ${time} 秒，半径 +${radius} 米`,price:16},
+  banana:{bonuses:[1,2,3],extra:[.35,.7,1.05],describe:(amount,time)=>`一次丢 ${amount+1} 片，滑倒延长 ${time} 秒`,price:12},
+  snowball:{bonuses:[1,2,3],extra:[.6,1.2,1.8],describe:(amount,time)=>`投 ${amount+1} 个冰雪球，减速延长 ${time} 秒`,price:14},
+  pulse:{bonuses:[5,11,18],extra:[7,14,21],describe:(radius,damage)=>`雪浪半径 +${radius} 米，伤害 +${damage}`,price:20},
+  avalanche:{bonuses:[5,12,20],describe:amount=>`雪崩半径增加 ${amount} 米`,price:54},
+  glider:{bonuses:[.55,1.15,1.85],describe:time=>`可控滑翔延长 ${time} 秒`,price:22},
+  autofrost:{bonuses:[1,2.2,3.6],extra:[3,6,9],describe:(time,damage)=>`自动发射延长 ${time} 秒，每发伤害 +${damage}`,price:24},
+  crew:{bonuses:[1,2,3],extra:[.5,1,1.5],describe:(amount,time)=>`召唤 ${amount+1} 名雪友，持续时间 +${time} 秒`,price:20},
 };
 const UPGRADES={...TALENTS,...ITEM_UPGRADES};
 const MAX_UPGRADE_POINTS=Object.keys(UPGRADES).length*UPGRADE_CAP;
@@ -30,10 +33,14 @@ export function upgradeBonus(upgrades,id){
   return validUpgrade(id)?UPGRADES[id].bonuses[upgradeRank(upgrades,id)-1]??0:0;
 }
 
+export function itemUpgradeExtra(upgrades,id){
+  return ITEM_UPGRADES[id]?.extra?.[upgradeRank(upgrades,id)-1]??0;
+}
+
 export function describeUpgrade(id,rank){
   if(!validUpgrade(id)||rank<1||rank>UPGRADE_CAP)return '';
   const upgrade=UPGRADES[id];
-  return upgrade.describe(upgrade.bonuses[rank-1]);
+  return upgrade.describe(upgrade.bonuses[rank-1],upgrade.extra?.[rank-1]);
 }
 
 export const ITEM_CAPACITY=3;

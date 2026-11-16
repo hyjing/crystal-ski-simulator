@@ -823,6 +823,7 @@ function drawMap(){
       dot(p,marker.color,p.type==='medkit'?6:4.5,p.type==='medkit'?'+':p.type==='supply'?'◇':null);
     }
     for(const trap of patrol.traps)dot(trap,PATROL_ITEMS.banana.color,4);
+    for(const ally of patrol.allies)if(ally.until>patrol.time)dot(ally,PATROL_ITEMS.crew.color,4.5);
     for(const agent of patrol.agents)if(!agent.launch&&agent.health!==0)dot(agent,agent.guardUntil>patrol.time?'#83dcff':'#b4213a',5.4);
   }
   const m=point(skier),front=point({x:skier.x+Math.sin(skier.heading)*10,z:skier.z+Math.cos(skier.heading)*10});
@@ -891,9 +892,11 @@ function updateUI(){
     }
     const branch=route.branches?.find(b=>b.medkit&&!b.medkit.taken&&patrol.furthest>=b.lo-35&&patrol.furthest<b.lo+75);
     $('chase-branch').hidden=!branch||mode!=='running';
-    const active=Object.values(patrol.effects);
+    const active=Object.values(patrol.effects).map(effect=>`${PATROL_ITEMS[effect.type].name} ${Math.max(0,effect.until-patrol.time).toFixed(1)}s`);
+    if(skier.airborne&&skier.gliderRemaining>0)active.push(`浮空翼 ${skier.gliderRemaining.toFixed(1)}s`);
+    if(patrol.allies.length)active.push(`援手 ×${patrol.allies.length}`);
     $('patrol-effect').hidden=!active.length;
-    $('patrol-effect').textContent=active.map(effect=>`${PATROL_ITEMS[effect.type].name} ${Math.max(0,effect.until-patrol.time).toFixed(1)}s`).join(' · ');
+    $('patrol-effect').textContent=active.join(' · ');
     const stacks=patrol.stacks;
     for(const button of $('patrol-items').children){
       const slot=Number(button.dataset.slot),stack=stacks[slot];
@@ -1275,9 +1278,19 @@ $('challenge').addEventListener('change',e=>{
 function usePatrolItem(slot=0){
   const type=patrol?.stacks[slot]?.type;
   if(mode!=='running'||!type)return;
-  if(!patrol.use(skier,slot))return;
+  if(!patrol.use(skier,slot,terrain)){
+    if(type==='glider'&&skier.gliderUsed)toast('浮空翼每次腾空只能用一次');
+    return;
+  }
+  if(type==='glider'){
+    snowEffects.breakTrail();powder.breakTrail();
+    snowEffects.snowBurst(skier.x,yAt(skier.x,skier.z),skier.z,48,.56);
+  }
   if(type==='pulse'||type==='mist')snowEffects.snowBurst(skier.x,yAt(skier.x,skier.z),skier.z,64,type==='pulse'?.85:.43);
-  toast(type==='avalanche'?'雪崩弹已向后抛出':`${PATROL_ITEMS[type].name}已释放`);
+  const message=type==='avalanche'?'雪崩弹已向后抛出'
+    :type==='glider'?'浮空翼已展开 · 用 A / D 或方向键滑翔'
+    :`${PATROL_ITEMS[type].name}已释放`;
+  toast(message);
   updateUI();
 }
 function detonateChaseBomb(blast){

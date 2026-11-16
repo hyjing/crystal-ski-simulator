@@ -1,7 +1,7 @@
 import {MOUNTAINS,resolveMountain} from './mountains.js';
 export function mountainIdentity(id){
  id=resolveMountain(id);const mountain=MOUNTAINS[id],canada=mountain.pack==='whistler';
- if(mountain.virtual)return {id,name:mountain.name,brand:mountain.brand,region:'CHASE MOUNTAIN',coordinates:mountain.coordinates,source:mountain.elevationLabel,description:'为「愤怒的雪友」设计的虚拟雪山，有宽坡、林间弯道和陡沟三条长线。',home:`?mountain=${id}`};
+ if(mountain.virtual)return {id,name:mountain.name,brand:mountain.brand,region:'CHASE MOUNTAIN',coordinates:mountain.coordinates,source:mountain.elevationLabel,description:'为「愤怒的雪友」设计的虚拟雪山，有宽坡、林间岔路、跳台和陡沟等六条长线。',home:`?mountain=${id}`};
  return {id,name:mountain.name,brand:canada?(id==='blackcomb'?'BLACKCOMB':'WHISTLER'):mountain.area?(mountain.area==='alpental'?'ALPENTAL':`SUMMIT ${mountain.area.toUpperCase()}`):'CRYSTAL',region:canada?'BRITISH COLUMBIA, CANADA':'WASHINGTON, USA',coordinates:mountain.coordinates,source:mountain.elevationLabel||'USGS 3DEP',description:`在 ${mountain.name} 的真实地形上，找到自己的线路。`,home:`?mountain=${id}`};
 }
 export function applyMountainIdentity(doc,id){

@@ -123,10 +123,12 @@ test('higher ranks reach item counts, area, duration, and attribute effects in t
   assert.equal(run.bombs.length,4);
   assert.equal(new Set(run.bombs.map(bomb=>bomb.end.x)).size,4);
   use('pulse');
-  assert.equal(run.waves[0].radius,34);
+  assert.equal(run.waves[0].radius,37);
   assert.equal(run.waves[0].duration,.62);
+  assert.equal(run.waves[0].damage,66);
   use('mist');
-  assert.equal(run.effects.mist.duration,6);
+  assert.equal(run.effects.mist.duration,7);
+  assert.equal(run.effects.mist.radius,23);
   assert.equal(run.damageRate,9.375);
   assert.equal(run.medkitHeal,55);
   const kick=new SkierKick(()=>0,()=>true);

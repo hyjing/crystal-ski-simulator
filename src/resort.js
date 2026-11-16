@@ -31,7 +31,8 @@ export function addForest(scene,terrain,routes,landcover,texture,vegetation,stat
     let progress=0;
     for(let i=1;i<route.points.length;i++){
       const a=route.points[i-1],b=route.points[i],length=Math.hypot(b.x-a.x,b.z-a.z);
-      const width=route.halfWidth??Math.max(5,(route.pisteWidth?.(progress+length/2)??pisteHalfWidth(route.name,route.difficulty))-2),segment={a,b,width};
+      const pisteWidth=route.pisteWidth?.(progress+length/2)??route.halfWidth??pisteHalfWidth(route.name,route.difficulty);
+      const width=route.halfWidth?pisteWidth:Math.max(5,pisteWidth-2),segment={a,b,width};
       progress+=length;
       for(let x=Math.floor((Math.min(a.x,b.x)-width)/cellSize);x<=Math.floor((Math.max(a.x,b.x)+width)/cellSize);x++)
         for(let z=Math.floor((Math.min(a.z,b.z)-width)/cellSize);z<=Math.floor((Math.max(a.z,b.z)+width)/cellSize);z++){

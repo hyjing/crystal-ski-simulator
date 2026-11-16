@@ -37,7 +37,7 @@ export function addBoundaryPosts(scene,terrain,route){
   for(let i=1;i<points.length;i++){
     const a=points[i-1],b=points[i],dx=b.x-a.x,dz=b.z-a.z,length=Math.hypot(dx,dz);if(length<.1)continue;
     for(let d=carry;d<length;d+=36){const t=d/length,x=a.x+dx*t,z=a.z+dz*t;if(Math.hypot(x-points[0].x,z-points[0].z)<80||Math.hypot(x-points.at(-1).x,z-points.at(-1).z)<55)continue;
-      const halfWidth=route.halfWidth??(route.id==='lucky-shot'?luckyWidth(progress+d):route.id==='green-valley'?22:13);for(const sign of [-1,1])markers.push({x:x+dz/length*halfWidth*sign,z:z-dx/length*halfWidth*sign});}
+      const halfWidth=route.pisteWidth?.(progress+d)??route.halfWidth??(route.id==='lucky-shot'?luckyWidth(progress+d):route.id==='green-valley'?22:13);for(const sign of [-1,1])markers.push({x:x+dz/length*halfWidth*sign,z:z-dx/length*halfWidth*sign});}
     progress+=length;
     carry=(carry-length)%36;if(carry<0)carry+=36;
   }

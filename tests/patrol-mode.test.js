@@ -4,6 +4,8 @@ import fs from 'node:fs';
 import {mapProjection} from '../src/minimap.js';
 import {PatrolRun, PATROL_ITEMS, PATROL_ROUTE_ID, resolveChaseRoute, longestChaseRoute} from '../src/patrol-mode.js';
 import {SkierKick} from '../src/kick.js';
+import {createSkier} from '../src/physics.js';
+import {stepAirborne} from '../src/airborne.js';
 import {SkiTraffic} from '../src/traffic.js';
 import {MOUNTAINS, mountainAsset} from '../src/mountains.js';
 import {createTerrain, getLiftRuns, pointAlongRoute} from '../src/terrain.js';
@@ -167,7 +169,7 @@ test('levelled buffs start immediately and repeated boosts extend their remainin
   assert.ok(run.use(player));
   assert.ok(run.use(player));
   assert.ok(run.use(player));
-  assert.ok(Math.abs(run.effects.boost.until-2.7)<1e-8);
+  assert.ok(Math.abs(run.effects.boost.until-3)<1e-8);
   assert.ok(Math.abs(run.effects.shield.until-2.5)<1e-8);
   assert.equal(run.effects.decoy.until,2.6);
 });
@@ -271,7 +273,7 @@ test('upgraded banana casts two traps per item, can overlap and each expires or 
   run.agents=[pursuer];
   run.step(.1,player,()=>false);
   assert.equal(run.traps.length,3);
-  assert.equal(pursuer.fallDuration,2.4);
+  assert.equal(pursuer.fallDuration,2.75);
   assert.equal(run.hits.length,0);
   run.agents=[];
   run.step(12.1,player,()=>false);
@@ -664,4 +666,65 @@ test('a pursuer can still apply contact damage when very close inside the mist',
   assert.ok(run.use(player));
   run.step(.1,player,()=>false);
   assert.ok(run.health<100);
+});
+
+
+test('a glider launches from rest, steers, lasts longer when upgraded, and cannot chain midair',()=>{
+  const flat={spacing:8,sample:()=>0,surface:()=>0,gradient:()=>({x:0,z:0})};
+  const skier=createSkier({x:0,z:100},{x:0,z:110});
+  const run=new PatrolRun(route,()=>true,()=>true,[],['glider','glider','glider']);
+  run.inventory=['glider','glider'];
+  assert.ok(run.use(skier,0,flat));
+  assert.ok(skier.airborne&&Math.abs(skier.gliderRemaining-3.2)<1e-8);
+  assert.equal(run.use(skier,0,flat),false);
+  assert.deepEqual(run.inventory,['glider']);
+  for(let i=0;i<90;i++)stepAirborne(skier,{steer:.5},flat,1/60);
+  assert.ok(skier.airborne&&skier.airClearance>1&&skier.x>3);
+  for(let i=0;i<270&&skier.airborne;i++)stepAirborne(skier,{},flat,1/60);
+  assert.equal(skier.airborne,false);
+  assert.equal(skier.gliderRemaining,0);
+  assert.ok(run.use(skier,0,flat));
+});
+
+test('rear cannon picks the closest rear target, respects armor, and repeats on its cadence',()=>{
+  const run=new PatrolRun(route,()=>true,()=>false,[],['autofrost','autofrost','autofrost']);
+  const player=makePlayer(100);
+  const front={x:0,z:103,heading:0,speed:0,bank:0,health:100};
+  const behind={x:0,z:92,heading:0,speed:0,bank:0,health:100,guardUntil:1};
+  const farther={x:0,z:83,heading:0,speed:0,bank:0,health:100};
+  run.agents=[front,farther,behind];run.stars=1;
+  run.inventory=['autofrost'];
+  assert.ok(run.use(player));
+  run.step(.05,player,()=>false);
+  assert.equal(run.guardBlocks,1);
+  assert.equal(behind.health,100);
+  assert.equal(run.shots.length,1);
+  run.step(.4,player,()=>false);
+  assert.equal(behind.health,100);
+  run.step(.26,player,()=>false);
+  assert.equal(behind.health,76);
+  assert.equal(front.health,100);
+  assert.equal(farther.health,100);
+  assert.equal(run.hits[0].source,'autofrost');
+});
+
+test('summon ranks create one to four moving allies that draw pressure and leave after being tagged',()=>{
+  for(let rank=0;rank<=3;rank++){
+    const run=new PatrolRun(route,()=>true,()=>true,[],Array(rank).fill('crew'));
+    const player=makePlayer(100);
+    run.inventory=['crew'];run.stars=1;
+    assert.ok(run.use(player));
+    assert.equal(run.allies.length,rank+1);
+    const ally=run.allies[0],start={x:ally.x,z:ally.z};
+    const agent={...start,speed:0,heading:0,bank:0};
+    run.agents=[agent];
+    run.step(.04,player,()=>false);
+    assert.ok(ally.z>start.z);
+    assert.equal(ally.until,run.time);
+    assert.ok(agent.stunUntil>run.time);
+    assert.equal(run.health,100);
+    assert.equal(run.hits.length,0);
+    run.step(.04,player,()=>false);
+    assert.equal(run.allies.length,rank);
+  }
 });

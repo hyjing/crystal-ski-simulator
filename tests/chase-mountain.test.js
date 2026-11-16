@@ -7,16 +7,16 @@ import {routeBranchCandidates} from '../src/route-experience.js';
 import {PatrolRun} from '../src/patrol-mode.js';
 import {pointAlongRoute} from '../src/terrain.js';
 
-test('Whitepeak exposes three distinct chase-only courses with flat starts and downhill finishes',()=>{
+test('Whitepeak exposes six distinct chase-only courses with flat starts and downhill finishes',()=>{
   const {terrain,routes,landcover,context}=createChaseMountain();
   assert.equal(resolveMountain('whitepeak'),'whitepeak');
   assert.equal(mountainAsset('whitepeak','dem.json'),null);
   assert.match(mountainIdentity('whitepeak').description,/虚拟雪山/);
-  assert.deepEqual(routes.map(r=>r.difficulty),['easy','intermediate','advanced']);
-  assert.equal(new Set(routes.map(r=>r.id)).size,3);
+  assert.deepEqual(routes.map(r=>r.difficulty),['easy','intermediate','advanced','intermediate','easy','advanced']);
+  assert.equal(new Set(routes.map(r=>r.id)).size,6);
   const maxGrades=[];
   for(const route of routes){
-    assert.ok(route.patrolOnly&&route.length>3000&&route.drop>600);
+    assert.ok(route.patrolOnly&&route.length>4600&&route.drop>800);
     const gradient=terrain.gradient(route.spawn.x,route.spawn.z);
     assert.ok(Math.hypot(gradient.x,gradient.z)<.08);
     const finish=route.points.at(-1);
@@ -32,10 +32,19 @@ test('Whitepeak exposes three distinct chase-only courses with flat starts and d
     const run=new PatrolRun(route,()=>true);
     assert.ok(run.pickups.some(p=>p.type==='supply')&&run.pickups.some(p=>p.type==='medkit'));
     assert.equal(run.pickups.filter(p=>p.type==='avalanche').length,1);
+    assert.ok(run.pickups.some(p=>p.type==='glider'));
+    assert.ok(run.pickups.some(p=>p.type==='crew')&&run.pickups.some(p=>p.type==='autofrost'));
+    assert.ok(run.pickups.filter(p=>p.type!=='medkit').length>=24);
   }
   assert.ok(maxGrades[0]<.25&&maxGrades[1]>.32&&maxGrades[2]>.5);
   assert.ok(routes[0].halfWidth>2*routes[1].halfWidth&&routes[1].halfWidth>routes[2].halfWidth);
-  assert.ok(routes[1].length>routes[0].length*1.12);
+  assert.ok(routes[1].length>routes[0].length*1.05);
+  const park=routes[3],parkGrades=park.points.map(p=>terrain.gradient(p.x,p.z).z);
+  assert.ok(Math.max(...parkGrades)>.08&&Math.min(...parkGrades)<-.60);
+  const shelf=routes[4];
+  assert.ok(shelf.points.at(-1).x-shelf.points[0].x>250);
+  const basin=routes[5];
+  assert.ok(basin.pisteWidth(basin.length*.3125)>basin.pisteWidth(basin.length*.4375)+10);
   assert.ok(routes[1].branches.length>0);
   assert.equal(landcover.values.length,terrain.width*terrain.height);
   assert.ok(landcover.values.some(v=>v>.75)&&landcover.values.some(v=>v===0));
