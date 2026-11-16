@@ -46,7 +46,7 @@ npm start
 
 ## 技术与数据
 
-- 白岬远景采用尼泊尔安纳普尔纳地区的 [Mapzen / SRTM 高程](https://github.com/tilezen/joerd/blob/master/docs/attribution.md)，高程由美国地质调查局提供。数据经过重采样、比例调整和边缘混合，接入虚拟雪场。
+- 白岬远景采用尼泊尔安纳普尔纳地区的 [Mapzen / SRTM 高程](https://github.com/tilezen/joerd/blob/master/docs/attribution.md)，高程由美国地质调查局提供。数据经过重采样、比例调整和边缘混合，接入虚拟雪场。山体的岩壁法线、沟壑与积雪分布由同一区域更细的高程推导。
 
 Three.js / WebGL · Vite · 自定义滑雪物理 · USGS / Mapzen 高程 · OpenStreetMap 雪道。
 

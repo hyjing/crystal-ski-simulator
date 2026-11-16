@@ -1,6 +1,9 @@
 const SIZE=641,SPACING=96;
 
 export const WHITEPEAK_RELIEF_PATH='data/whitepeak/annapurna-relief.bin';
+export const WHITEPEAK_SURFACE_PATH='data/whitepeak/annapurna-surface.png';
+// World-space bounds of the DEM-derived material, from the valley to the range behind it.
+export const WHITEPEAK_SURFACE_BOUNDS={west:-22000,east:22000,north:1000,south:31000};
 
 // Blend the authored ski area into the measured valleys at its outer edge.
 export function stitchWhitepeakRelief(buffer,local){

@@ -35,7 +35,7 @@ import {validRegionalGrid} from './regional-scenery.js';
 import {flyDrone} from './drone.js';
 import {applyMountainIdentity} from './mountain-identity.js';
 import {addWhitepeakValley,lodgeForestClearings} from './whitepeak-valley.js';
-import {stitchWhitepeakRelief,WHITEPEAK_RELIEF_PATH} from './whitepeak-relief.js';
+import {stitchWhitepeakRelief,WHITEPEAK_RELIEF_PATH,WHITEPEAK_SURFACE_PATH} from './whitepeak-relief.js';
 import {sceneryProfile} from './scenery-profile.js';
 import {MOUNTAINS,resolveMountain,mountainAsset} from './mountains.js';
 const mountainId=resolveMountain(new URLSearchParams(location.search).get('mountain')),mountain=MOUNTAINS[mountainId];
@@ -193,6 +193,8 @@ async function init(){
     if(!r.ok)throw new Error('Whitepeak elevation download');
     return r.arrayBuffer();
   }).catch(error=>{console.warn(error);return null;}):null;
+  const reliefSurface=isVirtual?new THREE.TextureLoader().loadAsync(`${import.meta.env.BASE_URL}${WHITEPEAK_SURFACE_PATH}`)
+    .catch(error=>{console.warn('Whitepeak surface detail unavailable',error);return null;}):null;
   const generated=isVirtual?(await import('./chase-mountain.js')).createChaseMountain():null;
   let mappedRoutes,infrastructure;
   if(generated){
@@ -277,9 +279,9 @@ async function init(){
   createMapBackground();
   speedRenderer=new SpeedRenderer(renderer,scene,camera);
   if(generated){
-    const heights=await relief;
+    const [heights,surface]=await Promise.all([relief,reliefSurface]);
     if(heights){
-      try{addWhitepeakBackdrop(scene,stitchWhitepeakRelief(heights,terrain),terrain);}
+      try{addWhitepeakBackdrop(scene,stitchWhitepeakRelief(heights,terrain),terrain,surface);}
       catch(error){console.warn(error);toast('白岬远景载入失败');}
     }else toast('白岬远景载入失败');
     $('scenery').disabled=false;

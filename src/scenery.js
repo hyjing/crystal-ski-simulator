@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import {stitchedRegionalGrid,validRegionalGrid} from './regional-scenery.js';
 import {createTerrain} from './terrain.js';
+import {WHITEPEAK_SURFACE_BOUNDS} from './whitepeak-relief.js';
 import {HDRLoader} from 'three/addons/loaders/HDRLoader.js';
 
 // All terrain shares the local tile's UTM origin and metric vertical datum.
@@ -75,10 +76,10 @@ export function addContextTerrain(scene,context,local,texture,rainier,regional){
   return addGrid(scene,context,local,texture,exclude,{x:-7500,z:4000,halfX:6500,halfZ:4000});
 }
 
-export function addWhitepeakBackdrop(scene,context,local){
+export function addWhitepeakBackdrop(scene,context,local,surfaceTexture){
   const halfX=(local.width-1)*local.spacing/2,halfZ=(local.height-1)*local.spacing/2;
   const exclude=[{west:-halfX+180,east:halfX-180,north:-halfZ+180,south:halfZ-180}];
-  const ridgeDetail=[{x:2500,z:19500,halfX:13000,halfZ:7600}];
+  const ridgeDetail=[{x:2500,z:17600,halfX:12500,halfZ:9600}];
   const mesh=addGrid(scene,context,local,null,exclude,ridgeDetail);
   mesh.name='Annapurna relief';
   const geometry=mesh.geometry,positions=geometry.attributes.position,normals=geometry.attributes.normal;
@@ -102,32 +103,51 @@ export function addWhitepeakBackdrop(scene,context,local){
   const material=mesh.material;
   material.color.set('#ffffff');
   material.vertexColors=true;
-  material.userData.distanceHaze=.68;
+  material.userData.distanceHaze=.55;
+  material.userData.useBackgroundFog=true;
+  if(!surfaceTexture)return mesh;
+  surfaceTexture.colorSpace=THREE.NoColorSpace;
+  surfaceTexture.anisotropy=8;
+  const {west,east,north,south}=WHITEPEAK_SURFACE_BOUNDS;
   material.onBeforeCompile=shader=>{
+    shader.uniforms.annapurnaSurface={value:surfaceTexture};
+    shader.uniforms.reliefSurfaceBounds={value:new THREE.Vector4(west,north,east-west,south-north)};
+    shader.uniforms.reliefLocalEdge={value:new THREE.Vector2(halfX,halfZ)};
     shader.vertexShader=shader.vertexShader.replace('#include <common>','#include <common>\nvarying vec3 vRelief;')
       .replace('#include <begin_vertex>','#include <begin_vertex>\nvRelief=position;');
     shader.fragmentShader=shader.fragmentShader.replace('#include <common>',`#include <common>
       varying vec3 vRelief;
-      float reliefHash(vec2 cell){
-        vec3 p=fract(vec3(cell.xyx)*.1031);
-        p+=dot(p,p.yzx+33.33);
-        return fract((p.x+p.y)*p.z);
-      }
-      float reliefGrain(vec2 point){
-        vec2 cell=floor(point),f=fract(point);
-        f*=f*(3.-2.*f);
-        return mix(mix(reliefHash(cell),reliefHash(cell+vec2(1,0)),f.x),
-          mix(reliefHash(cell+vec2(0,1)),reliefHash(cell+vec2(1,1)),f.x),f.y);
-      }`)
+      uniform sampler2D annapurnaSurface;
+      uniform vec4 reliefSurfaceBounds;
+      uniform vec2 reliefLocalEdge;`)
       .replace('#include <color_fragment>',`#include <color_fragment>
-        vec2 rockFace=vec2(vRelief.x+.45*vRelief.y,vRelief.z-.38*vRelief.y);
-        float bedding=reliefGrain(rockFace*vec2(.010,.018))-.5;
-        float clefts=reliefGrain(rockFace.yx*vec2(.051,.028))-.5;
-        float stone=1.-smoothstep(.24,.80,max(diffuseColor.r,max(diffuseColor.g,diffuseColor.b)));
-        diffuseColor.rgb*=1.+stone*(.19*bedding+.082*clefts);
+        vec2 reliefUV=(vRelief.xz-reliefSurfaceBounds.xy)/reliefSurfaceBounds.zw;
+        vec2 distanceToEdge=min(reliefUV,1.-reliefUV)*reliefSurfaceBounds.zw;
+        vec2 distanceToResort=abs(vRelief.xz)-reliefLocalEdge;
+        float reliefWeight=smoothstep(0.,1500.,min(distanceToEdge.x,distanceToEdge.y))
+          *smoothstep(2000.,3400.,max(distanceToResort.x,distanceToResort.y));
+        // PNG rows advance toward +Z. The loaded Three.js texture flips image rows.
+        vec3 landform=texture2D(annapurnaSurface,vec2(reliefUV.x,1.-reliefUV.y)).rgb;
+        vec2 rockNormal=landform.rg*2.-1.;
+        float upward=sqrt(max(.025,1.-dot(rockNormal,rockNormal)));
+        float shelter=landform.b;
+        float lowerAlpine=smoothstep(2700.,4600.,vRelief.y+1200.);
+        float snowline=smoothstep(3300.,5150.,vRelief.y+1200.+(shelter-.5)*1250.);
+        float rockFace=smoothstep(.15,.53,1.-upward+(0.5-shelter)*.17);
+        float highSnow=smoothstep(5350.,7350.,vRelief.y+1200.);
+        float snowCover=snowline*(1.-mix(.9,.52,highSnow)*rockFace);
+        vec3 stone=mix(vec3(.052,.092,.074),vec3(.158,.179,.195),max(lowerAlpine,rockFace));
+        vec3 snow=mix(vec3(.53,.72,.82),vec3(.92,.96,1.),smoothstep(.46,.76,upward));
+        vec3 surfaceColor=mix(stone,snow,snowCover);
+        surfaceColor*=mix(1.06,.78,smoothstep(.48,.94,shelter));
+        diffuseColor.rgb=mix(diffuseColor.rgb,surfaceColor,reliefWeight);
+      `)
+      .replace('#include <normal_fragment_maps>',`#include <normal_fragment_maps>
+        vec3 reliefNormal=normalize(mat3(viewMatrix)*vec3(rockNormal.x,upward,rockNormal.y));
+        normal=normalize(mix(normal,reliefNormal,reliefWeight*.9));
       `);
   };
-  material.customProgramCacheKey=()=> 'whitepeak-annapurna-rock-v1';
+  material.customProgramCacheKey=()=> 'whitepeak-annapurna-surface-v1';
   return mesh;
 }
 
