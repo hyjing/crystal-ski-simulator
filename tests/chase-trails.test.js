@@ -42,9 +42,23 @@ test('trails follow the real path, catch a fast crossing, and break across airti
   const view=new ChaseTrailEffects(new THREE.Group());
   view.update(segments,surface,.2);
   assert.equal(view.layers.flametrail.plume.count,3);
-  assert.equal(view.layers.frosttrail.ribbon.count,0);
+  const ribbon=view.layers.flametrail.ribbon;
+  const height=(x,z)=>.08*z*z+.2*x;
+  const sloped=new ChaseTrailEffects(new THREE.Group());
+  sloped.update(segments,height,.2);
+  const ground=sloped.layers.flametrail.ribbon.geometry;
+  const {position,expiry}=ground.attributes;
+  assert.ok(ground.drawRange.count>18);
+  const lastVertex=Math.max(...ground.index.array.subarray(0,ground.drawRange.count));
+  for(let i=0;i<=lastVertex;i++)assert.ok(Math.abs(position.getY(i)-height(position.getX(i),position.getZ(i))-.045)<1e-6);
+  assert.equal(expiry.getX(0),Math.fround(segments[0].until));
+  sloped.update(segments,height,.5);
+  assert.equal(sloped.clock.value,.5);
+  assert.match(ribbon.material.fragmentShader,/float groove/);
+  assert.equal(view.layers.frosttrail.ribbon.geometry.drawRange.count,0);
   view.update([],surface,5);
   assert.equal(view.layers.flametrail.plume.count,0);
+  assert.equal(ribbon.geometry.drawRange.count,0);
 });
 
 test('frost and fire trigger a one-time thermal hit, and mirage feeds a separate follow-up',()=>{
@@ -102,6 +116,8 @@ test('Whitepeak stitches measured Annapurna relief to the local terrain and rend
   backdrop.material.onBeforeCompile(shader);
   assert.match(shader.vertexShader,/vRelief=position/);
   assert.match(shader.fragmentShader,/vec3 landform=texture2D/);
+  assert.match(shader.fragmentShader,/stone=alpineVegetation/);
+  assert.match(shader.fragmentShader,/float footprint=max\(length\(dFdx/);
   assert.match(shader.fragmentShader,/normal=normalize\(mix\(normal,reliefNormal/);
   assert.match(shader.fragmentShader,/float mistDensity=backgroundFogDensity/);
   const {west,east,north,south}=WHITEPEAK_SURFACE_BOUNDS;

@@ -8,7 +8,8 @@ export const CHASE_TRAILS={
   miragetrail:{name:'幻光滑痕',color:'#c08aff',symbol:'◇',duration:3.8,linger:5,radius:3,damage:9,
     description:'使踩中的追赶者偏离路线并扣 9 点血。趁他迷向，用雪浪或雪弹炮追击可触发破幻'},
 };
-const SPACING=2.6,MAX_SEGMENTS=192;
+const SPACING=2.6;
+export const MAX_CHASE_TRAIL_SEGMENTS=192;
 
 export function layTrails(segments,effects,player,time){
   const live=segments.filter(segment=>segment.until>time);
@@ -28,7 +29,7 @@ export function layTrails(segments,effects,player,time){
       effect.last=b;
     }
   }
-  return live.length>MAX_SEGMENTS?live.slice(-MAX_SEGMENTS):live;
+  return live.length>MAX_CHASE_TRAIL_SEGMENTS?live.slice(-MAX_CHASE_TRAIL_SEGMENTS):live;
 }
 
 export function trailContact(segments,agent,next,surface){
