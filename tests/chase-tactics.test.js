@@ -147,11 +147,11 @@ test('a sprinter charges at two stars and a cutter telegraphs a fixed intercept 
  assert.equal(sideRun.dash,null);
 });
 
-test('the laser telegraphs its aim, can miss, and an active shield returns the beam to its shooter',()=>{
+test('the laser sweeps for several seconds, has limited lateral tracking, and can be reflected',()=>{
  const player={x:0,z:600,heading:0,speed:20,vx:0,vz:20};
  const setup=(mounted=false)=>{
   const run=new PatrolRun(simple,()=>true,()=>false),agent={x:0,z:573,heading:0,speed:18,bank:0,role:'laser',health:35};
-  if(mounted)Object.assign(agent,{mount:'plane',flightY:12});
+  if(mounted)Object.assign(agent,{mount:'helicopter',flightY:12});
   run.stars=4;run.nextDash=0;run.agents=[agent];
   run.step(.05,player,()=>false);
   assert.equal(run.dash?.kind,'laser');
@@ -161,22 +161,34 @@ test('the laser telegraphs its aim, can miss, and an active shield returns the b
  };
  const direct=setup();
  direct.run.step(1.06,{...player,z:620},()=>false);
- assert.equal(direct.run.health,86);
- assert.equal(direct.run.shots[0].kind,'laser');
+ assert.ok(direct.run.health<100);
+ assert.equal(direct.run.laserBeam.kind,'laser');
+ direct.run.step(.5,{...player,z:630},()=>false);
+ assert.ok(direct.run.health<87&&direct.run.laserBeam);
+ direct.run.step(1.75,{...player,x:10,z:658},()=>false);
+ assert.equal(direct.run.dash,null);
+ direct.run.step(.05,{...player,z:659},()=>false);
+ assert.equal(direct.run.laserBeam,null);
+ assert.ok(direct.run.time<direct.run.nextDash);
  const dodged=setup();
  dodged.run.step(1.06,{...player,x:6,z:620},()=>false);
  assert.equal(dodged.run.health,100);
- assert.equal(dodged.run.shots[0].result,'miss');
+ assert.equal(dodged.run.laserBeam.result,'miss');
+ const first=dodged.run.dash.point.x;
+ dodged.run.step(.25,{...player,x:9,z:625},()=>false);
+ assert.equal(dodged.run.health,100);
+ assert.ok(dodged.run.dash.point.x-first<=.96);
  const reflected=setup(true);
  reflected.run.inventory=['shield'];
  assert.ok(reflected.run.use(player));
  reflected.run.step(1.06,{...player,z:620},()=>false);
  assert.equal(reflected.run.health,100);
  assert.equal(reflected.agent.health,0);
- assert.deepEqual(reflected.run.shots.map(shot=>shot.kind),['laser','reflection']);
+ assert.deepEqual(reflected.run.shots.map(shot=>shot.kind),['reflection']);
+ assert.equal(reflected.run.laserBeam.result,'reflected');
  assert.equal(reflected.run.hits[0].combo,'激光反射');
- assert.equal(reflected.run.shots[1].end.z,reflected.run.shots[0].z);
- assert.ok(reflected.run.shots[1].end.y>10);
+ assert.equal(reflected.run.shots[0].end.z,reflected.run.laserBeam.z);
+ assert.ok(reflected.run.shots[0].end.y>10);
  reflected.run.step(.1,{...player,z:622},()=>false);
  assert.equal(reflected.run.hits.length,1);
 });
@@ -224,7 +236,7 @@ test('a plane occupies one pursuer slot, stays above the slope, and poses no gro
  run.step(.04,player,point=>point.flightY>ground(point.x,point.z)+8,ground);
  const plane=run.agents[0];
  assert.equal(run.agents.length,1);
- assert.equal(plane?.mount,'plane');
+ assert.equal(plane?.mount,'helicopter');
  assert.ok(plane.flightY>=ground(plane.x,plane.z)+7);
  assert.equal(run.damage(plane,'pulse',45),'blocked');
  assert.equal(run.damage(plane,'autofrost',15),'hit');

@@ -62,11 +62,12 @@ test('trails follow the real path, catch a fast crossing, and break across airti
 });
 
 test('frost and fire trigger a one-time thermal hit, and mirage feeds a separate follow-up',()=>{
-  const run=new PatrolRun(route,()=>true,()=>false);
+  const run=new PatrolRun(route,()=>true,()=>false,['frosttrail']);
   const target=makePursuer(0,106);
   run.agents=[target];run.stars=1;
-  run.inventory=['frosttrail','flametrail','miragetrail'];
-  assert.ok(run.use(player));
+  run.inventory=['flametrail','miragetrail'];
+  run.evadeLanding({type:'land',quality:'clean',airTime:.5},player);
+  assert.ok(run.effects.frosttrail);
   run.step(.11,{...player,z:109},()=>false);
   assert.equal(target.health,90);
   assert.ok(target.chillUntil>run.time);

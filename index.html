@@ -85,8 +85,12 @@
     <div class="rider-level"><strong id="progress-level"></strong><span id="progress-xp"></span></div>
     <progress id="progress-meter" max="60" value="0" aria-label="升级经验"></progress>
     <p id="talent-note"></p>
-    <label class="mountain-picker">强化词条<select id="upgrade-choice"></select></label>
-    <button id="choose-upgrade" type="button" class="secondary">确认强化</button>
+    <div id="skill-tree" class="skill-tree" aria-label="被动技能树"></div>
+    <details id="item-upgrades">
+      <summary>道具强化</summary>
+      <label class="mountain-picker">道具<select id="upgrade-choice"></select></label>
+      <button id="choose-upgrade" type="button" class="secondary">确认强化</button>
+    </details>
     <details id="supply-shop">
       <summary>道具商店 <span id="shop-coins"></span></summary>
       <p id="shop-supplies"></p>

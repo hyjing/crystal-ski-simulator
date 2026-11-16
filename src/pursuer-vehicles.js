@@ -4,6 +4,7 @@ const paint=(color,roughness=.52)=>new THREE.MeshStandardMaterial({color,roughne
 const rubber=paint('#252c32',.92),metal=paint('#a1b2bd',.38);
 const glass=new THREE.MeshStandardMaterial({color:'#376e8a',metalness:.32,roughness:.23});
 const lamp=new THREE.MeshBasicMaterial({color:'#d7f8ff'});
+const partLaser=new THREE.MeshBasicMaterial({color:'#ff698e'});
 const red=paint('#c64c33'),white=paint('#e9e8df');
 const box=new THREE.BoxGeometry(),pod=new THREE.SphereGeometry(1,12,8);
 
@@ -39,27 +40,31 @@ export function createPursuerSnowmobile(){
   return model;
 }
 
-export function createPursuerPlane(){
+export function createPursuerHelicopter(){
   const model=new THREE.Group();
-  model.name='Chase bush plane';
-  part(model,'Fuselage',white,[0,.26,0],[.69,.70,2.65],pod);
-  part(model,'Cowling',red,[0,.27,1.68],[.68,.52,.94],pod);
-  part(model,'Canopy',glass,[0,.81,.41],[.56,.48,1.00],pod);
-  part(model,'Dorsal stripe',red,[0,.48,-1.35],[.33,.32,1.20],pod);
-  const propeller=new THREE.Group();
-  propeller.position.set(0,.29,2.63);
-  part(propeller,'Propeller',rubber,[0,0,0],[.11,1.67,.06]);
-  part(propeller,'Spinner',metal,[0,0,.05],[.16,.16,.18],pod);
-  model.add(propeller);
-  model.userData.propeller=propeller;
+  model.name='Chase helicopter';
+  part(model,'Cabin',white,[0,.35,0],[.78,.81,1.42],pod);
+  part(model,'Cabin glazing',glass,[0,.53,.70],[.73,.61,.81],pod);
+  part(model,'Engine housing',red,[0,1.08,-.40],[.57,.35,.88],pod);
+  part(model,'Tail boom',white,[0,.62,-2.04],[.35,.34,3.0],pod);
+  part(model,'Tail fin',red,[0,.93,-3.38],[.13,.86,.51]).rotation.x=-.25;
+  part(model,'Laser pod',metal,[0,-.43,.82],[.31,.25,.38],pod);
+  part(model,'Emitter',partLaser,[0,-.43,1.15],[.17,.17,.09],pod);
+  const rotor=new THREE.Group();
+  rotor.position.y=1.64;
+  part(model,'Mast',metal,[0,1.41,0],[.14,.51,.14]);
+  part(rotor,'Main rotor blade',rubber,[0,0,0],[6.4,.045,.21]);
+  part(rotor,'Main rotor blade',rubber,[0,0,0],[.21,.045,6.4]);
+  const tailRotor=new THREE.Group();
+  tailRotor.position.set(.15,1.1,-3.52);
+  part(tailRotor,'Tail rotor',rubber,[0,0,0],[.05,1.12,.12]);
+  model.add(rotor,tailRotor);
+  model.userData.rotor=rotor;
+  model.userData.tailRotor=tailRotor;
   for(const side of [-1,1]){
-    part(model,'Main wing',white,[side*1.88,.65,.36],[3.72,.17,1.37]).rotation.z=side*.06;
-    part(model,'Wingtip',red,[side*3.62,.76,.37],[.39,.18,1.17]).rotation.z=side*.06;
-    part(model,'Tailplane',white,[side*.83,.58,-2.0],[1.65,.11,.69]).rotation.z=side*.03;
-    part(model,'Wing strut',metal,[side*1.1,.36,.56],[.10,1.43,.1]).rotation.z=-side*1.06;
-    part(model,'Landing strut',metal,[side*.56,-.21,.65],[.10,.76,.11]).rotation.z=-side*.35;
-    part(model,'Landing ski',rubber,[side*.73,-.60,.75],[.28,.13,1.53]);
+    part(model,'Skid',metal,[side*.63,-.69,.15],[.16,.14,2.65]);
+    part(model,'Skid tip',metal,[side*.63,-.57,1.48],[.16,.14,.42]).rotation.x=-.52;
+    for(const z of [-.62,.77])part(model,'Skid mount',metal,[side*.47,-.41,z],[.14,.63,.14]).rotation.z=side*.42;
   }
-  part(model,'Tail fin',red,[0,1.0,-2.05],[.16,1.18,.80]).rotation.x=-.16;
   return model;
 }

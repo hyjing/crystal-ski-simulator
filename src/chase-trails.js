@@ -4,7 +4,7 @@ export const CHASE_TRAILS={
   flametrail:{name:'烈焰滑痕',color:'#ff6a27',symbol:'♨',duration:3.8,linger:4.5,radius:2.9,damage:8,
     description:'沿雪板留下火焰。踩中的雪友在 2.5 秒内持续受伤；碰到挂霜目标时触发融裂'},
   frosttrail:{name:'霜冻滑痕',color:'#68dcff',symbol:'❄',duration:4.2,linger:5.5,radius:3.2,damage:10,
-    description:'留下一道冰带。踩中扣 10 点血、减速并挂霜，可接火焰触发融裂'},
+    description:'技能树被动。平稳落地后短暂铺冰，减速并挂霜，可接火焰触发融裂'},
   miragetrail:{name:'幻光滑痕',color:'#c08aff',symbol:'◇',duration:3.8,linger:5,radius:3,damage:9,
     description:'使踩中的追赶者偏离路线并扣 9 点血。趁他迷向，用雪浪或雪弹炮追击可触发破幻'},
 };

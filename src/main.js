@@ -1,7 +1,7 @@
 import {qualityScale,adaptQuality} from './render-quality.js';
 import {RunGhost,ghostKey,readGhost} from './run-ghost.js';
 import {GhostSkier} from './ghost-skier.js';
-import {ITEM_UPGRADES,ITEM_CAPACITY,ITEM_STACK_LIMIT,itemStacks,shopStock,KNOCKDOWN_XP,KNOCKDOWN_COINS,TALENTS,UPGRADE_CAP,RunExperience,levelProgress,upgradePoints,upgradeRank,describeUpgrade,chooseUpgrade,buyItem,readProgress,saveProgress} from './progression.js';
+import {ITEM_UPGRADES,ITEM_CAPACITY,ITEM_STACK_LIMIT,itemStacks,shopStock,KNOCKDOWN_XP,KNOCKDOWN_COINS,TALENTS,SKILL_BRANCHES,upgradeUnlocked,UPGRADE_CAP,RunExperience,levelProgress,upgradePoints,upgradeRank,describeUpgrade,chooseUpgrade,buyItem,readProgress,saveProgress} from './progression.js';
 import {LUCKY_SECTORS,luckyWidth,luckyShade,routeBranchCandidates,chaseDirection} from './route-experience.js';
 import {mapProjection} from './minimap.js';
 import {PURSUER_SKILLS} from './pursuer-skills.js';
@@ -1200,21 +1200,26 @@ function renderProgress(){
   $('progress-meter').max=stats.needed;
   $('progress-meter').value=stats.xp;
   const choice=$('upgrade-choice'),previous=choice.value;
-  const groups=[
-    ['属性',Object.entries(TALENTS).map(([id,v])=>[id,v.name])],
-    ['道具',Object.keys(ITEM_UPGRADES).map(id=>[id,PATROL_ITEMS[id].name])],
-  ];
-  const options=groups.flatMap(([,items])=>items);
-  const available=options.find(([id])=>upgradeRank(riderProgress.upgrades,id)<UPGRADE_CAP);
-  $('talent-note').textContent=available
-    ?`${points?points+' 点强化可用。':'每次升级获得 1 点。'} 每项最高 ${UPGRADE_CAP} 级，下趟生效。`
-    :'所有词条均已满级。';
-  choice.innerHTML=groups.map(([group,items])=>`<optgroup label="${group}">${items.map(([id,name])=>{
-    const rank=upgradeRank(riderProgress.upgrades,id),maxed=rank===UPGRADE_CAP;
+  const items=Object.keys(ITEM_UPGRADES),upgrades=riderProgress.upgrades;
+  const available=items.find(id=>upgradeRank(upgrades,id)<UPGRADE_CAP);
+  $('talent-note').textContent=points?`${points} 点可用 · 技能与道具强化下趟生效`:'升级获得技能点 · 强化下趟生效';
+  $('skill-tree').innerHTML=SKILL_BRANCHES.map(branch=>`<section class="skill-branch">
+    <h3>${branch.name}</h3>
+    ${branch.nodes.map(id=>{
+      const skill=TALENTS[id],rank=upgradeRank(upgrades,id),locked=!upgradeUnlocked(upgrades,id),maxed=rank===UPGRADE_CAP;
+      const hint=locked?`需要 ${TALENTS[skill.requires].name} 1 级`:maxed?'已满级':points?'强化 · 1 点':'需要 1 点';
+      return `<button type="button" class="skill-node" data-skill="${id}" data-locked="${locked}"${locked||maxed||!points?' disabled':''}>
+        <strong>${skill.name} <span>${rank}/${UPGRADE_CAP}</span></strong>
+        <small>${describeUpgrade(id,Math.min(rank+1,UPGRADE_CAP))}</small><em>${hint}</em>
+      </button>`;
+    }).join('')}
+  </section>`).join('');
+  choice.innerHTML=items.map(id=>{
+    const rank=upgradeRank(upgrades,id),maxed=rank===UPGRADE_CAP;
     const detail=describeUpgrade(id,Math.min(rank+1,UPGRADE_CAP));
-    return `<option value="${id}"${maxed?' disabled':''}>${name} · ${rank}/${UPGRADE_CAP} · ${maxed?'满级':'下一级'} ${detail}</option>`;
-  }).join('')}</optgroup>`).join('');
-  choice.value=previous&&upgradeRank(riderProgress.upgrades,previous)<UPGRADE_CAP?previous:available?.[0]??'';
+    return `<option value="${id}"${maxed?' disabled':''}>${PATROL_ITEMS[id].name} · ${rank}/${UPGRADE_CAP} · ${maxed?'满级':'下一级'} ${detail}</option>`;
+  }).join('');
+  choice.value=items.includes(previous)&&upgradeRank(upgrades,previous)<UPGRADE_CAP?previous:available??'';
   updateUpgradeButton();
   $('shop-coins').textContent=`${riderProgress.coins} 金币`;
   const supplies=itemStacks(riderProgress.supplies);
@@ -1276,6 +1281,14 @@ $('progress-after-run').addEventListener('click',()=>openProgress(true));
 $('progress-close').addEventListener('click',()=>$('progress-dialog').close());
 $('progress-dialog').addEventListener('close',()=>{
   if($('progress-dialog').dataset.result==='true')$('result').showModal();
+});
+$('skill-tree').addEventListener('click',event=>{
+  const node=event.target.closest('button[data-skill]');
+  if(!node||!chooseUpgrade(riderProgress,node.dataset.skill))return;
+  saveProgress(progressStorage,riderProgress);
+  renderProgress();
+  const next=$('skill-tree').querySelector(`[data-skill="${node.dataset.skill}"]:enabled`);
+  (next??$('progress-close')).focus();
 });
 $('choose-upgrade').addEventListener('click',()=>{
   if(!chooseUpgrade(riderProgress,$('upgrade-choice').value))return;
@@ -1385,7 +1398,7 @@ function detonateChaseBomb(blast){
   snowEffects.snowBurst(x,yAt(x,z),z,120,radius/20);
   const visitors=gear.npcs?traffic?.states.filter(state=>traffic.canBeKicked(state))??[]:[];
   const priorBlocks=patrol.guardBlocks;
-  const hit=kick.avalanche(blast,[...patrol.agents.filter(agent=>agent.mount!=='plane'),...visitors],radius,target=>
+  const hit=kick.avalanche(blast,[...patrol.agents.filter(agent=>agent.mount!=='helicopter'),...visitors],radius,target=>
     patrol.agents.includes(target)&&patrol.damage(target,'avalanche',Infinity)!=='down');
   const visitorsHit=visitors.filter(target=>hit.has(target));
   if(visitorsHit.length)confirmChaseKnockdown('雪崩弹',visitorsHit);
@@ -1428,7 +1441,7 @@ function resolveChaseKick(target){
   return result!=='down';
 }
 function canBeKicked(target){
-  if(patrol?.agents.includes(target))return target.mount!=='plane'&&!target.launch&&target.health!==0;
+  if(patrol?.agents.includes(target))return target.mount!=='helicopter'&&!target.launch&&target.health!==0;
   return Boolean(gear.npcs&&traffic?.states.includes(target)&&traffic.canBeKicked(target));
 }
 function kickSkier(){

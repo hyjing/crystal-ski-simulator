@@ -5,8 +5,8 @@ import {deployGlider} from './airborne.js';
 import {pointAlongRoute} from './terrain.js';
 import {AVALANCHE_DURATION,AVALANCHE_RADIUS} from './kick.js';
 import {sweptContact} from './traffic-brain.js';
-import {PURSUER_SKILLS,planPursuerSkill,resolvePursuerSkill,updatePursuerHazards} from './pursuer-skills.js';
-import {DEFAULT_TALENTS,ITEM_STACK_LIMIT,canStoreItem,itemStacks,upgradeBonus,itemUpgradeExtra} from './progression.js';
+import {PURSUER_SKILLS,planPursuerSkill,resolvePursuerSkill,sweepPursuerLaser,updatePursuerHazards} from './pursuer-skills.js';
+import {DEFAULT_TALENTS,ITEM_UPGRADES,ITEM_STACK_LIMIT,canStoreItem,itemStacks,upgradeBonus,itemUpgradeExtra,upgradeRank,passiveCooldown} from './progression.js';
 
 export const PATROL_ROUTE_ID = 'crystal-angry-skiers';
 export const resolveChaseRoute = id => id === 'crystal-patrol-descent' ? PATROL_ROUTE_ID : id;
@@ -28,7 +28,7 @@ export const PURSUER_ROLES={
   ice:{name:'冰带手',color:'#73dcff',symbol:'❄'},
   escort:{name:'护航手',color:'#91baff',symbol:'+'},
   snowball:{name:'投雪手',color:'#f0f7ff',symbol:'●'},
-  laser:{name:'激光小飞机',color:'#ff7498',symbol:'✦'},
+  laser:{name:'激光直升机',color:'#ff7498',symbol:'✦'},
 };
 const ROLES=['racer','cutter','ice','sprinter','laser','escort','snowball','guard','scout'];
 const roleOf=agent=>agent.role??['racer','guard','scout'][(agent.id??0)%3];
@@ -53,7 +53,7 @@ export const PATROL_ITEMS = {
   avalanche: {name:'雪崩弹',color:'#ff986e',symbol:'✹',duration:AVALANCHE_DURATION,description:'稀有 · 自动瞄向 75 米内身后雪友的预计落点，爆炸击倒范围内未受护盾保护的雪友'},
   mist: {name:'雪雾弹',color:'#e3e6f7',symbol:'☁',duration:3,radius:14,damage:6,description:'留下 3 秒雪雾，减速遮挡视线，雾中的雪友每秒受到 6 点伤害'},
   glider: {name:'浮空翼',color:'#91fff3',symbol:'↗',duration:1.35,damage:22,radius:4.5,description:'沿当前滑行方向向前弹射，再展翼滑翔；掠过追赶者上方造成 22 点下冲伤害'},
-  autofrost: {name:'追尾雪弹炮',color:'#82b5ff',symbol:'»',duration:3.4,radius:38,damage:15,description:'自动向身后最近的追赶者发射雪弹，每发 15 点伤害'},
+  autofrost: {name:'追尾雪弹炮',color:'#82b5ff',symbol:'»',duration:3.4,radius:38,damage:15,description:'技能树被动。两星起自动向身后追赶者发射雪弹'},
   crew: {name:'雪友援手',color:'#6dffc3',symbol:'✦',duration:5.5,damage:32,description:'召唤滑向侧方的雪友，吸引 48 米内的追赶者；被追上时反击一次，造成 32 点伤害'},
   banana: {name:'香蕉皮',color:'#ffcd36',symbol:'⌣',duration:12,damage:18,description:'使第一个滑过的雪友滑倒 2.4 秒并受 18 点伤害；有剩余生命就能起身'},
 };
@@ -88,6 +88,9 @@ export class PatrolRun {
     this.contact = 0;
     this.damageRate=DAMAGE_PER_SECOND*(1-upgradeBonus(talents,'stamina')/100);
     this.medkitHeal=MEDKIT_HEAL+upgradeBonus(talents,'recovery');
+    this.passives=talents.slice();
+    this.nextFrostTrail=0;
+    this.nextRearShot=0;
     this.escapeArmed=false;
     this.escapes=0;
     this.health = MAX_HEALTH;
@@ -121,7 +124,7 @@ export class PatrolRun {
     this.effects={};
     this.nextIncident = 0;
     this.nextAgent = 0;
-    const types = ['boost','pulse','mist','shield','banana','flametrail','frosttrail','miragetrail','autofrost','crew'];
+    const types = ['boost','pulse','mist','shield','banana','flametrail','miragetrail','crew'];
     this.pickups = [];
     let itemIndex=0;
     for(let d=route.spawn.distance+115;d<route.length-90;d+=(route.pickupSpacing??225)){
@@ -162,7 +165,7 @@ export class PatrolRun {
   }
 
   damage(agent,source,amount){
-    if(agent.launch||agent.health===0||(agent.mount==='plane'&&source!=='shield'&&source!=='autofrost')||this.blockAttack(agent))return 'blocked';
+    if(agent.launch||agent.health===0||(agent.mount==='helicopter'&&source!=='shield'&&source!=='autofrost')||this.blockAttack(agent))return 'blocked';
     let combo;
     if(source==='flametrail'&&agent.chillUntil>this.time){
       agent.chillUntil=0;
@@ -211,6 +214,13 @@ export class PatrolRun {
     if(event?.type==='land'&&event.quality==='clean'&&event.airTime>=.35){
       this.evadeUntil=this.time+.35;
       this.contact=0;
+      const duration=upgradeBonus(this.passives,'frosttrail');
+      if(player&&duration&&this.time>=this.nextFrostTrail){
+        const type='frosttrail',rank=upgradeRank(this.passives,type),item=CHASE_TRAILS[type];
+        this.effects[type]={type,start:this.time,until:this.time+duration,duration,last:{x:player.x,z:player.z},
+          extra:[0,3,6][rank-1],linger:item.linger};
+        this.nextFrostTrail=this.time+passiveCooldown(this.passives,type);
+      }
       if(event.glider&&player){
         const ground=surface(player.x,player.z);
         for(const agent of this.agents){
@@ -239,7 +249,7 @@ export class PatrolRun {
       const gap=range(point,player);
       const firstTurn={x:point.x+Math.sin(point.heading)*8,z:point.z+Math.cos(point.heading)*8};
       const elevation=surface(point.x,point.z);
-      if(mount==='plane')point.flightY=elevation+12;
+      if(mount==='helicopter')point.flightY=elevation+12;
       return gap>=26&&gap<=105&&this.agents.every(agent=>range(agent,point)>14)&&
         offscreen(point)&&this.clear(point)&&this.clear(firstTurn)&&Math.abs(elevation-ground)<gap*.48+3;
     });
@@ -256,7 +266,8 @@ export class PatrolRun {
     return this.clear(point)&&this.pathClear(point)&&Math.abs(surface(point.x,point.z)-surface(agent.x,agent.z))<14?point:null;
   }
 
-  updateManeuver(player,mist,shield,surface){
+  updateManeuver(player,mist,shield,surface,dt){
+    this.laserBeam=this.reflectedBeam=null;
     const dash=this.dash;
     if(dash){
       const agent=dash.agent,target=dash.target??player;
@@ -267,8 +278,9 @@ export class PatrolRun {
       else if(PURSUER_SKILLS[dash.kind]){
         if(!dash.fired&&this.time>=dash.at){
           dash.fired=true;
-          resolvePursuerSkill(this,dash,player,surface,shield?this.effects.shield:null);
+          if(dash.kind!=='laser')resolvePursuerSkill(this,dash,surface);
         }
+        if(dash.kind==='laser'&&dash.fired)sweepPursuerLaser(this,dash,player,surface,shield?this.effects.shield:null,dt);
         if(this.time>=dash.until)this.dash=null;
       }
     }
@@ -283,7 +295,7 @@ export class PatrolRun {
     for(const agent of eligible){
       const role=roleOf(agent),gap=range(agent,player),skill=planPursuerSkill(this,agent,player,surface);
       if(skill){
-        if(!shield||skill.kind==='escort')choices.push({...skill,agent});
+        if(!shield||skill.kind==='escort'||skill.kind==='laser')choices.push({...skill,agent});
         continue;
       }
       if(shield||player.airborne)continue;
@@ -299,7 +311,7 @@ export class PatrolRun {
     const config=PURSUER_SKILLS[next.kind],at=this.time+(config?.windup??DASH_WARNING);
     this.dash={...next,at,until:at+(config?.duration??(next.kind==='cut'?1.45:DASH_DURATION))};
     next.agent.lastSkill=++this.lastSkill;
-    this.nextDash=this.time+7;
+    this.nextDash=this.time+(next.kind==='laser'?8:7);
   }
 
   repel(agent,player,duration,speed,pushTime,source=null){
@@ -329,7 +341,7 @@ export class PatrolRun {
 
   use(player,slot=0,terrain){
     const type=this.stacks[slot]?.type;
-    if(!type||this.outcome||player.crashRemaining)return false;
+    if(!type||!Object.hasOwn(ITEM_UPGRADES,type)||this.outcome||player.crashRemaining)return false;
     const bonus=upgradeBonus(this.itemUpgrades,type),extra=itemUpgradeExtra(this.itemUpgrades,type);
     if(type==='glider'&&!deployGlider(player,terrain,PATROL_ITEMS.glider.duration+bonus))return false;
     this.inventory.splice(this.inventory.lastIndexOf(type),1);
@@ -380,10 +392,6 @@ export class PatrolRun {
         effect.last={x,z};
         effect.hit=new Set();
       }
-      if(type==='autofrost'){
-        effect.damage=item.damage+extra;
-        effect.nextShot=this.effects.autofrost?.nextShot??this.time;
-      }
       if(this.effects[type])effect.until=this.effects[type].until+duration;
       this.effects[type]=effect;
       if(type==='shield')this.contact=0;
@@ -396,7 +404,7 @@ export class PatrolRun {
     let best=null,score=Infinity;
     for(const target of this.agents){
       const dx=target.x-player.x,dz=target.z-player.z,gap=Math.hypot(dx,dz);
-      if(target.mount==='plane'||target.launch||target.health===0||gap>75||dx*fx+dz*fz>2)continue;
+      if(target.mount==='helicopter'||target.launch||target.health===0||gap>75||dx*fx+dz*fz>2)continue;
       if(Math.abs(surface(target.x,target.z)-ground)>8+gap*.67)continue;
       const fuse=.36+gap*.003;
       const end=this.bombLead(target,fuse);
@@ -490,7 +498,7 @@ export class PatrolRun {
     if(!flight&&player.speed<9)return;
     const item=PATROL_ITEMS[type],ground=surface(player.x,player.z);
     for(const agent of this.agents){
-      if(agent.mount==='plane'||agent.launch||agent.health===0||hit.has(agent)||!sweptContact(last,player,agent,item.radius))continue;
+      if(agent.mount==='helicopter'||agent.launch||agent.health===0||hit.has(agent)||!sweptContact(last,player,agent,item.radius))continue;
       const above=ground+(flight?player.airClearance??0:0)-surface(agent.x,agent.z);
       if(flight?above<0||above>7:Math.abs(above)>3)continue;
       hit.add(agent);
@@ -501,7 +509,7 @@ export class PatrolRun {
   damageInMist(mist,surface){
     const height=surface(mist.x,mist.z);
     for(const agent of this.agents){
-      if(agent.mount==='plane'||agent.launch||agent.health===0||this.time<(mist.hitAt.get(agent)??0)||
+      if(agent.mount==='helicopter'||agent.launch||agent.health===0||this.time<(mist.hitAt.get(agent)??0)||
         range(mist,agent)>=mist.radius||Math.abs(surface(agent.x,agent.z)-height)>6+range(mist,agent)*.45)continue;
       mist.hitAt.set(agent,this.time+1);
       this.damage(agent,'mist',PATROL_ITEMS.mist.damage);
@@ -535,8 +543,8 @@ export class PatrolRun {
   }
 
   fireRearShot(player,surface){
-    const effect=this.effects.autofrost;
-    if(!effect||this.time<effect.nextShot||player.crashRemaining)return;
+    const damage=upgradeBonus(this.passives,'autofrost');
+    if(!damage||this.stars<2||this.time<this.nextRearShot||player.crashRemaining)return;
     const heading=Math.hypot(player.vx,player.vz)>2?Math.atan2(player.vx,player.vz):player.heading;
     const forwardX=Math.sin(heading),forwardZ=Math.cos(heading),ground=surface(player.x,player.z);
     let target=null,closest=PATROL_ITEMS.autofrost.radius;
@@ -544,12 +552,12 @@ export class PatrolRun {
       const distance=range(agent,player);
       if(agent.launch||agent.health===0||distance<.15||distance>=closest)continue;
       const ahead=(agent.x-player.x)*forwardX+(agent.z-player.z)*forwardZ;
-      if(ahead>-.25*distance||Math.abs((agent.flightY??surface(agent.x,agent.z))-ground)>4+distance*(agent.mount==='plane'?.40:.35))continue;
+      if(ahead>-.25*distance||Math.abs((agent.flightY??surface(agent.x,agent.z))-ground)>4+distance*(agent.mount==='helicopter'?.40:.35))continue;
       target=agent;closest=distance;
     }
     if(!target)return;
-    effect.nextShot=this.time+.62;
-    const result=this.damage(target,'autofrost',effect.damage);
+    this.nextRearShot=this.time+passiveCooldown(this.passives,'autofrost');
+    const result=this.damage(target,'autofrost',damage);
     this.shots.push({x:player.x,z:player.z,y:ground+1+(player.airborne?player.airClearance??0:0),
       end:{x:target.x,z:target.z,y:target.flightY??(surface(target.x,target.z)+1.05)},
       start:this.time,impact:this.time+.08,until:this.time+.35,result,target});
@@ -627,12 +635,13 @@ export class PatrolRun {
     this.intercept={point,branch,at:this.time+INTERCEPT_WARNING,heading:Math.atan2(last.x-point.x,last.z-point.z)};
   }
 
-  advancePlane(agent,player,dt,surface){
+  advanceHelicopter(agent,player,dt,surface){
     const heading=player.heading,side=agent.approach==='left'?-1:1;
     const x=player.x-Math.sin(heading)*25+Math.cos(heading)*side*18;
     const z=player.z-Math.cos(heading)*25-Math.sin(heading)*side*18;
     const desired=Math.atan2(x-agent.x,z-agent.z);
-    const turn=clamp(turnAngle(agent.heading,desired),-.80*dt,.80*dt);
+    const turnRate=this.dash?.agent===agent&&this.dash.fired ? .38 : .72;
+    const turn=clamp(turnAngle(agent.heading,desired),-turnRate*dt,turnRate*dt);
     agent.heading+=turn;
     const pace=clamp(player.speed*.9+8,20,48);
     agent.speed+=(pace-agent.speed)*Math.min(1,dt*1.4);
@@ -683,7 +692,7 @@ export class PatrolRun {
       const radius=wave.radius*clamp((this.time-wave.start)/wave.duration,0,1);
       for(const agent of this.agents){
         const gap=range(agent,wave);
-        if(agent.mount==='plane'||agent.launch||wave.hit.has(agent)||gap>radius||
+        if(agent.mount==='helicopter'||agent.launch||wave.hit.has(agent)||gap>radius||
           Math.abs(surface(agent.x,agent.z)-surface(wave.x,wave.z))>7+gap*.4)continue;
         wave.hit.add(agent);
         const result=this.damage(agent,'pulse',wave.damage);
@@ -729,7 +738,7 @@ export class PatrolRun {
     if(!concealed&&this.agents.length<desired&&this.time>=this.spawnAfter){
       let role=ROLES[this.nextAgent%ROLES.length];
       if((role==='laser'||role==='sprinter')&&this.agents.some(agent=>agent.role===role))role='scout';
-      const mount=role==='laser'?'plane':role==='sprinter'?'snowmobile':null;
+      const mount=role==='laser'?'helicopter':role==='sprinter'?'snowmobile':null;
       const point=this.reinforcement(player,along.progress,offscreen,surface,mount);
       this.spawnAfter=this.time+(point?(this.stars>=4?1.6:2.15):.45);
       if(point){
@@ -740,7 +749,7 @@ export class PatrolRun {
     }
 
     const shield=Boolean(this.effects.shield);
-    this.updateManeuver(player,mist,shield,surface);
+    this.updateManeuver(player,mist,shield,surface,dt);
     updatePursuerHazards(this,player,surface,shield,this.hazardSample??player);
     this.hazardSample={x:player.x,z:player.z};
     for(const agent of this.agents){
@@ -754,9 +763,9 @@ export class PatrolRun {
     const playerHeight=surface(player.x,player.z);
     for(const agent of this.agents){
       if(agent.launch)continue;
-      if(agent.mount==='plane'){
+      if(agent.mount==='helicopter'){
         if(agent.health!==0){
-          this.advancePlane(agent,player,dt,surface);
+          this.advanceHelicopter(agent,player,dt,surface);
           threat=Math.min(threat,range(agent,player));
         }else{
           agent.x+=Math.sin(agent.heading)*dt*16;

@@ -166,3 +166,21 @@ test('retired supplies refund their purchase price and retired ranks return thei
   saveProgress(storage,profile);
   assert.deepEqual(readProgress(storage),profile);
 });
+
+test('passive branches require their root and preserve old ranks while refunding old stock',()=>{
+ const profile={xp:360,coins:0,upgrades:[],supplies:[]};
+ assert.equal(chooseUpgrade(profile,'autofrost'),false);
+ assert.ok(chooseUpgrade(profile,'stamina'));
+ assert.ok(chooseUpgrade(profile,'autofrost'));
+ assert.equal(chooseUpgrade(profile,'frosttrail'),false);
+ assert.ok(chooseUpgrade(profile,'agility'));
+ assert.ok(chooseUpgrade(profile,'frosttrail'));
+ let value;
+ const storage={getItem:()=>value,setItem:(_,next)=>{value=next;}};
+ saveProgress(storage,{xp:140,coins:7,upgrades:['autofrost'],supplies:['frosttrail','autofrost','shield']});
+ const legacy=readProgress(storage);
+ assert.deepEqual(legacy,{xp:140,coins:47,upgrades:['autofrost'],supplies:['shield']});
+ assert.ok(chooseUpgrade(legacy,'autofrost'));
+ saveProgress(storage,legacy);
+ assert.deepEqual(readProgress(storage),legacy);
+});

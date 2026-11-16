@@ -660,14 +660,15 @@ test('the glider pops forward along travel, ignores a held turn, then accepts fr
 });
 
 test('rear cannon picks the closest rear target, respects armor, and repeats on its cadence',()=>{
-  const run=new PatrolRun(route,()=>true,()=>false,[],['autofrost','autofrost','autofrost']);
+  const run=new PatrolRun(route,()=>true,()=>false,['autofrost','autofrost','autofrost']);
   const player=makePlayer(100);
   const front={x:0,z:103,heading:0,speed:0,bank:0,health:100};
   const behind={x:0,z:92,heading:0,speed:0,bank:0,health:100,guardUntil:1};
   const farther={x:0,z:83,heading:0,speed:0,bank:0,health:100};
   run.agents=[front,farther,behind];run.stars=1;
-  run.inventory=['autofrost'];
-  assert.ok(run.use(player));
+  run.step(.05,player,()=>false);
+  assert.equal(run.shots.length,0);
+  run.stars=2;
   run.step(.05,player,()=>false);
   assert.equal(run.guardBlocks,1);
   assert.equal(behind.health,100);
@@ -675,8 +676,8 @@ test('rear cannon picks the closest rear target, respects armor, and repeats on 
   assert.equal(run.shots[0].result,'blocked');
   run.step(.4,player,()=>false);
   assert.equal(behind.health,100);
-  run.step(.26,player,()=>false);
-  assert.equal(behind.health,76);
+  run.step(1.46,player,()=>false);
+  assert.equal(behind.health,82);
   assert.equal(front.health,100);
   assert.equal(farther.health,100);
   assert.equal(run.hits[0].source,'autofrost');

@@ -5,7 +5,7 @@ import {applyGear,GEAR_PRESETS} from './wardrobe.js';
 import {fallAnimation} from './npc-routines.js';
 import {GLIDER_POP_TIME} from './airborne.js';
 import {PURSUER_SKILLS,pursuerLaserOrigin} from './pursuer-skills.js';
-import {createPursuerSnowmobile,createPursuerPlane} from './pursuer-vehicles.js';
+import {createPursuerSnowmobile,createPursuerHelicopter} from './pursuer-vehicles.js';
 import {PATROL_ITEMS,PURSUER_ROLES,MEDKIT,SUPPLY,MAX_PURSUERS,PURSUER_HEALTH} from './patrol-mode.js';
 import {ChaseTrailEffects} from './chase-trail-effects.js';
 import {poseKickedSkier} from './kick.js';
@@ -73,6 +73,10 @@ export class PatrolScene {
     this.projectiles=[];
     this.allies=[];
     this.shotMeshes=[];
+    this.laserSweep=createRearShotEffect();
+    this.reflectedSweep=createRearShotEffect();
+    this.laserSweep.visible=this.reflectedSweep.visible=false;
+    this.root.add(this.laserSweep,this.reflectedSweep);
     this.snowballMeshes=[];
     this.iceTrails=new ChaseTrailEffects(this.root,['frosttrail']);
     this.laserAim=skillLine(PURSUER_SKILLS.laser.color);
@@ -176,6 +180,7 @@ export class PatrolScene {
     this.trailEffects.update([],this.surface,0);
     this.iceTrails.update([],this.surface,0);
     this.laserAim.visible=this.escortLine.visible=this.snowTarget.visible=false;
+    this.laserSweep.visible=this.reflectedSweep.visible=false;
     for(const actor of this.actors)actor.userData.guard.visible=false;
     for(const vehicle of this.vehicles)if(vehicle)vehicle.visible=false;
     this.root.visible=Boolean(run);
@@ -203,7 +208,13 @@ export class PatrolScene {
   }
 
   updatePursuerEffects(time){
-    const {dash,agents,snowballs}=this.run;
+    const {dash,agents,snowballs,laserBeam,reflectedBeam}=this.run;
+    const renderSweep=(fx,beam)=>{
+      if(!beam){fx.visible=false;return;}
+      updateRearShotEffect(fx,{...beam,start:time-.09,impact:time,until:time+.1},time);
+    };
+    renderSweep(this.laserSweep,laserBeam);
+    renderSweep(this.reflectedSweep,reflectedBeam);
     this.laserAim.visible=this.escortLine.visible=false;
     const raised=(point,lift)=>({x:point.x,z:point.z,y:this.surface(point.x,point.z)+lift});
     if(dash?.kind==='laser'&&!dash.fired){
@@ -235,21 +246,22 @@ export class PatrolScene {
     let model=this.vehicles[slot];
     if(model)model.visible=false;
     if(!agent?.mount||agent.launch)return null;
-    const mounted=agent.mount==='plane'||agent.health!==0&&!(agent.fallDuration>0&&agent.stunUntil>time);
+    const mounted=agent.mount==='helicopter'||agent.health!==0&&!(agent.fallDuration>0&&agent.stunUntil>time);
     if(!mounted)return null;
     if(model?.userData.mount!==agent.mount){
       if(model)this.root.remove(model);
-      model=agent.mount==='plane'?createPursuerPlane():createPursuerSnowmobile();
+      model=agent.mount==='helicopter'?createPursuerHelicopter():createPursuerSnowmobile();
       model.userData.mount=agent.mount;
       this.vehicles[slot]=model;
       this.root.add(model);
     }
     model.visible=true;
-    if(agent.mount==='plane'){
+    if(agent.mount==='helicopter'){
       model.position.set(agent.x,agent.flightY??(this.surface(agent.x,agent.z)+12),agent.z);
       const down=agent.health===0;
       model.rotation.set(down?.18:0,agent.heading,down?-.60:agent.bank,'YXZ');
-      model.userData.propeller.rotation.z=time*(down?19:84);
+      model.userData.rotor.rotation.y=time*(down?13:61);
+      model.userData.tailRotor.rotation.x=time*(down?18:83);
     }
     return model;
   }
@@ -360,7 +372,7 @@ export class PatrolScene {
       const appeared=actor.userData.chaseAgent!==agent;
       actor.userData.chaseAgent=agent;
       const vehicle=this.updateVehicle(i,agent,time);
-      const aircraft=agent?.mount==='plane';
+      const aircraft=agent?.mount==='helicopter';
       actor.visible=Boolean(agent&&!aircraft);
       const marker=actor.userData.chaseMarker;
       marker.visible=Boolean(agent);

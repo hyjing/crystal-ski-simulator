@@ -31,7 +31,8 @@ test('Whitepeak exposes six distinct chase-only courses with flat starts and dow
     assert.ok(run.pickups.some(p=>p.type==='supply')&&run.pickups.some(p=>p.type==='medkit'));
     assert.equal(run.pickups.filter(p=>p.type==='avalanche').length,1);
     assert.ok(run.pickups.some(p=>p.type==='glider'));
-    assert.ok(run.pickups.some(p=>p.type==='crew')&&run.pickups.some(p=>p.type==='autofrost'));
+    assert.ok(run.pickups.some(p=>p.type==='crew'));
+    assert.ok(run.pickups.every(p=>!['autofrost','frosttrail'].includes(p.type)));
     assert.ok(run.pickups.filter(p=>p.type!=='medkit').length>=24);
   }
   assert.ok(maxGrades[0]<.25&&maxGrades[1]>.32&&maxGrades[2]>.5);
