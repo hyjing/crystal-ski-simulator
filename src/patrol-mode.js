@@ -31,13 +31,17 @@ export const PATROL_ITEMS = {
   pulse: {name:'雪浪脉冲',color:'#b0fff0',symbol:'◎',duration:.62,radius:19,damage:45,description:'环形击退并造成 45 点伤害，能打断近身围追'},
   avalanche: {name:'雪崩弹',color:'#ff986e',symbol:'✹',duration:AVALANCHE_DURATION,description:'稀有 · 落地直接击倒范围内未受护盾保护的雪友'},
   snowball: {name:'冰雪球',color:'#8cd9ff',symbol:'●',duration:.65,description:'拦停落点旁最近的雪友，打断冲刺并大幅减速 3.2 秒'},
-  mist: {name:'雪雾弹',color:'#e3e6f7',symbol:'☁',duration:2.3,radius:13,description:'遮蔽 2.3 秒，阻止贴身伤害和新雪友补位，方便换路线'},
+  mist: {name:'雪雾弹',color:'#e3e6f7',symbol:'☁',duration:3,radius:14,description:'留下 3 秒减速雾区。雪友会穿过或绕行，视线被挡时搜索你最后出现的位置'},
   banana: {name:'香蕉皮',color:'#ffcd36',symbol:'⌣',duration:12,description:'绊倒第一个滑过的雪友 2.4 秒，之后他会重新站起来'},
 };
 export const MEDKIT = {name:'血包',color:'#f95178'};
 export const SUPPLY = {name:'道具补给',color:'#f1c77c'};
 const range = (a, b) => Math.hypot(a.x-b.x, a.z-b.z);
 const turnAngle = (a, b) => Math.atan2(Math.sin(b-a), Math.cos(b-a));
+
+function fogBlocks(mist,observer,target){
+  return Boolean(mist&&range(observer,target)>4&&sweptContact(observer,target,mist,PATROL_ITEMS.mist.radius));
+}
 
 function routePoint(route, distance, offset=0) {
   const p = pointAlongRoute(route, clamp(distance,0,route.length));
@@ -264,6 +268,32 @@ export class PatrolRun {
     this.iceHits++;
   }
 
+  searchThroughMist(agent,mist){
+    if(agent.mistSearch?.cloud!==mist){
+      const lastSeen=agent.lastTarget??mist;
+      const dx=mist.x-agent.x,dz=mist.z-agent.z,distance=Math.hypot(dx,dz);
+      const heading=distance>.1?Math.atan2(dx,dz):mist.heading;
+      const radius=PATROL_ITEMS.mist.radius;
+      const side=(agent.id??0)%4<2?1:-1;
+      const flank=(forward,lateral)=>({
+        x:mist.x+Math.sin(heading)*forward+Math.cos(heading)*lateral,
+        z:mist.z+Math.cos(heading)*forward-Math.sin(heading)*lateral,
+      });
+      const detour=(agent.id??0)%2===1&&distance>radius+4
+        ? [side,-side].map(sign=>flank(1,sign*(radius+6))).find(this.clear)
+        : null;
+      const exit=detour?{x:detour.x+Math.sin(heading)*radius,z:detour.z+Math.cos(heading)*radius}
+        :flank(radius+5,side*3);
+      agent.mistSearch={cloud:mist,waypoint:detour??lastSeen,detour:Boolean(detour),exit:this.clear(exit)?exit:null};
+    }
+    const search=agent.mistSearch;
+    if(range(agent,search.waypoint)<5&&search.exit){
+      search.waypoint=search.exit;
+      search.exit=null;
+    }
+    return search.waypoint;
+  }
+
   boost(player,dt){
     if(!this.effects.boost||player.crashRemaining)return;
     const gain=Math.min(22*dt,Math.max(0,PHYSICS.maxHorizontalSpeed-Math.hypot(player.vx,player.vz)));
@@ -278,11 +308,12 @@ export class PatrolRun {
     this.shieldHits=0;
     this.iceHits=0;
     this.time+=dt;
-    if(this.stars>=2&&!(this.effects.mist?.until>this.time)){
+    const activeMist=this.effects.mist?.until>this.time?this.effects.mist:null;
+    if(this.stars>=2){
       for(const agent of this.agents){
         const gap=range(agent,player);
         if(agent.id%3===1&&!agent.guardUsed&&!agent.launch&&agent.health!==0&&!(agent.stunUntil>this.time)&&
-          gap<=21&&Math.abs(surface(agent.x,agent.z)-surface(player.x,player.z))<8){
+          gap<=21&&!fogBlocks(activeMist,agent,player)&&Math.abs(surface(agent.x,agent.z)-surface(player.x,player.z))<8){
           agent.guardUsed=true;
           agent.guardUntil=this.time+GUARD_DURATION;
         }
@@ -341,10 +372,10 @@ export class PatrolRun {
       if(previous<marker&&this.furthest>=marker)this.addStar();
     }
 
-    const mist=this.effects.mist;
-    const obscured=Boolean(mist);
+    const mist=activeMist;
+    const concealed=mist&&range(mist,player)<PATROL_ITEMS.mist.radius;
     const desired=this.stars?Math.min(MAX_PURSUERS,this.stars+2):0;
-    if(!obscured&&this.agents.length<desired&&this.time>=this.spawnAfter){
+    if(!concealed&&this.agents.length<desired&&this.time>=this.spawnAfter){
       const point=this.reinforcement(player,along.progress,offscreen,surface);
       this.spawnAfter=this.time+(point?2.25:.45);
       if(point){
@@ -356,12 +387,12 @@ export class PatrolRun {
     const lure=this.effects.decoy;
     const shield=Boolean(this.effects.shield);
     const dash=this.dash;
-    if(dash&&(this.time>=dash.until||shield||obscured||lure||dash.agent.launch||
+    if(dash&&(this.time>=dash.until||shield||fogBlocks(mist,dash.agent,player)||lure||dash.agent.launch||
       dash.agent.stunUntil>this.time||dash.agent.slowUntil>this.time||!this.agents.includes(dash.agent)))this.dash=null;
-    if(!this.dash&&this.stars>=3&&this.time>=this.nextDash&&!shield&&!obscured&&!lure){
+    if(!this.dash&&this.stars>=3&&this.time>=this.nextDash&&!shield&&!lure){
       const agent=this.agents.find(agent=>{
         const gap=range(agent,player);
-        return gap>=7&&gap<=25&&!agent.launch&&!(agent.stunUntil>this.time)&&!(agent.slowUntil>this.time)&&
+        return gap>=7&&gap<=25&&!fogBlocks(mist,agent,player)&&!agent.launch&&!(agent.stunUntil>this.time)&&!(agent.slowUntil>this.time)&&
           Math.abs(surface(agent.x,agent.z)-surface(player.x,player.z))<8;
       });
       if(agent){
@@ -397,22 +428,31 @@ export class PatrolRun {
       const distracted=lureDistance<=PATROL_ITEMS.decoy.radius;
       const id=agent.id??0;
       const slowed=agent.slowUntil>this.time;
-      const enableTuck=!obscured&&!distracted&&!slowed&&separation>(agent.tucking?21:36);
+      const fogged=Boolean(mist&&range(mist,agent)<PATROL_ITEMS.mist.radius);
+      const lost=fogBlocks(mist,agent,player);
+      agent.fogSlowed=fogged;
+      if(!lost){
+        agent.lastTarget??={};
+        Object.assign(agent.lastTarget,{x:player.x,z:player.z});
+        if(agent.mistSearch)agent.aimAt=0;
+        agent.mistSearch=null;
+      }
+      const enableTuck=!lost&&!fogged&&!distracted&&!slowed&&separation>(agent.tucking?21:36);
       if(this.time>=(agent.gapCheckAt??0)){
         agent.losingGround=agent.previousGap===undefined||separation>=agent.previousGap-2;
         agent.previousGap=separation;
         agent.gapCheckAt=this.time+.65;
       }
-      if(this.time>=(agent.aimAt??0)){
+      if(!lost&&this.time>=(agent.aimAt??0)){
         const lane=Math.sin(id*2.4+this.time*.7)*(3+Math.min(5,agent.speed*.16))*clamp(separation/26,.18,1);
         const lookAhead=enableTuck?32:22;
-        const target=distracted?lure:obscured?mist:following?routePoint(this.route,onRoute.progress+lookAhead,enableTuck?lane*.35:lane):{
+        const target=distracted?lure:following?routePoint(this.route,onRoute.progress+lookAhead,enableTuck?lane*.35:lane):{
           x:player.x+Math.cos(player.heading)*lane,z:player.z-Math.sin(player.heading)*lane,
         };
         agent.aim=target;
         agent.aimAt=this.time+.30+(id%3)*.09;
       }
-      const target=distracted?lure:obscured?mist:agent.aim;
+      const target=distracted?lure:lost?this.searchThroughMist(agent,mist):agent.aim;
       const dx=target.x-agent.x,dz=target.z-agent.z;
       const aim=Math.atan2(dx,dz);
       const delta=turnAngle(agent.heading,aim);
@@ -423,9 +463,12 @@ export class PatrolRun {
         downhill>.5&&Math.abs(delta)<(agent.tucking?.58:.36)&&this.clear(probe);
       const normal=clamp(4+this.stars*1.45+player.speed*.78,12,49);
       const tuckedPace=clamp(Math.max(normal+11,player.speed+6)+downhill,24,60);
-      const pace=distracted?(lureDistance<7?0:12):obscured?(range(agent,mist)<7?0:normal*.45)
+      const cruise=distracted?(lureDistance<7?0:12)
         :slowed?Math.min(normal*.32,9):charging?Math.min(54,normal+12):agent.tucking?tuckedPace:normal;
-      agent.speed+=(pace-agent.speed)*Math.min(1,dt*(distracted?9:agent.tucking?2.5:1.7));
+      const turningAround=lost&&agent.mistSearch?.detour&&!distracted&&Math.abs(delta)>.32;
+      const pace=fogged?Math.min(cruise*.42,10):turningAround?Math.min(cruise,14)
+        :lost&&range(agent,target)<3?3:cruise;
+      agent.speed+=(pace-agent.speed)*Math.min(1,dt*(distracted?9:fogged||turningAround?6:agent.tucking?2.5:1.7));
       const step=agent.speed*dt;
       const turnRate=distracted?3.5:agent.tucking?.63:Math.min(1.6,Math.max(5,agent.speed)/16);
       const heading=agent.heading+clamp(delta,-dt*turnRate,dt*turnRate);
@@ -459,7 +502,7 @@ export class PatrolRun {
         agent.heading=heading;
         agent.speed*=.80;
       }
-      if(!distracted){
+      if(!distracted&&!lost){
         const gap=range(agent,player);
         threat=Math.min(threat,gap);
         if(gap<=CAPTURE_RADIUS&&!(agent.freezeUntil>this.time)&&Math.abs(surface(agent.x,agent.z)-playerHeight)<2)
@@ -467,7 +510,7 @@ export class PatrolRun {
       }
     }
 
-    if(!obscured&&threat<75)this.lastSeen=this.time;
+    if(threat<75)this.lastSeen=this.time;
     if(this.stars&&this.agents.some(agent=>!agent.launch&&agent.health!==0)&&this.time-this.lastSeen>12){
       this.stars--;
       this.lastSeen=this.time;
@@ -481,7 +524,7 @@ export class PatrolRun {
       }
     }
     const inReach = this.stars > 0 && contactDistance <= CAPTURE_RADIUS &&
-      !player.airborne && this.time>=this.evadeUntil && !shield && !obscured;
+      !player.airborne && this.time>=this.evadeUntil && !shield;
     this.contact = inReach ? this.contact + dt : 0;
     if(inReach){
       this.health=Math.max(0,this.health-this.damageRate*dt);

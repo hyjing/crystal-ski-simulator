@@ -349,7 +349,7 @@ test('an avalanche is thrown immediately and detonates later around its landing 
   assert.ok(pursuer.launch.finished&&visitor.launch.finished);
 });
 
-test('high heat telegraphs a pursuer dash and mist cancels it and stops close damage',()=>{
+test('high heat telegraphs a pursuer dash and mist interrupts it when sight is lost',()=>{
   const run=new PatrolRun(route,()=>true,()=>false),player=makePlayer(100);
   const pursuer={x:0,z:85,speed:18,heading:0,bank:0};
   run.stars=3;run.agents=[pursuer];run.time=7;
@@ -361,7 +361,7 @@ test('high heat telegraphs a pursuer dash and mist cancels it and stops close da
   const chargingSpeed=pursuer.speed;
   run.inventory=['mist'];
   assert.ok(run.use(player));
-  pursuer.z=97;
+  pursuer.z=94;
   run.step(.05,player,()=>false);
   assert.equal(run.dash,null);
   assert.equal(run.health,100);
@@ -613,7 +613,7 @@ test('an ordinary ice ball brakes a single pursuer without changing either healt
   assert.equal(run.hits.length,0);
 });
 
-test('the decoy lands to the side and snow mist pauses reinforcements',()=>{
+test('the decoy lands to the side and mist conceals the player while inside',()=>{
   const run=new PatrolRun(route,()=>true);
   const player={...makePlayer(100),turn:1};
   run.inventory=['decoy','mist'];
@@ -626,4 +626,42 @@ test('the decoy lands to the side and snow mist pauses reinforcements',()=>{
   assert.equal(run.agents.length,0);
   run.step(PATROL_ITEMS.mist.duration,player);
   assert.equal(run.agents.length,1);
+});
+
+test('pursuers slow in mist, remember a lost target, and choose to cross or detour',()=>{
+  const run=new PatrolRun(route,()=>true,()=>false);
+  const direct={id:0,x:0,z:76,speed:24,heading:0,bank:0};
+  const detour={id:1,x:0,z:70,speed:24,heading:0,bank:0};
+  const player=makePlayer(100);
+  run.agents=[direct,detour];
+  run.stars=1;
+  run.step(.03,player,()=>false);
+  run.inventory=['mist'];
+  assert.ok(run.use(player));
+  run.step(.03,makePlayer(139),()=>false);
+  assert.deepEqual(direct.mistSearch.waypoint,{x:0,z:100});
+  assert.equal(direct.mistSearch.detour,false);
+  assert.equal(detour.mistSearch.detour,true);
+  assert.ok(Math.abs(detour.mistSearch.waypoint.x)>PATROL_ITEMS.mist.radius);
+  direct.z=91;direct.speed=24;
+  run.step(.25,makePlayer(139),()=>false);
+  assert.equal(direct.fogSlowed,true);
+  assert.ok(direct.speed<10);
+  const visible={...makePlayer(139),x:80};
+  direct.z=139;
+  run.step(.03,visible,()=>false);
+  assert.equal(direct.fogSlowed,false);
+  assert.equal(direct.mistSearch,null);
+  assert.deepEqual(direct.lastTarget,{x:80,z:139});
+});
+
+test('a pursuer can still apply contact damage when very close inside the mist',()=>{
+  const run=new PatrolRun(route,()=>true,()=>false);
+  const player=makePlayer(100);
+  run.agents=[{id:0,x:0,z:98,speed:0,heading:0,bank:0}];
+  run.stars=1;
+  run.inventory=['mist'];
+  assert.ok(run.use(player));
+  run.step(.1,player,()=>false);
+  assert.ok(run.health<100);
 });

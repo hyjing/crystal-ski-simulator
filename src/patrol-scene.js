@@ -228,7 +228,7 @@ export class PatrolScene {
       const charging=this.run.dash?.agent===agent;
       const stunned=agent.stunUntil>time;
       const status=launch||agent.health===0?'down':stunned?'stunned':blocked?'blocked':
-        guard.visible?'guard':charging?'dash':agent.slowUntil>time?'slow':agent.tucking?'tuck':'chase';
+        guard.visible?'guard':charging?'dash':agent.slowUntil>time||agent.fogSlowed?'slow':agent.tucking?'tuck':'chase';
       marker.material.map=this.statusIcons[status];
       const scale=charging?1.05+.15*Math.sin(this.phase*21):status==='chase'?.58:.85;
       marker.scale.setScalar(scale);
