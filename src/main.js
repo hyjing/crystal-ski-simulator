@@ -953,7 +953,11 @@ function updateUI(){
     const warning=patrol.intercept;
     $('chase-counter').hidden=(!dash&&!warning)||mode!=='running';
     if(warning)$('chase-counter').textContent=`绕行手即将从${warning.branch.name}切入 · ${Math.max(0,warning.at-patrol.time).toFixed(1)}s`;
-    else if(dash)$('chase-counter').textContent=patrol.time<dash.at?'雪友即将冲刺 · 雪雾、护盾或援手可打断':'雪友冲刺中';
+    else if(dash){
+      const cut=dash.kind==='cut',remaining=Math.max(0,dash.at-patrol.time);
+      $('chase-counter').textContent=remaining>0?`${cut?'横切手即将封线':'雪友即将冲刺'} · ${remaining.toFixed(1)}s`
+        :cut?'横切手正在切入':'雪友冲刺中';
+    }
     $('chase-direction').hidden=!threat||mode!=='running';
     if(threat){
       $('chase-direction-label').textContent=`${PURSUER_ROLES[threat.role]?.name??'雪友'} · ${threat.label} ${threat.distance} m`;
@@ -1366,7 +1370,7 @@ function usePatrolItem(slot=0){
   }
   if(type==='pulse'||type==='mist')snowEffects.snowBurst(skier.x,yAt(skier.x,skier.z),skier.z,64,type==='pulse'?.85:.43);
   const message=type==='avalanche'?(patrol.bombs.at(-1)?.target?'雪崩弹已瞄向身后雪友':'雪崩弹已向身后近处抛出')
-    :type==='glider'?'浮空翼沿原方向展开 · 松开再按转弯键可调整'
+    :type==='glider'?'浮空翼向前弹射 · 展翼后可微调方向'
     :`${PATROL_ITEMS[type].name}已释放`;
   toast(message);
   updateUI();

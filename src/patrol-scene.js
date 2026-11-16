@@ -3,6 +3,7 @@ import {createAthleteRig,updateAthletePose} from './athlete.js';
 import {loadHumanoid} from './humanoid.js';
 import {applyGear,GEAR_PRESETS} from './wardrobe.js';
 import {fallAnimation} from './npc-routines.js';
+import {GLIDER_POP_TIME} from './airborne.js';
 import {PATROL_ITEMS,PURSUER_ROLES,MEDKIT,SUPPLY,MAX_PURSUERS,PURSUER_HEALTH} from './patrol-mode.js';
 import {ChaseTrailEffects} from './chase-trail-effects.js';
 import {poseKickedSkier} from './kick.js';
@@ -216,7 +217,9 @@ export class PatrolScene {
     if(this.glider.visible){
       this.glider.position.set(player.x,player.airY-1200+1.25,player.z);
       this.glider.rotation.set(0,player.heading,.35*(player.steerInput||0));
-      this.glider.scale.set(THREE.MathUtils.clamp(player.gliderRemaining*4,.15,1),1,1);
+      const pop=(player.gliderPopRemaining||0)/GLIDER_POP_TIME;
+      this.glider.scale.set(THREE.MathUtils.clamp(player.gliderRemaining*4,.15,1)*(1-.62*pop),1,1+.3*pop);
+      this.glider.material.opacity=.72+.23*pop;
     }
     this.shield.visible=Boolean(player&&effects.shield);
     if(this.shield.visible){
@@ -287,7 +290,7 @@ export class PatrolScene {
       const charging=this.run.dash?.agent===agent;
       const stunned=agent.stunUntil>time;
       const status=launch||agent.health===0?'down':stunned?'stunned':blocked?'blocked':
-        guard.visible?'guard':charging?'dash':agent.mirage?.until>time?'mirage':agent.burn?.until>time?'burn':
+        guard.visible?'guard':charging?(this.run.dash.kind==='cut'?'cutter':'dash'):agent.mirage?.until>time?'mirage':agent.burn?.until>time?'burn':
         agent.fogSlowed||agent.chillUntil>time?'slow':agent.tucking?'tuck':agent.role??'chase';
       marker.material.map=this.statusIcons[status];
       const scale=charging?1.05+.15*Math.sin(this.phase*21):(status==='chase'||status===agent.role)?.65:.85;
@@ -323,10 +326,12 @@ export class PatrolScene {
       if(pose||appeared)updateAthletePose(actor,{speed,heading,edgeRoll:bank,tuck:agent.tucking?.92:speed>15?.42:0,
         crashRemaining:remaining,fallAmount:fall.amount,fallCrouch:fall.crouch,fallBrace:fall.brace,fallPhase:fall.phase},.05,this.surface);
     }
-    const warning=this.run.intercept;
-    this.interceptIcon.visible=Boolean(warning);
-    if(warning){
-      const {x,z}=warning.point;
+    const warning=this.run.intercept,cut=this.run.dash?.kind==='cut'?this.run.dash:null;
+    const target=warning?.point??cut?.point;
+    this.interceptIcon.visible=Boolean(target);
+    if(target){
+      const {x,z}=target;
+      this.interceptIcon.material.map=this.statusIcons[warning?'scout':'cutter'];
       this.interceptIcon.position.set(x,this.surface(x,z)+2.7,z);
       this.interceptIcon.scale.setScalar(1.4+.25*Math.sin(this.phase*18));
     }

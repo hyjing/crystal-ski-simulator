@@ -104,3 +104,45 @@ test('each Whitepeak route has its own finish bonus, including streak and cargo 
   run.inventory=[];
   assert.equal(cargo.reward(run,true),0);
 });
+
+test('reinforcements alternate rear and both flanks and only use clear offscreen entries',()=>{
+ const run=new PatrolRun(simple,()=>true),player={x:0,z:600,heading:0,speed:20,vx:0,vz:20};
+ const points=[];
+ for(let i=0;i<3;i++){
+  run.nextAgent=i;
+  points.push(run.reinforcement(player,600,()=>true,()=>0));
+ }
+ assert.deepEqual(points.map(p=>p.approach),['rear','left','right']);
+ assert.ok(points.every(p=>p.z<555));
+ assert.ok(points[1].x< -25&&points[2].x>25);
+ assert.ok(points[1].heading>0&&points[2].heading<0);
+ run.nextAgent=1;
+ assert.equal(run.reinforcement(player,600,p=>p.x>25,()=>0).approach,'right');
+ assert.equal(run.reinforcement(player,600,()=>false,()=>0),undefined);
+});
+
+test('a sprinter charges at two stars and a cutter telegraphs a fixed intercept that shields cancel',()=>{
+ const player={x:0,z:600,heading:0,speed:20,vx:0,vz:20};
+ const sprinter={x:0,z:580,heading:0,speed:15,bank:0,role:'sprinter'};
+ const rearRun=new PatrolRun(simple,()=>true);
+ rearRun.agents=[sprinter];rearRun.stars=2;rearRun.nextDash=0;
+ rearRun.step(.02,player,()=>false);
+ assert.equal(rearRun.dash.kind,'sprint');
+ const start=rearRun.dash.at;
+ while(rearRun.time<start+.34)rearRun.step(.04,player,()=>false);
+ assert.ok(sprinter.speed>28);
+ const cutter={x:-15,z:590,heading:0,speed:17,bank:0,role:'cutter'};
+ const sideRun=new PatrolRun(simple,()=>true);
+ sideRun.agents=[cutter];sideRun.stars=3;sideRun.nextDash=0;
+ sideRun.step(.02,player,()=>false);
+ assert.equal(sideRun.dash.kind,'cut');
+ assert.equal(sideRun.dash.agent,cutter);
+ assert.ok(sideRun.dash.point.z>player.z+9);
+ const gate=sideRun.dash.point;
+ sideRun.step(.2,{...player,x:9},()=>false);
+ assert.equal(sideRun.dash.point,gate);
+ sideRun.inventory=['shield'];
+ assert.ok(sideRun.use(player));
+ sideRun.step(.02,player,()=>false);
+ assert.equal(sideRun.dash,null);
+});

@@ -631,7 +631,7 @@ test('a pursuer can still apply contact damage when very close inside the mist',
 });
 
 
-test('the glider preserves momentum through activation and a held turn, then accepts fresh steering',()=>{
+test('the glider pops forward along travel, ignores a held turn, then accepts fresh steering',()=>{
   const flat={spacing:8,sample:()=>0,surface:()=>0,gradient:()=>({x:0,z:0})};
   const skier=createSkier({x:0,z:100},{x:10,z:100});
   Object.assign(skier,{vx:2,vz:10,speed:Math.hypot(2,10),steerInput:.5});
@@ -642,14 +642,17 @@ test('the glider preserves momentum through activation and a held turn, then acc
   assert.equal(run.use(skier,0,flat),false);
   assert.deepEqual(run.inventory,['glider']);
   assert.equal(skier.heading,Math.atan2(2,10));
-  for(let i=0;i<52;i++)stepAirborne(skier,{steer:.5},flat,1/60);
-  assert.equal(skier.vx,2);
-  assert.equal(skier.vz,10);
-  assert.ok(Math.abs(skier.speed-Math.hypot(2,10))<1e-8);
+  const launchSpeed=Math.hypot(2,10)+12;
+  assert.ok(skier.airVy>7);
+  for(let i=0;i<12;i++)stepAirborne(skier,{steer:.5},flat,1/60);
+  assert.ok(skier.airClearance>1.85&&skier.z>104);
+  for(let i=0;i<40;i++)stepAirborne(skier,{steer:.5},flat,1/60);
+  assert.ok(Math.abs(skier.vx/skier.vz-.2)<1e-8);
+  assert.ok(Math.abs(skier.speed-launchSpeed)<1e-8);
   stepAirborne(skier,{},flat,1/60);
   for(let i=0;i<38;i++)stepAirborne(skier,{steer:.5},flat,1/60);
-  assert.ok(skier.airborne&&skier.airClearance>1&&skier.vx>4);
-  assert.ok(Math.abs(skier.speed-Math.hypot(2,10))<1e-8);
+  assert.ok(skier.airborne&&skier.airClearance>1&&skier.vx>9);
+  assert.ok(Math.abs(skier.speed-launchSpeed)<1e-8);
   for(let i=0;i<270&&skier.airborne;i++)stepAirborne(skier,{},flat,1/60);
   assert.equal(skier.airborne,false);
   assert.equal(skier.gliderRemaining,0);
