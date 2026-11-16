@@ -117,7 +117,26 @@ test('Whitepeak stitches measured Annapurna relief to the local terrain and rend
   assert.match(shader.vertexShader,/vRelief=position/);
   assert.match(shader.fragmentShader,/vec3 landform=texture2D/);
   assert.match(shader.fragmentShader,/stone=alpineVegetation/);
-  assert.match(shader.fragmentShader,/float footprint=max\(length\(dFdx/);
+  const woodlands=scene.getObjectByName('Whitepeak slope woodlands');
+  assert.ok(woodlands.children.length>8);
+  const location=new THREE.Vector3(),matrix=new THREE.Matrix4();
+  const halfX=(terrain.width-1)*terrain.spacing/2,halfZ=(terrain.height-1)*terrain.spacing/2;
+  let treeCount=0;
+  const meshDetails=new Set();
+  for(const tile of woodlands.children){
+    assert.ok(tile.isInstancedMesh&&tile.boundingSphere.radius>0);
+    assert.ok(tile.geometry.attributes.position.count>8);
+    meshDetails.add(tile.geometry.index.count);
+    treeCount+=tile.count;
+    for(const sample of [0,tile.count-1]){
+      tile.getMatrixAt(sample,matrix);
+      location.setFromMatrixPosition(matrix);
+      assert.ok(Math.max(Math.abs(location.x)-halfX,Math.abs(location.z)-halfZ)>=79.99);
+      assert.ok(location.y+1200<3900);
+    }
+  }
+  assert.ok(treeCount>5000&&treeCount<80000);
+  assert.equal(meshDetails.size,2);
   assert.match(shader.fragmentShader,/normal=normalize\(mix\(normal,reliefNormal/);
   assert.match(shader.fragmentShader,/float mistDensity=backgroundFogDensity/);
   const {west,east,north,south}=WHITEPEAK_SURFACE_BOUNDS;

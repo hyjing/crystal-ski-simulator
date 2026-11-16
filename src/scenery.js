@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import {stitchedRegionalGrid,validRegionalGrid} from './regional-scenery.js';
 import {createTerrain} from './terrain.js';
 import {WHITEPEAK_SURFACE_BOUNDS} from './whitepeak-relief.js';
+import {addWhitepeakWoodlands} from './whitepeak-woodlands.js';
 import {HDRLoader} from 'three/addons/loaders/HDRLoader.js';
 
 // All terrain shares the local tile's UTM origin and metric vertical datum.
@@ -79,13 +80,14 @@ export function addContextTerrain(scene,context,local,texture,rainier,regional){
 export function addWhitepeakBackdrop(scene,context,local,surfaceTexture){
   const halfX=(local.width-1)*local.spacing/2,halfZ=(local.height-1)*local.spacing/2;
   const exclude=[{west:-halfX+180,east:halfX-180,north:-halfZ+180,south:halfZ-180}];
-  const ridgeDetail=[{x:2500,z:17600,halfX:12500,halfZ:9600}];
+  const ridgeDetail=[{x:2500,z:17600,halfX:12500,halfZ:9600},{x:0,z:4700,halfX:7500,halfZ:4200}];
   const mesh=addGrid(scene,context,local,null,exclude,ridgeDetail);
   mesh.name='Annapurna relief';
+  addWhitepeakWoodlands(scene,mesh.geometry,{halfX,halfZ});
   const geometry=mesh.geometry,positions=geometry.attributes.position,normals=geometry.attributes.normal;
   const colors=new Float32Array(positions.count*3);
   const stone=new THREE.Color('#3b4756'),snow=new THREE.Color('#f4fbff');
-  const valley=new THREE.Color('#465c58'),ice=new THREE.Color('#a6cddd');
+  const valley=new THREE.Color('#555850'),ice=new THREE.Color('#a6cddd');
   const rock=new THREE.Color(),shade=new THREE.Color();
   for(let i=0;i<positions.count;i++){
     const x=positions.getX(i),z=positions.getZ(i),elevation=positions.getY(i)+1200;
@@ -132,24 +134,15 @@ export function addWhitepeakBackdrop(scene,context,local,surfaceTexture){
           mix(timberHash(cell+vec2(0.,1.)),timberHash(cell+1.),f.x),f.y);
       }
       vec3 alpineVegetation(vec3 stone,vec2 point,float elevation,float upward,float shelter,float rockFace){
-        // Large stands share slopes and gullies. Smaller glades interrupt their
-        // silhouettes. Fade crown texture once a pixel covers multiple crowns.
-        float footprint=max(length(dFdx(point)),length(dFdy(point)));
+        // Sparse grasses and exposed soil under the geometric canopy.
         vec2 slopeBands=mat2(.82,.57,-.57,.82)*point;
         float stand=timberNoise(slopeBands/vec2(730.,430.));
         float glade=timberNoise(point/96.);
         float treeline=3440.+(stand-.5)*600.+(shelter-.5)*260.;
         float soil=1.-smoothstep(.18,.32,1.-upward);
         float meadow=(1.-smoothstep(treeline-150.,treeline+640.,elevation))*soil;
-        float forestBand=1.-smoothstep(treeline-260.,treeline+90.,elevation);
-        float forest=smoothstep(.45,.64,stand*.78+glade*.22+(shelter-.5)*.13)*soil*forestBand;
-        float crownMask=timberNoise(point/14.);
-        float canopy=timberNoise(point/39.)*.60+crownMask*.40;
-        canopy=mix(canopy,.5,smoothstep(13.,45.,footprint));
-        vec3 trees=mix(vec3(.022,.040,.027),vec3(.065,.107,.062),canopy);
-        vec3 grass=mix(vec3(.087,.115,.067),vec3(.154,.163,.093),glade);
-        vec3 openGround=mix(stone,grass,meadow*(.25+.61*glade)*(1.-rockFace));
-        return mix(openGround,trees,forest);
+        vec3 grass=mix(vec3(.083,.092,.060),vec3(.153,.151,.100),glade);
+        return mix(stone,grass,meadow*(.18+.49*glade)*(1.-rockFace));
       }`)
       .replace('#include <color_fragment>',`#include <color_fragment>
         vec2 reliefUV=(vRelief.xz-reliefSurfaceBounds.xy)/reliefSurfaceBounds.zw;
@@ -167,7 +160,7 @@ export function addWhitepeakBackdrop(scene,context,local,surfaceTexture){
         float rockFace=smoothstep(.15,.53,1.-upward+(0.5-shelter)*.17);
         float highSnow=smoothstep(5350.,7350.,vRelief.y+1200.);
         float snowCover=snowline*(1.-mix(.9,.52,highSnow)*rockFace);
-        vec3 stone=mix(vec3(.052,.092,.074),vec3(.158,.179,.195),max(lowerAlpine,rockFace));
+        vec3 stone=mix(vec3(.084,.092,.081),vec3(.158,.179,.195),max(lowerAlpine,rockFace));
         vec3 snow=mix(vec3(.53,.72,.82),vec3(.92,.96,1.),smoothstep(.46,.76,upward));
         stone=alpineVegetation(stone,vRelief.xz,vRelief.y+1200.,upward,shelter,rockFace);
         vec3 surfaceColor=mix(stone,snow,snowCover);
@@ -179,7 +172,7 @@ export function addWhitepeakBackdrop(scene,context,local,surfaceTexture){
         normal=normalize(mix(normal,reliefNormal,reliefWeight*.9));
       `);
   };
-  material.customProgramCacheKey=()=> 'whitepeak-annapurna-surface-v2';
+  material.customProgramCacheKey=()=> 'whitepeak-annapurna-surface-v3';
   return mesh;
 }
 
