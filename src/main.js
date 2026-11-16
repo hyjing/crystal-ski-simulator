@@ -34,6 +34,7 @@ import {fallAnimation} from './npc-routines.js';
 import {validRegionalGrid} from './regional-scenery.js';
 import {flyDrone} from './drone.js';
 import {applyMountainIdentity} from './mountain-identity.js';
+import {addWhitepeakValley,lodgeForestClearings} from './whitepeak-valley.js';
 import {stitchWhitepeakRelief,WHITEPEAK_RELIEF_PATH} from './whitepeak-relief.js';
 import {sceneryProfile} from './scenery-profile.js';
 import {MOUNTAINS,resolveMountain,mountainAsset} from './mountains.js';
@@ -93,7 +94,7 @@ let pendingRecovery=null;
 const liftJourney=new LiftJourney();let liftClock=0,stationLife,stationAudio,crowdVoices,challenge,challengeRenderer,challengeMode='free';
 const voiceRight=new THREE.Vector3(),voiceListener=new THREE.Vector3();
 let hasSatellite=false;
-let treePositions=[], trailPoints=[], mapBackground, snowEffects, sun, powder, speedRenderer, aerialImage, mapLayer='terrain', resortUpdate=()=>{};
+let valleyFeatures,treePositions=[], trailPoints=[], mapBackground, snowEffects, sun, powder, speedRenderer, aerialImage, mapLayer='terrain', resortUpdate=()=>{};
 const baseElevation=1200, fixedStep=1/120;
 const forward = new THREE.Vector3(), targetCamera = new THREE.Vector3(), lookTarget = new THREE.Vector3();
 const displayLook = new THREE.Vector3();
@@ -250,8 +251,11 @@ async function init(){
   powder=new PowderSurface(scene,terrain,renderer);
   if(!generated)routes.forEach(r=>{r.spawn=liftExitSpawn(terrain,r,infrastructure);});
   const forestRoutes=isVirtual?routes:[...mappedRoutes.filter(r=>!isCrystal||r.id!=='lucky-shot'),...routes];
-  treePositions=addForest(scene,terrain,[...forestRoutes,...routes.flatMap(r=>r.branches??[])],landcover,firTexture,vegetation,stationAreas);
-  if(!generated){
+  const treeClearings=generated?lodgeForestClearings(generated.lodges):stationAreas;
+  treePositions=addForest(scene,terrain,[...forestRoutes,...routes.flatMap(r=>r.branches??[])],landcover,firTexture,vegetation,treeClearings);
+  if(generated){
+    valleyFeatures=addWhitepeakValley(scene,terrain,generated.lodges,routes);
+  }else{
     resortUpdate=addResort(scene,terrain,infrastructure,stationAreas);
     addStationStructures(scene,terrain,infrastructure,stationAreas,resortUpdate.serviceStops);
   }
@@ -853,6 +857,10 @@ function drawMap(){
     points.forEach((p,i)=>{const m=point(p);if(i&&!p.break)ctx.lineTo(m.x,m.y);else ctx.moveTo(m.x,m.y);});
     ctx.strokeStyle=color;ctx.lineWidth=size;ctx.setLineDash(dash);ctx.stroke();ctx.setLineDash([]);
   }
+  if(valleyFeatures){
+    line(valleyFeatures.river,'#458b9c',2.7);
+    line(valleyFeatures.road,'#827868',1.3);
+  }
   for(const other of routes)if(other!==route&&(isVirtual||!other.patrolOnly))line(other.points,aerial?'#9ebdcc':'#94ac8b',1.4,[4,4]);
   line(route.points,aerial?'#ddfaab':'#2e5847',4);
   for(const branch of route.branches??[])line(branch.points,branch.kind==='shortcut'?'#309c92':'#cc8e34',2,[4,4]);
@@ -866,6 +874,7 @@ function drawMap(){
     if(text){ctx.fillStyle='#fff';ctx.font='bold 10px sans-serif';ctx.textAlign='center';ctx.fillText(text,m.x,m.y+3.5);}
   }
   if(replayPoint)dot(replayPoint,'#59c9eb',4);
+  if(valleyFeatures)for(const lodge of valleyFeatures.lodges)dot(lodge,'#8b6446',2.7);
   dot(route.points[0],'#315b4b',8,'S');
   dot(route.points.at(-1),'#996027',8,'F');
   if(patrol){

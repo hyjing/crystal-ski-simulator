@@ -1,3 +1,4 @@
+import {valleyElevation,valleyCanopy,valleyLodges} from './whitepeak-valley-layout.js';
 import {chaseGoal,authoredChaseBranches} from './chase-goals.js';
 import {routeBranchCandidates} from './route-experience.js';
 import {clamp} from './physics.js';
@@ -78,11 +79,16 @@ function topography(width,height,spacing){
         elevation+=(trail.height+walls+bank-elevation)*blend;
         coverage=Math.min(coverage,smooth((gap-trail.halfWidth-2)/30));
       }
+      elevation=valleyElevation(x,z,elevation);
       heights[index]=elevation;
       const grove=.51+.24*Math.sin(x/115+Math.sin(z/180)*1.8)+.24*Math.cos(z/121+x/250);
       const timberline=1-smooth((elevation-1950)/340);
       const habitat=.34+.66*hill(x,450);
-      values[index]=smooth((grove-.28)/.60)*coverage*timberline*habitat;
+      const base=smooth((grove-.28)/.60)*timberline*habitat;
+      if(z>1450){
+        const valley=valleyCanopy(x,z,coverage);
+        values[index]=Math.max(base,valley.gain*timberline)*valley.terrain;
+      }else values[index]=base*coverage;
     }
   }
   return {width,height,spacing,heights,originUTM:[-halfX,halfZ],values};
@@ -111,5 +117,5 @@ export function createChaseMountain(){
   const [xmin,ymax]=local.originUTM;
   const extent={xmin,ymax,xmax:xmin+(WIDTH-1)*SPACING,ymin:ymax-(HEIGHT-1)*SPACING};
   const landcover={width:WIDTH,height:HEIGHT,extent,values:local.values};
-  return {terrain,routes,landcover,infrastructure:emptyInfrastructure};
+  return {terrain,routes,landcover,lodges:valleyLodges(routes),infrastructure:emptyInfrastructure};
 }
