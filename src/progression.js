@@ -15,7 +15,7 @@ export const ITEM_UPGRADES={
   banana:{kind:'数量',description:'一次丢两片香蕉皮',price:12},
   snowball:{kind:'数量',description:'一次投两个冰雪球',price:14},
   pulse:{kind:'威力',description:'雪浪半径增加 5 米',price:20},
-  avalanche:{kind:'威力',description:'雪崩半径增加 5 米',price:24},
+  avalanche:{kind:'威力',description:'雪崩半径增加 5 米',price:54},
 };
 export const ITEM_CAPACITY=3;
 export const ITEM_STACK_LIMIT=3;

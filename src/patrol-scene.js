@@ -3,7 +3,7 @@ import {createAthleteRig,updateAthletePose} from './athlete.js';
 import {loadHumanoid} from './humanoid.js';
 import {applyGear,GEAR_PRESETS} from './wardrobe.js';
 import {fallAnimation} from './npc-routines.js';
-import {PATROL_ITEMS,MEDKIT,SUPPLY} from './patrol-mode.js';
+import {PATROL_ITEMS,MEDKIT,SUPPLY,MAX_PURSUERS,PURSUER_HEALTH} from './patrol-mode.js';
 import {poseKickedSkier} from './kick.js';
 
 function statusIcon(symbol,color){
@@ -72,10 +72,11 @@ export class PatrolScene {
     const guardMaterial=this.shield.material.clone();
     this.statusIcons={
       chase:statusIcon('◆','#ff8192'),dash:statusIcon('!', '#ffc26c'),
+      tuck:statusIcon('»','#ffce83'),
       guard:statusIcon('⬡','#83dcff'),blocked:statusIcon('⬡','#fff4ad'),
       slow:statusIcon('❄','#92e6ff'),stunned:statusIcon('×','#fff4ad'),down:statusIcon('KO','#ff9d87'),
     };
-    for(let i=0;i<5;i++){
+    for(let i=0;i<MAX_PURSUERS;i++){
       const actor=createAthleteRig(this.root);
       actor.visible=false;
       this.actors.push(actor);
@@ -87,6 +88,19 @@ export class PatrolScene {
       tag.visible=false;
       this.root.add(tag);
       actor.userData.chaseMarker=tag;
+      const health=new THREE.Group();
+      const bar=(color,width,height)=>{
+        const sprite=new THREE.Sprite(new THREE.SpriteMaterial({color,depthWrite:false,toneMapped:false}));
+        sprite.scale.set(width,height,1);
+        health.add(sprite);
+        return sprite;
+      };
+      bar('#241923',1.32,.18);
+      const fill=bar('#f55e77',1.20,.10);
+      fill.renderOrder=1;
+      health.visible=false;
+      this.root.add(health);
+      actor.userData.healthBar={group:health,fill};
       const guard=new THREE.Mesh(this.shield.geometry,guardMaterial);
       guard.visible=false;
       this.root.add(guard);
@@ -201,6 +215,9 @@ export class PatrolScene {
       marker.visible=Boolean(agent);
       const guard=actor.userData.guard;
       guard.visible=Boolean(agent&&!agent.launch&&(agent.guardUntil>time||agent.guardFlashUntil>time));
+      const {group:healthBar,fill}=actor.userData.healthBar;
+      healthBar.visible=Boolean(agent&&player&&!agent.launch&&agent.health!==0&&
+        Math.hypot(agent.x-player.x,agent.z-player.z)<60);
       if(!agent)continue;
       const {x,z,heading,speed,bank,launch}=agent;
       const blocked=agent.guardFlashUntil>time;
@@ -210,12 +227,20 @@ export class PatrolScene {
       }
       const charging=this.run.dash?.agent===agent;
       const stunned=agent.stunUntil>time;
-      const status=launch||stunned&&agent.fallDuration?'down':stunned?'stunned':blocked?'blocked':guard.visible?'guard':charging?'dash':agent.slowUntil>time?'slow':'chase';
+      const status=launch||agent.health===0?'down':stunned?'stunned':blocked?'blocked':
+        guard.visible?'guard':charging?'dash':agent.slowUntil>time?'slow':agent.tucking?'tuck':'chase';
       marker.material.map=this.statusIcons[status];
       const scale=charging?1.05+.15*Math.sin(this.phase*21):status==='chase'?.58:.85;
       marker.scale.setScalar(scale);
       const anchor=launch??agent;
       marker.position.set(anchor.x,this.surface(anchor.x,anchor.z)+(launch?.height??0)+(status==='down'?1.55:2.35),anchor.z);
+      if(healthBar.visible){
+        const ratio=(agent.health??PURSUER_HEALTH)/PURSUER_HEALTH;
+        healthBar.position.copy(marker.position);
+        healthBar.position.y-=.49;
+        fill.scale.x=1.2*ratio;
+        fill.center.x=.5/ratio;
+      }
       if(launch){
         const t=launch.progress;
         poseKickedSkier(actor,launch,this.surface);
@@ -235,7 +260,7 @@ export class PatrolScene {
       const fall=fallAnimation(remaining,agent.fallDuration);
       const repelled=!remaining&&agent.stunUntil>this.run.time?Math.min(1,(agent.stunUntil-this.run.time)*2):0;
       actor.rotateZ((i%2?1:-1)*(fall.amount*1.25+repelled*.23));
-      if(pose||appeared)updateAthletePose(actor,{speed,heading,edgeRoll:bank,tuck:speed>15?.42:0,
+      if(pose||appeared)updateAthletePose(actor,{speed,heading,edgeRoll:bank,tuck:agent.tucking?.92:speed>15?.42:0,
         crashRemaining:remaining,fallAmount:fall.amount,fallCrouch:fall.crouch,fallBrace:fall.brace,fallPhase:fall.phase},.05,this.surface);
     }
     for(const [i,token] of this.tokens.entries()){

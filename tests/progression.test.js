@@ -47,7 +47,7 @@ test('level points each buy one unique attribute or item upgrade and legacy XP i
 
 test('shop checks price and persists three stacks of up to three consumables',()=>{
   const profile=readProgress(null);
-  profile.coins=50;
+  profile.coins=80;
   assert.equal(buyItem(profile,'no-such-item'),false);
   assert.ok(buyItem(profile,'avalanche'));
   assert.ok(buyItem(profile,'banana'));

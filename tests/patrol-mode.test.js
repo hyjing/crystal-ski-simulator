@@ -167,9 +167,9 @@ test('levelled buffs start immediately and repeated boosts extend their remainin
   assert.ok(run.use(player));
   assert.ok(run.use(player));
   assert.ok(run.use(player));
-  assert.ok(Math.abs(run.effects.boost.until-2.3)<1e-8);
+  assert.ok(Math.abs(run.effects.boost.until-2.7)<1e-8);
   assert.ok(Math.abs(run.effects.shield.until-2.5)<1e-8);
-  assert.equal(run.effects.decoy.until,2.1);
+  assert.equal(run.effects.decoy.until,2.6);
 });
 
 test('boost delivers a short burst, then the shield repels pursuers and expires',()=>{
@@ -177,7 +177,7 @@ test('boost delivers a short burst, then the shield repels pursuers and expires'
   run.inventory=['boost','shield'];
   run.stars=1;
   assert.ok(run.use(player));
-  for(let i=0;i<90;i++){
+  for(let i=0;i<110;i++){
     run.boost(player,.01);
     run.step(.01,player,()=>false);
   }
@@ -206,7 +206,7 @@ test('a nearby pursuer brakes hard for a decoy and resumes chasing as soon as it
   run.step(.1,player);
   assert.ok(close.speed<3);
   assert.equal(run.captureRemaining,null);
-  run.step(2.05,player);
+  run.step(PATROL_ITEMS.decoy.duration,player);
   assert.deepEqual(run.effects,{});
   assert.ok(run.captureRemaining>0);
 });
@@ -271,7 +271,8 @@ test('upgraded banana casts two traps per item, can overlap and each expires or 
   run.agents=[pursuer];
   run.step(.1,player,()=>false);
   assert.equal(run.traps.length,3);
-  assert.ok(pursuer.stunUntil>2);
+  assert.ok(pursuer.stunUntil>1.2);
+  assert.equal(pursuer.health,55);
   run.agents=[];
   run.step(12.1,player,()=>false);
   assert.equal(run.traps.length,0);
@@ -427,10 +428,14 @@ test('a kicked pursuer stops counting toward capture and is replaced offscreen',
   const agent={x:0,z:98,heading:0,speed:0,bank:0,id:10};
   const other={x:0,z:60,heading:0,speed:0,bank:0,id:11};
   run.agents=[agent,other];
+  run.spawnAfter=1.2;
   run.stars=1;
   run.contact=1;
+  agent.health=55;
   assert.ok(kick.start(player,[agent,other]));
-  kick.step(.17,player,()=>true);
+  const result=kick.step(.17,player,()=>true,()=>{},target=>run.kickHit(target,player)!=='down');
+  assert.equal(result.type,'hit');
+  assert.equal(agent.health,0);
   run.step(.17,player);
   assert.equal(run.captureRemaining,null);
   kick.step(.87,player,()=>true);
@@ -492,13 +497,14 @@ test('an armored pursuer telegraphs a guard, blocks one attack, and can then be 
   assert.ok(pursuer.guardUntil>run.time);
   const kick=new SkierKick(()=>0,()=>true);
   assert.ok(kick.start(player,[pursuer]));
-  const blocked=target=>run.blockAttack(target);
+  const blocked=target=>run.kickHit(target,player)!=='down';
   assert.equal(kick.step(.17,player,()=>true,()=>{},blocked).type,'blocked');
+  assert.equal(pursuer.health,undefined);
   assert.equal(pursuer.launch,undefined);
   assert.equal(run.guardBlocks,1);
   run.step(.03,player,()=>false);
   assert.equal(pursuer.guardUntil,0);
-  assert.deepEqual(kick.avalanche(player,[pursuer],20,blocked),new Set([pursuer]));
+  assert.deepEqual(kick.avalanche(player,[pursuer],20,target=>run.damage(target,'avalanche',Infinity)!=='down'),new Set([pursuer]));
 });
 
 test('one guarded banana trip spends the trap without counting a knockdown',()=>{
@@ -514,4 +520,56 @@ test('one guarded banana trip spends the trap without counting a knockdown',()=>
   run.traps=[{x:0,z:97,until:3}];
   run.step(.03,player,()=>false);
   assert.equal(run.trips[0].agent,pursuer);
+});
+
+test('ordinary chase hits chip health and only the finishing hit earns a knockdown',()=>{
+  const run=new PatrolRun(route,()=>true),player=makePlayer(100);
+  const agent={x:0,z:98,speed:14,heading:0,bank:0};
+  assert.equal(run.kickHit(agent,player),'hit');
+  assert.equal(agent.health,45);
+  assert.equal(agent.launch,undefined);
+  assert.equal(run.damage(agent,'banana',PATROL_ITEMS.banana.damage),'down');
+  assert.equal(agent.health,0);
+  assert.ok(agent.downUntil>run.time);
+  assert.equal(run.damage(agent,'pulse',PATROL_ITEMS.pulse.damage),'blocked');
+  assert.deepEqual(run.hits.map(({damage,down})=>[damage,down]),[[55,false],[45,true]]);
+});
+
+test('an avalanche is a single rare pickup and normal supply boxes never refill it',()=>{
+  const run=new PatrolRun(route,()=>true);
+  const rare=run.pickups.filter(p=>p.type==='avalanche');
+  assert.equal(rare.length,1);
+  assert.ok(rare[0].z>route.length*.65);
+  run.inventory=['avalanche','pulse','banana'];
+  assert.equal(run.refillType('avalanche'),'pulse');
+  run.inventory=['avalanche','pulse','pulse','pulse','banana','banana','banana'];
+  assert.equal(run.refillType('avalanche'),undefined);
+});
+
+test('a lagging pursuer tucks on clear downhill terrain and slows for flat terrain',()=>{
+  const run=new PatrolRun(route,()=>true);
+  const agent={x:0,z:130,speed:22,heading:0,bank:0,id:0};
+  const player={...makePlayer(200),speed:29,vz:29};
+  run.agents=[agent];
+  run.stars=1;
+  for(let i=0;i<24;i++)run.step(1/30,player,()=>false,(x,z)=>-z*.25);
+  assert.equal(agent.tucking,true);
+  assert.ok(agent.speed>player.speed+3);
+  run.step(1/30,player,()=>false,()=>0);
+  assert.equal(agent.tucking,false);
+});
+
+test('pursuers left well behind retire and reinforcements appear offscreen without teleporting',()=>{
+  const run=new PatrolRun(route,()=>true);
+  const old={x:0,z:250,speed:10,heading:0,bank:0,id:25};
+  const player=makePlayer(500);
+  run.agents=[old];run.stars=3;
+  run.step(.05,player,()=>false);
+  assert.ok(run.agents.includes(old));
+  run.step(.05,player);
+  assert.equal(run.agents.length,0);
+  run.step(.67,player);
+  assert.equal(run.agents.length,1);
+  assert.notEqual(run.agents[0],old);
+  assert.ok(player.z-run.agents[0].z>25);
 });

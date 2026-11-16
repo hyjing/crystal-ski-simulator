@@ -55,7 +55,7 @@ export function routeBranchCandidates(route,terrain){
 export function chaseDirection(player,agents,heading,time){
   let closest=null,distance=48;
   for(const agent of agents){
-    if(agent.launch||agent.stunUntil>time)continue;
+    if(agent.launch||agent.health===0||agent.stunUntil>time)continue;
     const gap=Math.hypot(agent.x-player.x,agent.z-player.z);
     if(gap<distance){closest=agent;distance=gap;}
   }

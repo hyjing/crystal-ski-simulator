@@ -487,13 +487,12 @@ function updatePhysics(dt){
   if(skier.airEvent?.type==='jump-blocked')toast('起跳需要至少 18 km/h · 先撑杖或顺坡加速');
   if(skier.airEvent?.type==='land'&&skier.airEvent.quality==='recover')toast('落地稍偏 · 屈膝缓冲、搓雪恢复');
   if(skier.airEvent?.type==='crash'){const reasons={impact:'触地冲击过大',crossed:'高速横板落地',combined:'横板与冲击叠加',rotation:'空中旋转尚未收住'};toast(`落地摔倒：${reasons[skier.airEvent.reason]||'失去支撑'} · 正在起身`);}elapsed+=dt;peakSpeed=Math.max(peakSpeed,skier.speed);totalDistance=skier.distance;
-  const kickEvent=kick.step(dt,skier,canBeKicked,playLaunchLanding,blockChaseAttack);
+  const kickEvent=kick.step(dt,skier,canBeKicked,playLaunchLanding,resolveChaseKick);
   if(kickEvent?.type==='hit'){
-    if(patrol?.agents.includes(kickEvent.target))patrol.contact=0;
     const {start,fromY,heading}=kickEvent.flight;
     snowEffects.kickBurst(start.x,fromY,start.z,heading);
-    if(patrol)confirmChaseKnockdown('踹开',[kickEvent.target]);
-    else toast('踹飞了！');
+    if(patrol&&!patrol.agents.includes(kickEvent.target))confirmChaseKnockdown('踹开',[kickEvent.target]);
+    else if(!patrol)toast('踹飞了！');
   }else if(kickEvent?.type==='miss')toast('雪友已滑出踢击范围');
   if(patrol){
     patrolStep+=dt;
@@ -504,15 +503,17 @@ function updatePhysics(dt){
         patrol.guardBlocks=0;
         toast('已击破雪友护盾 · 趁现在进攻');
       }
-      for(const [type,count] of Object.entries(patrol.skillHits)){
-        if(count)confirmChaseHit(PATROL_ITEMS[type].name,count);
+      if(patrol.shieldHits)confirmChaseHit(PATROL_ITEMS.shield.name,patrol.shieldHits);
+      for(const hit of patrol.hits.splice(0)){
+        const label=hit.source==='kick'?'踹开':PATROL_ITEMS[hit.source].name;
+        if(hit.down)confirmChaseKnockdown(label,[hit.agent]);
+        else confirmChaseHit(label,1,false,0,hit.damage);
       }
       if(escapes!==patrol.escapes){runExperience.escape();toast('成功脱身');}
       if(patrol.health<health)damageEffect=elapsed+.34;
-      for(const {trap,agent} of patrol.trips){
+      for(const {trap} of patrol.trips){
         const {x,z}=trap;
         snowEffects.snowBurst(x,yAt(x,z),z,24,.31);
-        confirmChaseKnockdown('香蕉皮',[agent]);
       }
       patrolStep=0;
       if(event==='caught'){finishRun(true);return;}
@@ -766,7 +767,7 @@ function drawMap(){
       dot(p,marker.color,p.type==='medkit'?6:4.5,p.type==='medkit'?'+':p.type==='supply'?'◇':null);
     }
     for(const trap of patrol.traps)dot(trap,PATROL_ITEMS.banana.color,4);
-    for(const agent of patrol.agents)if(!agent.launch)dot(agent,agent.guardUntil>patrol.time?'#83dcff':'#b4213a',5.4);
+    for(const agent of patrol.agents)if(!agent.launch&&agent.health!==0)dot(agent,agent.guardUntil>patrol.time?'#83dcff':'#b4213a',5.4);
   }
   const m=point(skier),front=point({x:skier.x+Math.sin(skier.heading)*10,z:skier.z+Math.cos(skier.heading)*10});
   ctx.save();
@@ -820,13 +821,13 @@ function updateUI(){
       : remaining!==null&&remaining>0?'正在掉血'
       : patrol.outcome==='escaped'?'已到达终点'
       : patrol.health<=25?'生命偏低'
-      : patrol.agents.some(agent=>!agent.launch)?'追赶中'
+      : patrol.agents.some(agent=>!agent.launch&&agent.health!==0)?'追赶中'
       : patrol.stars?'雪友赶来中':'安全';
     camera.getWorldDirection(mapForward);
     const threat=chaseDirection(skier,patrol.agents,Math.atan2(mapForward.x,mapForward.z),patrol.time);
     const dash=patrol.dash;
     $('chase-counter').hidden=!dash||mode!=='running';
-    if(dash)$('chase-counter').textContent=patrol.time<dash.at?'雪友即将冲刺 · 护盾或信标可打断':'雪友冲刺中';
+    if(dash)$('chase-counter').textContent=patrol.time<dash.at?'雪友即将冲刺 · 冰雪球、护盾或信标可打断':'雪友冲刺中';
     $('chase-direction').hidden=!threat||mode!=='running';
     if(threat){
       $('chase-direction-label').textContent=`${threat.label} · ${threat.distance} m`;
@@ -1207,9 +1208,11 @@ function detonateChaseBomb(blast){
   snowEffects.snowBurst(x,yAt(x,z),z,120,radius/20);
   const visitors=gear.npcs?traffic?.states.filter(state=>traffic.canBeKicked(state))??[]:[];
   const priorBlocks=patrol.guardBlocks;
-  const hit=kick.avalanche(blast,[...patrol.agents,...visitors],radius,blockChaseAttack);
-  if(hit.size)confirmChaseKnockdown('雪崩弹',hit);
-  else if(patrol.guardBlocks===priorBlocks)toast('雪崩弹已引爆 · 落点附近无人');
+  const hit=kick.avalanche(blast,[...patrol.agents,...visitors],radius,target=>
+    patrol.agents.includes(target)&&patrol.damage(target,'avalanche',Infinity)!=='down');
+  const visitorsHit=visitors.filter(target=>hit.has(target));
+  if(visitorsHit.length)confirmChaseKnockdown('雪崩弹',visitorsHit);
+  if(!hit.size&&patrol.guardBlocks===priorBlocks)toast('雪崩弹已引爆 · 落点附近无人');
   return hit;
 }
 function confirmChaseKnockdown(source,targets){
@@ -1217,7 +1220,7 @@ function confirmChaseKnockdown(source,targets){
   for(const target of targets){count++;if(runExperience.knockdown(target))paid++;}
   confirmChaseHit(source,count,true,paid);
 }
-function confirmChaseHit(source,count,down=false,paid=0){
+function confirmChaseHit(source,count,down=false,paid=0,damage=0){
   const marker=$('chase-hit');
   const active=!marker.hidden&&elapsed<hitUntil;
   if(active&&marker.dataset.result==='down'&&!down)return;
@@ -1227,8 +1230,10 @@ function confirmChaseHit(source,count,down=false,paid=0){
   marker.dataset.source=source;
   marker.dataset.count=String(total);
   const rewards=paid+(same?Number(marker.dataset.rewardCount):0);
+  const totalDamage=damage+(same?Number(marker.dataset.damage||0):0);
   marker.dataset.rewardCount=String(rewards);
-  $('chase-hit-label').textContent=`${source} · ${down?'击倒':'命中'}${total>1?' ×'+total:''}${rewards?` · +${rewards*KNOCKDOWN_XP} XP · +${rewards*KNOCKDOWN_COINS} 金币`:''}`;
+  marker.dataset.damage=String(totalDamage);
+  $('chase-hit-label').textContent=`${source} · ${down?'击倒':'命中'}${total>1?' ×'+total:''}${totalDamage?` · ${totalDamage} 伤害`:''}${rewards?` · +${rewards*KNOCKDOWN_XP} XP · +${rewards*KNOCKDOWN_COINS} 金币`:''}`;
   hitUntil=elapsed+(down?1.2:.68);
   marker.hidden=false;
 }
@@ -1239,18 +1244,21 @@ $('patrol-items').addEventListener('click',event=>{
   const slot=event.target.closest('[data-slot]');
   if(slot)usePatrolItem(Number(slot.dataset.slot));
 });
-function blockChaseAttack(target){
-  return Boolean(patrol?.agents.includes(target)&&patrol.blockAttack(target));
+function resolveChaseKick(target){
+  if(!patrol?.agents.includes(target))return false;
+  const result=patrol.kickHit(target,skier);
+  if(result==='hit')snowEffects.kickBurst(target.x,yAt(target.x,target.z),target.z,skier.heading);
+  return result!=='down';
 }
 function canBeKicked(target){
-  if(patrol?.agents.includes(target))return !target.launch&&!(target.stunUntil>patrol.time);
+  if(patrol?.agents.includes(target))return !target.launch&&target.health!==0;
   return Boolean(gear.npcs&&traffic?.states.includes(target)&&traffic.canBeKicked(target));
 }
 function kickSkier(){
   if(mode!=='running'||!kick.ready||skier.airborne||skier.crashRemaining)return;
   const targets=[...(patrol?.agents??[]),...(gear.npcs?traffic?.states??[]:[])].filter(canBeKicked);
   if(kick.start(skier,targets))updateUI();
-  else toast(`雪友进入 ${KICK_RANGE} 米范围后可踹飞`);
+  else toast(`雪友进入 ${KICK_RANGE} 米范围后可踢开`);
 }
 $('patrol-kick').addEventListener('click',kickSkier);
 $('touch-kick').addEventListener('click',kickSkier);
