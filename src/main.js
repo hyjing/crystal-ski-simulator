@@ -547,7 +547,7 @@ function updatePhysics(dt){
     snowEffects.kickBurst(start.x,fromY,start.z,heading);
     if(patrol&&!patrol.agents.includes(kickEvent.target))confirmChaseKnockdown('踹开',[kickEvent.target]);
     else if(!patrol)toast('踹飞了！');
-  }else if(kickEvent?.type==='miss')toast('雪友已滑出踢击范围');
+  }else if(kickEvent?.type==='miss')toast('雪友已滑出范围 · 可再次踢开');
   if(patrol){
     patrolStep+=dt;
     if(patrolStep>=1/30){
@@ -1288,7 +1288,7 @@ function usePatrolItem(slot=0){
   }
   if(type==='pulse'||type==='mist')snowEffects.snowBurst(skier.x,yAt(skier.x,skier.z),skier.z,64,type==='pulse'?.85:.43);
   const message=type==='avalanche'?'雪崩弹已向后抛出'
-    :type==='glider'?'浮空翼已展开 · 用 A / D 或方向键滑翔'
+    :type==='glider'?'浮空翼沿原方向展开 · 松开再按转弯键可调整'
     :`${PATROL_ITEMS[type].name}已释放`;
   toast(message);
   updateUI();

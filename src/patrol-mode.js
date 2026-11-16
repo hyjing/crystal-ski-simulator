@@ -35,7 +35,7 @@ export const PATROL_ITEMS = {
   avalanche: {name:'雪崩弹',color:'#ff986e',symbol:'✹',duration:AVALANCHE_DURATION,description:'稀有 · 落地直接击倒范围内未受护盾保护的雪友'},
   snowball: {name:'冰雪球',color:'#8cd9ff',symbol:'●',duration:.65,description:'拦停落点旁最近的雪友，打断冲刺并大幅减速 3.2 秒'},
   mist: {name:'雪雾弹',color:'#e3e6f7',symbol:'☁',duration:3,radius:14,description:'留下 3 秒减速雾区。雪友会穿过或绕行，视线被挡时搜索你最后出现的位置'},
-  glider: {name:'浮空翼',color:'#91fff3',symbol:'↗',duration:1.35,description:'立即腾空，可用转弯键滑翔。每次腾空限放一次'},
+  glider: {name:'浮空翼',color:'#91fff3',symbol:'↗',duration:1.35,description:'沿原速度与方向腾空。松开再按转弯键可调整，每次腾空限放一次'},
   autofrost: {name:'追尾雪弹炮',color:'#82b5ff',symbol:'»',duration:3.4,radius:38,damage:15,description:'自动向身后最近的追赶者发射雪弹，每发 15 点伤害'},
   crew: {name:'雪友援手',color:'#6dffc3',symbol:'✦',duration:5.5,description:'召来滑向侧方的雪友，吸引 48 米内的追赶者；被追上即退场'},
   banana: {name:'香蕉皮',color:'#ffcd36',symbol:'⌣',duration:12,description:'绊倒第一个滑过的雪友 2.4 秒，之后他会重新站起来'},
@@ -374,9 +374,10 @@ export class PatrolRun {
     }
     if(!target)return;
     effect.nextShot=this.time+.62;
-    this.shots.push({x:player.x,z:player.z,y:ground+1+(player.airClearance??0),
-      end:{x:target.x,z:target.z,y:surface(target.x,target.z)+.85},start:this.time,until:this.time+.17});
-    this.damage(target,'autofrost',effect.damage);
+    const result=this.damage(target,'autofrost',effect.damage);
+    this.shots.push({x:player.x,z:player.z,y:ground+1+(player.airborne?player.airClearance??0:0),
+      end:{x:target.x,z:target.z,y:surface(target.x,target.z)+1.05},
+      start:this.time,impact:this.time+.08,until:this.time+.35,result,target});
   }
 
   step(dt,player,offscreen=()=>true,surface=()=>0,collision=()=>null,detonate=()=>null){
@@ -597,6 +598,12 @@ export class PatrolRun {
       }
     }
 
+    for(const shot of this.shots){
+      if(!shot.target)continue;
+      const {x,z}=shot.target;
+      Object.assign(shot.end,{x,z,y:surface(x,z)+1.05});
+      if(this.time>=shot.impact)shot.target=null;
+    }
     if(threat<75)this.lastSeen=this.time;
     if(this.stars&&this.agents.some(agent=>!agent.launch&&agent.health!==0)&&this.time-this.lastSeen>12){
       this.stars--;

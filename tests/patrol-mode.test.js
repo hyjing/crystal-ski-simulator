@@ -669,17 +669,25 @@ test('a pursuer can still apply contact damage when very close inside the mist',
 });
 
 
-test('a glider launches from rest, steers, lasts longer when upgraded, and cannot chain midair',()=>{
+test('the glider preserves momentum through activation and a held turn, then accepts fresh steering',()=>{
   const flat={spacing:8,sample:()=>0,surface:()=>0,gradient:()=>({x:0,z:0})};
-  const skier=createSkier({x:0,z:100},{x:0,z:110});
+  const skier=createSkier({x:0,z:100},{x:10,z:100});
+  Object.assign(skier,{vx:2,vz:10,speed:Math.hypot(2,10),steerInput:.5});
   const run=new PatrolRun(route,()=>true,()=>true,[],['glider','glider','glider']);
   run.inventory=['glider','glider'];
   assert.ok(run.use(skier,0,flat));
   assert.ok(skier.airborne&&Math.abs(skier.gliderRemaining-3.2)<1e-8);
   assert.equal(run.use(skier,0,flat),false);
   assert.deepEqual(run.inventory,['glider']);
-  for(let i=0;i<90;i++)stepAirborne(skier,{steer:.5},flat,1/60);
-  assert.ok(skier.airborne&&skier.airClearance>1&&skier.x>3);
+  assert.equal(skier.heading,Math.atan2(2,10));
+  for(let i=0;i<52;i++)stepAirborne(skier,{steer:.5},flat,1/60);
+  assert.equal(skier.vx,2);
+  assert.equal(skier.vz,10);
+  assert.ok(Math.abs(skier.speed-Math.hypot(2,10))<1e-8);
+  stepAirborne(skier,{},flat,1/60);
+  for(let i=0;i<38;i++)stepAirborne(skier,{steer:.5},flat,1/60);
+  assert.ok(skier.airborne&&skier.airClearance>1&&skier.vx>4);
+  assert.ok(Math.abs(skier.speed-Math.hypot(2,10))<1e-8);
   for(let i=0;i<270&&skier.airborne;i++)stepAirborne(skier,{},flat,1/60);
   assert.equal(skier.airborne,false);
   assert.equal(skier.gliderRemaining,0);
@@ -699,6 +707,7 @@ test('rear cannon picks the closest rear target, respects armor, and repeats on 
   assert.equal(run.guardBlocks,1);
   assert.equal(behind.health,100);
   assert.equal(run.shots.length,1);
+  assert.equal(run.shots[0].result,'blocked');
   run.step(.4,player,()=>false);
   assert.equal(behind.health,100);
   run.step(.26,player,()=>false);
@@ -706,6 +715,7 @@ test('rear cannon picks the closest rear target, respects armor, and repeats on 
   assert.equal(front.health,100);
   assert.equal(farther.health,100);
   assert.equal(run.hits[0].source,'autofrost');
+  assert.equal(run.shots[0].result,'hit');
 });
 
 test('summon ranks create one to four moving allies that draw pressure and leave after being tagged',()=>{
@@ -726,5 +736,36 @@ test('summon ranks create one to four moving allies that draw pressure and leave
     assert.equal(run.hits.length,0);
     run.step(.04,player,()=>false);
     assert.equal(run.allies.length,rank);
+  }
+});
+
+
+test('kick follows a passing target on steep snow and can adjust to another nearby skier',()=>{
+  const kick=new SkierKick((x,z)=>-z*.44,()=>true);
+  const player=makePlayer(100);
+  const first={x:0,z:95.1},second={x:1,z:106};
+  assert.ok(kick.start(player,[first,second]));
+  first.z=93.3;
+  assert.equal(kick.step(.12,player,()=>true).target,first);
+  kick.reset();
+  first.z=95;
+  assert.ok(kick.start(player,[first,second]));
+  first.z=90;second.z=104;
+  assert.equal(kick.step(.12,player,()=>true).target,second);
+});
+
+test('a missed kick restores its charge or cooldown while finishing the swing',()=>{
+  const kick=new SkierKick(()=>0,()=>true),player=makePlayer(100);
+  const target={x:0,z:96};
+  for(const charge of [0,1]){
+    kick.reset();kick.charge=charge;target.z=96;
+    assert.ok(kick.start(player,[target]));
+    target.z=85;
+    assert.equal(kick.step(.12,player,()=>true).type,'miss');
+    assert.equal(kick.cooldown,0);
+    assert.equal(kick.charge,charge);
+    assert.equal(kick.ready,false);
+    kick.step(.46,player,()=>true);
+    assert.ok(kick.ready);
   }
 });

@@ -1,11 +1,12 @@
 import {clamp} from './physics.js';
 import {DEFAULT_TALENTS,upgradeBonus} from './progression.js';
 
-export const KICK_RANGE = 3.2;
+export const KICK_RANGE = 5.2;
+const KICK_TRACK_RANGE = 7;
 export const AVALANCHE_RADIUS = 20;
 export const AVALANCHE_DURATION = .95;
 const COOLDOWN = 5;
-const WINDUP = .16;
+const WINDUP = .11;
 const RECOVERY = .57;
 const FLIGHT = .86;
 const SETTLE = .22;
@@ -50,18 +51,27 @@ export class SkierKick {
   }
 
   inReach(player,point,reach){
-    return distance(player,point)<=reach&&
-      Math.abs(this.surface(player.x,player.z)-this.surface(point.x,point.z))<1.6;
+    const gap=distance(player,point);
+    return gap<=reach&&Math.abs(this.surface(player.x,player.z)-this.surface(point.x,point.z))<1.9+gap*.30;
+  }
+
+  nearestTarget(player,targets){
+    return targets.filter(agent=>!agent.launch&&this.inReach(player,position(agent),KICK_RANGE))
+      .sort((a,b)=>distance(position(a),player)-distance(position(b),player))[0];
+  }
+
+  sideRelativeTo(player,target){
+    const point=position(target);
+    const across=(point.x-player.x)*Math.cos(player.heading)-(point.z-player.z)*Math.sin(player.heading);
+    return across<0?-1:1;
   }
 
   start(player,targets){
     if(!this.ready||player.airborne||player.crashRemaining)return false;
-    const target=targets.filter(agent=>!agent.launch&&this.inReach(player,position(agent),KICK_RANGE))
-      .sort((a,b)=>distance(position(a),player)-distance(position(b),player))[0];
+    const target=this.nearestTarget(player,targets);
     if(!target)return false;
-    const point=position(target);
-    const across=(point.x-player.x)*Math.cos(player.heading)-(point.z-player.z)*Math.sin(player.heading);
-    this.action={target,start:this.time,side:across<0?-1:1,resolved:false};
+    this.action={target,targets,start:this.time,side:this.sideRelativeTo(player,target),
+      resolved:false,spentCharge:this.charge>0,previousReadyAt:this.readyAt};
     if(this.charge)this.charge--;
     this.recoverAt=this.time+RECOVERY;
     this.readyAt=this.charge?0:this.time+this.baseCooldown;
@@ -103,15 +113,24 @@ export class SkierKick {
     }
     const action=this.action;
     if(!action)return null;
-    const {target,side}=action;
     if(!action.resolved&&this.time-action.start>=WINDUP){
       action.resolved=true;
-      const point=position(target);
-      if(player.airborne||player.crashRemaining||!eligible(target)||!this.inReach(player,point,KICK_RANGE+.5)){
+      let target;
+      if(!player.airborne&&!player.crashRemaining){
+        if(!action.target.launch&&eligible(action.target)&&this.inReach(player,position(action.target),KICK_TRACK_RANGE)){
+          target=action.target;
+        }else{
+          target=this.nearestTarget(player,action.targets.filter(eligible));
+        }
+      }
+      if(!target){
+        this.readyAt=action.previousReadyAt;
+        if(action.spentCharge)this.charge=Math.min(3,this.charge+1);
         return {type:'miss'};
       }
+      const side=action.side=this.sideRelativeTo(player,target);
       if(blocked(target))return {type:'blocked'};
-      const dx=point.x-player.x,dz=point.z-player.z,r=Math.hypot(dx,dz);
+      const point=position(target),dx=point.x-player.x,dz=point.z-player.z,r=Math.hypot(dx,dz);
       const heading=r>.1?Math.atan2(dx+Math.cos(player.heading)*side*r*.7,
         dz-Math.sin(player.heading)*side*r*.7):player.heading+side*Math.PI/2;
       return {type:'hit',target,flight:this.launch(target,heading)};

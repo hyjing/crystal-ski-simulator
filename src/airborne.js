@@ -13,13 +13,17 @@ function launch(s,terrain,manual){
 export function deployGlider(s,terrain,duration){
  if(!terrain||s.crashRemaining||s.gliderUsed)return false;
  if(!s.airborne){
-  if(Math.hypot(s.vx,s.vz)<14){s.vx=Math.sin(s.heading)*14;s.vz=Math.cos(s.heading)*14;}
   launch(s,terrain,false);
   s.airY+=.8;
  }
  const g=terrain.gradient(s.x,s.z);
  s.airVy=Math.max(s.airVy,g.x*s.vx+g.z*s.vz+4.5);
  s.airClearance=Math.max(0,s.airY-height(terrain,s.x,s.z));
+ const speed=Math.hypot(s.vx,s.vz);
+ if(speed>.05)s.heading=Math.atan2(s.vx,s.vz);
+ s.speed=speed;
+ s.trickYaw=0;s.spinRate=0;
+ s.gliderSteeringReady=false;
  s.gliderUsed=true;
  s.gliderRemaining=duration;
  return true;
@@ -49,7 +53,9 @@ export function stepAirborne(s,input,terrain,dt,snow='packed'){
  const gliding=s.gliderRemaining>0,gravity=PHYSICS.gravity*(gliding?.30:1);
  if(gliding){
   s.gliderRemaining=Math.max(0,s.gliderRemaining-dt);
-  s.steerInput=clamp(input.steer||0,-1,1);
+  const steer=clamp(input.steer||0,-1,1);
+  if(Math.abs(steer)<.1)s.gliderSteeringReady=true;
+  s.steerInput=s.gliderSteeringReady?steer:0;
   const angle=s.steerInput*.8*dt,c=Math.cos(angle),j=Math.sin(angle),vx=s.vx;
   s.vx=vx*c+s.vz*j;s.vz=s.vz*c-vx*j;s.heading=wrap(s.heading+angle);
   const g=terrain.gradient(s.x,s.z),clearance=s.airY-height(terrain,s.x,s.z);
@@ -57,11 +63,12 @@ export function stepAirborne(s,input,terrain,dt,snow='packed'){
   s.airVy+=(targetVy-s.airVy)*(1-Math.exp(-dt*6));
  }
  const v=Math.hypot(s.vx,s.vz,s.airVy),cdA=PHYSICS.uprightCdA+(PHYSICS.tuckCdA-PHYSICS.uprightCdA)*(input.tuck?1:0),drag=Math.exp(-.5*PHYSICS.airDensity*cdA/PHYSICS.mass*v*dt);
- s.vx*=drag;s.vz*=drag;s.airVy*=drag;s.x+=s.vx*dt;s.z+=s.vz*dt;s.distance+=Math.hypot(s.vx,s.vz)*dt;
+ if(!gliding){s.vx*=drag;s.vz*=drag;}
+ s.airVy*=drag;s.x+=s.vx*dt;s.z+=s.vz*dt;s.distance+=Math.hypot(s.vx,s.vz)*dt;
  s.airY+=s.airVy*dt-.5*gravity*dt*dt;s.airVy-=gravity*dt;s.flightTime+=dt;s.airPeak=Math.max(s.airPeak,s.airY-s.launchHeight);
- s.spinRate+=(clamp(input.spin||0,-1,1)*8.0-s.spinRate)*(1-Math.exp(-dt*9));s.trickYaw+=s.spinRate*dt;
+ if(!gliding){s.spinRate+=(clamp(input.spin||0,-1,1)*8.0-s.spinRate)*(1-Math.exp(-dt*9));s.trickYaw+=s.spinRate*dt;}
  s.grab+=(Number(!!input.grab)-s.grab)*(1-Math.exp(-dt*10));if(input.grab)s.grabTime+=dt;
- s.tuck+=(Number(!!input.tuck)-s.tuck)*(1-Math.exp(-dt*8));s.poling=0;s.turn*=Math.exp(-dt*12);s.edgeRoll*=Math.exp(-dt*8);s.edgeAngle=Math.abs(s.edgeRoll);s.speed=Math.hypot(s.vx,s.vz,s.airVy);
+ s.tuck+=(Number(!!input.tuck)-s.tuck)*(1-Math.exp(-dt*8));s.poling=0;s.turn*=Math.exp(-dt*12);s.edgeRoll*=Math.exp(-dt*8);s.edgeAngle=Math.abs(s.edgeRoll);s.speed=gliding?Math.hypot(s.vx,s.vz):Math.hypot(s.vx,s.vz,s.airVy);
  const ground=height(terrain,s.x,s.z);s.airClearance=Math.max(0,s.airY-ground);const g=landingGradient(terrain,s.x,s.z),relative=s.airVy-g.x*s.vx-g.z*s.vz;
  if(s.airY<=ground&&relative<0){
   const travel=Math.atan2(s.vx,s.vz),impact=-relative/Math.sqrt(1+g.x*g.x+g.z*g.z),touchdownHeading=wrap(s.heading+s.trickYaw),quality=landingQuality(touchdownHeading,travel,impact,Math.hypot(s.vx,s.vz),s.spinRate),halves=Math.round(Math.abs(s.trickYaw)/Math.PI);

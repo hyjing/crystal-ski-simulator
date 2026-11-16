@@ -5,6 +5,7 @@ import {applyGear,GEAR_PRESETS} from './wardrobe.js';
 import {fallAnimation} from './npc-routines.js';
 import {PATROL_ITEMS,MEDKIT,SUPPLY,MAX_PURSUERS,PURSUER_HEALTH} from './patrol-mode.js';
 import {poseKickedSkier} from './kick.js';
+import {createRearShotEffect,updateRearShotEffect} from './rear-shot-effect.js';
 
 function statusIcon(symbol,color){
   const canvas=document.createElement('canvas');
@@ -49,7 +50,6 @@ export class PatrolScene {
     this.projectiles=[];
     this.allies=[];
     this.shotMeshes=[];
-    this.shotGeometry=new THREE.SphereGeometry(.16,8,5);
     this.allyMaterial=new THREE.MeshStandardMaterial({
       color:'#53cdb1',emissive:'#21856d',emissiveIntensity:.7,roughness:.7,
     });
@@ -174,12 +174,7 @@ export class PatrolScene {
       mesh.scale.setScalar(bomb.type==='snowball'?.42:.69);
       mesh.material=this.materials[bomb.type];
     });
-    this.updateInstances(this.shotMeshes,shots,()=>new THREE.Mesh(this.shotGeometry,this.materials.autofrost),(mesh,shot)=>{
-      const p=THREE.MathUtils.clamp((time-shot.start)/(shot.until-shot.start),0,1),end=shot.end;
-      mesh.position.set(THREE.MathUtils.lerp(shot.x,end.x,p),THREE.MathUtils.lerp(shot.y,end.y,p),THREE.MathUtils.lerp(shot.z,end.z,p));
-      mesh.lookAt(end.x,end.y,end.z);
-      mesh.scale.set(1,1,3.5);
-    });
+    this.updateInstances(this.shotMeshes,shots,createRearShotEffect,(fx,shot)=>updateRearShotEffect(fx,shot,time));
     this.updateInstances(this.allies,allies,()=>{
       const actor=createAthleteRig(this.root);
       actor.traverse(mesh=>{
