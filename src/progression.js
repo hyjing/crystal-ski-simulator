@@ -1,3 +1,4 @@
+const RETIRED_ITEMS={decoy:14,snowball:14};
 const KEY='terrain-sessions:progress:v1';
 
 export const UPGRADE_CAP=3;
@@ -11,11 +12,9 @@ export const DEFAULT_TALENTS=Object.freeze(['stamina']);
 
 export const ITEM_UPGRADES={
   boost:{bonuses:[.45,.95,1.55],extra:[6,12,18],describe:(time,thrust)=>`加速延长 ${time} 秒，推力 +${thrust}`,price:12},
-  decoy:{bonuses:[1,2.5,4],extra:[20,40,60],describe:(time,radius)=>`信标延长 ${time} 秒，范围 +${radius} 米`,price:14},
   shield:{bonuses:[.8,1.8,3],extra:[1.5,3,4.5],describe:(time,radius)=>`护盾延长 ${time} 秒，击退范围 +${radius} 米`,price:18},
   mist:{bonuses:[1,2.5,4],extra:[3,6,9],describe:(time,radius)=>`雪雾延长 ${time} 秒，半径 +${radius} 米`,price:16},
   banana:{bonuses:[1,2,3],extra:[.35,.7,1.05],describe:(amount,time)=>`一次丢 ${amount+1} 片，滑倒延长 ${time} 秒`,price:12},
-  snowball:{bonuses:[1,2,3],extra:[.6,1.2,1.8],describe:(amount,time)=>`投 ${amount+1} 个冰雪球，减速延长 ${time} 秒`,price:14},
   pulse:{bonuses:[5,11,18],extra:[7,14,21],describe:(radius,damage)=>`雪浪半径 +${radius} 米，伤害 +${damage}`,price:20},
   avalanche:{bonuses:[5,12,20],describe:amount=>`雪崩半径增加 ${amount} 米`,price:54},
   glider:{bonuses:[.55,1.15,1.85],describe:time=>`可控滑翔延长 ${time} 秒`,price:22},
@@ -111,12 +110,19 @@ export function readProgress(storage){
     }
   }
   const supplies=[];
+  const refunded=new Map();
+  let coins=counter(saved?.coins);
   if(Array.isArray(saved?.supplies)){
     for(const id of saved.supplies){
+      if(typeof id!=='string')continue;
       if(Object.hasOwn(ITEM_UPGRADES,id)&&canStoreItem(supplies,id))supplies.push(id);
+      else if(Object.hasOwn(RETIRED_ITEMS,id)&&(refunded.get(id)??0)<ITEM_STACK_LIMIT){
+        refunded.set(id,(refunded.get(id)??0)+1);
+        coins+=RETIRED_ITEMS[id];
+      }
     }
   }
-  return {xp,coins:counter(saved?.coins),upgrades,supplies};
+  return {xp,coins:counter(coins),upgrades,supplies};
 }
 
 export function saveProgress(storage,profile){

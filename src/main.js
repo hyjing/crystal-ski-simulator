@@ -557,16 +557,17 @@ function updatePhysics(dt){
         patrol.guardBlocks=0;
         toast('已击破雪友护盾 · 趁现在进攻');
       }
-      if(patrol.iceHits)confirmChaseHit(PATROL_ITEMS.snowball.name,patrol.iceHits,false,0,0,'减速');
-      if(patrol.shieldHits)confirmChaseHit(PATROL_ITEMS.shield.name,patrol.shieldHits);
       for(const hit of patrol.hits.splice(0)){
+        if(['boost','glider','shield','crew'].includes(hit.source)){
+          const {x,z}=hit.agent;
+          snowEffects.snowBurst(x,yAt(x,z),z,30,.42);
+        }
         const label=hit.source==='kick'?'踹开':PATROL_ITEMS[hit.source].name;
         if(hit.down)confirmChaseKnockdown(label,[hit.agent]);
-        else confirmChaseHit(label,1,false,0,hit.damage);
+        else confirmChaseHit(label,1,false,0,hit.damage,hit.source==='banana'?'滑倒':'命中');
       }
       if(escapes!==patrol.escapes){runExperience.escape();toast('成功脱身');}
       if(patrol.health<health)damageEffect=elapsed+.34;
-      if(patrol.trips.length)confirmChaseHit(PATROL_ITEMS.banana.name,patrol.trips.length,false,0,0,'滑倒');
       for(const {trap} of patrol.trips){
         const {x,z}=trap;
         snowEffects.snowBurst(x,yAt(x,z),z,24,.31);
@@ -884,7 +885,7 @@ function updateUI(){
     const threat=chaseDirection(skier,patrol.agents,Math.atan2(mapForward.x,mapForward.z),patrol.time);
     const dash=patrol.dash;
     $('chase-counter').hidden=!dash||mode!=='running';
-    if(dash)$('chase-counter').textContent=patrol.time<dash.at?'雪友即将冲刺 · 冰雪球、护盾或信标可打断':'雪友冲刺中';
+    if(dash)$('chase-counter').textContent=patrol.time<dash.at?'雪友即将冲刺 · 雪雾、护盾或援手可打断':'雪友冲刺中';
     $('chase-direction').hidden=!threat||mode!=='running';
     if(threat){
       $('chase-direction-label').textContent=`${threat.label} · ${threat.distance} m`;
@@ -1295,10 +1296,6 @@ function usePatrolItem(slot=0){
 }
 function detonateChaseBomb(blast){
   const {x,z,radius}=blast;
-  if(blast.type==='snowball'){
-    snowEffects.snowBurst(x,yAt(x,z),z,42,.58);
-    return null;
-  }
   snowEffects.snowBurst(x,yAt(x,z),z,120,radius/20);
   const visitors=gear.npcs?traffic?.states.filter(state=>traffic.canBeKicked(state))??[]:[];
   const priorBlocks=patrol.guardBlocks;

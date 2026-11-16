@@ -67,9 +67,6 @@ export class PatrolScene {
     this.glider.add(ribs);
     this.glider.visible=false;
     this.root.add(this.glider);
-    this.beacon=new THREE.Mesh(this.tokenGeometry,this.materials.decoy);
-    this.beacon.visible=false;
-    this.root.add(this.beacon);
     this.rings=[];
     this.ringGeometry=new THREE.RingGeometry(.78,1,64,2).rotateX(-Math.PI/2);
     this.pulseShape=this.ringGeometry.attributes.position.array;
@@ -171,7 +168,7 @@ export class PatrolScene {
       const x=THREE.MathUtils.lerp(bomb.x,bomb.end.x,t),z=THREE.MathUtils.lerp(bomb.z,bomb.end.z,t);
       mesh.position.set(x,this.surface(x,z)+.24+(1-t)*(bomb.height+1.2+10*t),z);
       mesh.rotation.set(t*6,0,t*3);
-      mesh.scale.setScalar(bomb.type==='snowball'?.42:.69);
+      mesh.scale.setScalar(.69);
       mesh.material=this.materials[bomb.type];
     });
     this.updateInstances(this.shotMeshes,shots,createRearShotEffect,(fx,shot)=>updateRearShotEffect(fx,shot,time));
@@ -204,13 +201,6 @@ export class PatrolScene {
       this.shield.rotation.y=this.phase*6;
       this.shield.scale.setScalar(1+.18*Math.sin(this.phase*19));
       this.shield.material.opacity=.45*Math.min(1,remaining*5);
-    }
-    this.beacon.visible=Boolean(effects.decoy);
-    if(this.beacon.visible){
-      const {x,z}=effects.decoy;
-      this.beacon.position.set(x,this.surface(x,z)+1.3,z);
-      this.beacon.rotation.y=this.phase*8;
-      this.beacon.scale.setScalar(1.35+.3*Math.sin(this.phase*16));
     }
     const mist=effects.mist;
     this.mistPuffs.forEach((puff,i)=>{
@@ -272,7 +262,7 @@ export class PatrolScene {
       const charging=this.run.dash?.agent===agent;
       const stunned=agent.stunUntil>time;
       const status=launch||agent.health===0?'down':stunned?'stunned':blocked?'blocked':
-        guard.visible?'guard':charging?'dash':agent.slowUntil>time||agent.fogSlowed?'slow':agent.tucking?'tuck':'chase';
+        guard.visible?'guard':charging?'dash':agent.fogSlowed?'slow':agent.tucking?'tuck':'chase';
       marker.material.map=this.statusIcons[status];
       const scale=charging?1.05+.15*Math.sin(this.phase*21):status==='chase'?.58:.85;
       marker.scale.setScalar(scale);

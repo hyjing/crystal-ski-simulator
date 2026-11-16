@@ -164,14 +164,14 @@ test('snow pulse releases before a pursuer enters range and can overlap other it
 
 test('levelled buffs start immediately and repeated boosts extend their remaining time',()=>{
   const run=new PatrolRun(route,()=>true,()=>true,[],['boost','shield']),player=makePlayer(100);
-  run.inventory=['boost','boost','shield','decoy'];
+  run.inventory=['boost','boost','shield','mist'];
   assert.ok(run.use(player));
   assert.ok(run.use(player));
   assert.ok(run.use(player));
   assert.ok(run.use(player));
   assert.ok(Math.abs(run.effects.boost.until-3)<1e-8);
   assert.ok(Math.abs(run.effects.shield.until-2.5)<1e-8);
-  assert.equal(run.effects.decoy.until,2.6);
+  assert.equal(run.effects.mist.until,3);
 });
 
 test('boost delivers a short burst, then the shield repels pursuers and expires',()=>{
@@ -194,24 +194,15 @@ test('boost delivers a short burst, then the shield repels pursuers and expires'
   assert.ok(run.use(player));
   run.step(.15,player,()=>false);
   assert.ok(close.z<92);
+  assert.equal(close.health,75);
+  run.step(.65,player,()=>false);
+  assert.equal(close.health,75);
   assert.equal(run.captureRemaining,null);
   run.step(PATROL_ITEMS.shield.duration,player,()=>false);
   assert.deepEqual(run.effects,{});
 });
 
-test('a nearby pursuer brakes hard for a decoy and resumes chasing as soon as it expires',()=>{
-  const run=new PatrolRun(route,()=>false),player=makePlayer(100);
-  run.inventory=['decoy'];run.stars=1;run.contact=1;
-  const close={x:0,z:98,speed:25,heading:0,bank:0};
-  run.agents=[close];
-  assert.ok(run.use(player));
-  run.step(.1,player);
-  assert.ok(close.speed<3);
-  assert.equal(run.captureRemaining,null);
-  run.step(PATROL_ITEMS.decoy.duration,player);
-  assert.deepEqual(run.effects,{});
-  assert.ok(run.captureRemaining>0);
-});
+
 
 
 test('full health lasts eight uninterrupted seconds regardless of speed or patrol count',()=>{
@@ -274,7 +265,7 @@ test('upgraded banana casts two traps per item, can overlap and each expires or 
   run.step(.1,player,()=>false);
   assert.equal(run.traps.length,3);
   assert.equal(pursuer.fallDuration,2.75);
-  assert.equal(run.hits.length,0);
+  assert.equal(run.hits[0].damage,18);
   run.agents=[];
   run.step(12.1,player,()=>false);
   assert.equal(run.traps.length,0);
@@ -286,7 +277,7 @@ test('the inventory holds three stacks, leaves overflow on the snow, and consume
   for(const p of fixed.slice(0,3)){
     assert.equal(run.step(.03,{...makePlayer(p.z),x:p.x}),'pickup');
   }
-  assert.deepEqual(run.inventory,['boost','pulse','decoy']);
+  assert.deepEqual(run.inventory,['boost','pulse','mist']);
   const fourth=fixed[3],player={...makePlayer(fourth.z),x:fourth.x};
   assert.equal(run.step(.03,player),'pickup-full');
   assert.equal(run.step(.03,player),null);
@@ -302,7 +293,7 @@ test('the inventory holds three stacks, leaves overflow on the snow, and consume
   assert.ok(run.use(player,0));
   assert.deepEqual(run.stacks.map(v=>v.count),[2,1,1]);
   assert.ok(run.use(player,2));
-  assert.ok(run.effects.decoy);
+  assert.ok(run.effects.mist);
   assert.equal(run.step(.03,player),'pickup');
   assert.deepEqual(run.stacks,[{type:'boost',count:2},{type:'pulse',count:1},{type:'shield',count:1}]);
 });
@@ -370,18 +361,7 @@ test('high heat telegraphs a pursuer dash and mist interrupts it when sight is l
   assert.ok(pursuer.speed<chargingSpeed);
 });
 
-test('the quantity specialty throws two snowballs that slow pursuers without launching them',()=>{
-  const run=new PatrolRun(route,()=>true,()=>false,[],['snowball']),player=makePlayer(100);
-  const pursuer={x:3,z:86,speed:15,heading:0,bank:0};
-  run.stars=1;
-  run.agents=[pursuer];run.inventory=['snowball'];
-  assert.ok(run.use(player));
-  assert.equal(run.bombs.length,2);
-  run.step(.3,player,()=>false);
-  assert.equal(run.bombs.length,0);
-  assert.ok(pursuer.slowUntil>2);
-  assert.equal(pursuer.launch,undefined);
-});
+
 
 test('each additional ski area exposes its longest mapped run as a shareable chase',()=>{
   for(const id of Object.keys(MOUNTAINS).filter(id=>id!=='crystal'&&!MOUNTAINS[id].virtual)){
@@ -578,15 +558,15 @@ test('pursuers left well behind retire and reinforcements appear offscreen witho
 
 test('a banana slip slides, leaves a low-health pursuer alive, and allows the same skier to recover',()=>{
   const run=new PatrolRun(route,()=>true);
-  const pursuer={x:0,z:97,speed:15,heading:0,bank:0,health:1};
+  const pursuer={x:0,z:97,speed:15,heading:0,bank:0,health:25};
   const player=makePlayer(100);
   run.agents=[pursuer];
   run.stars=1;
   run.traps=[{x:0,z:97,until:8}];
   run.step(.04,player,()=>false);
   assert.equal(run.trips[0].agent,pursuer);
-  assert.equal(pursuer.health,1);
-  assert.equal(run.hits.length,0);
+  assert.equal(pursuer.health,7);
+  assert.equal(run.hits[0].down,false);
   assert.equal(run.contact,0);
   const slippedAt=pursuer.z;
   run.step(.1,player,()=>false);
@@ -598,31 +578,13 @@ test('a banana slip slides, leaves a low-health pursuer alive, and allows the sa
   assert.ok(pursuer.speed>0);
 });
 
-test('an ordinary ice ball brakes a single pursuer without changing either health bar',()=>{
-  const run=new PatrolRun(route,()=>true,()=>false);
-  const player=makePlayer(100);
-  const closest={x:0,z:86,speed:25,heading:0,bank:0,health:65};
-  const second={x:3,z:87,speed:25,heading:0,bank:0,health:100};
-  run.agents=[closest,second];
-  run.inventory=['snowball'];
-  run.stars=1;
-  assert.ok(run.use(player));
-  run.step(.3,player,()=>false);
-  assert.equal(run.iceHits,1);
-  assert.ok(closest.speed<9&&closest.slowUntil>3);
-  assert.equal(second.slowUntil,undefined);
-  assert.deepEqual(run.agents.map(agent=>agent.health),[65,100]);
-  assert.equal(run.hits.length,0);
-});
 
-test('the decoy lands to the side and mist conceals the player while inside',()=>{
+
+test('mist conceals the player while inside',()=>{
   const run=new PatrolRun(route,()=>true);
   const player={...makePlayer(100),turn:1};
-  run.inventory=['decoy','mist'];
+  run.inventory=['mist'];
   run.stars=1;
-  assert.ok(run.use(player));
-  assert.equal(run.effects.decoy.x,-12);
-  assert.equal(run.effects.decoy.z,96);
   assert.ok(run.use(player));
   run.step(.1,player);
   assert.equal(run.agents.length,0);
@@ -733,7 +695,7 @@ test('summon ranks create one to four moving allies that draw pressure and leave
     assert.equal(ally.until,run.time);
     assert.ok(agent.stunUntil>run.time);
     assert.equal(run.health,100);
-    assert.equal(run.hits.length,0);
+    assert.equal(run.hits[0].damage,32);
     run.step(.04,player,()=>false);
     assert.equal(run.allies.length,rank);
   }
@@ -768,4 +730,48 @@ test('a missed kick restores its charge or cooldown while finishing the swing',(
     kick.step(.46,player,()=>true);
     assert.ok(kick.ready);
   }
+});
+
+test('boost and glider damage on a swept pass once per cast, with altitude limits',()=>{
+  for(const type of ['boost','glider']){
+    const run=new PatrolRun(route,()=>true,()=>false);
+    const player={...createSkier({x:0,z:100},{x:0,z:110}),speed:20,vz:20};
+    const terrain={surface:()=>0,gradient:()=>({x:0,z:0})};
+    const target={x:0,z:104,speed:0,heading:0,bank:0,health:100};
+    const remote={x:7,z:104,speed:0,heading:0,bank:0,health:100};
+    run.stars=1;run.agents=[target,remote];run.inventory=[type];
+    assert.ok(run.use(player,0,terrain));
+    if(type==='glider'){
+      player.airClearance=8;
+      player.z=102;
+      run.step(.04,player,()=>false);
+      assert.equal(target.health,100);
+      player.airClearance=3;
+    }
+    player.z=109;
+    run.step(.04,player,()=>false);
+    assert.equal(target.health,100-PATROL_ITEMS[type].damage);
+    assert.equal(remote.health,100);
+    player.z=104;
+    run.step(.04,player,()=>false);
+    assert.deepEqual(run.hits.map(({source})=>source),[type]);
+  }
+});
+
+test('mist deals periodic damage inside the cloud and credits a finishing hit only once',()=>{
+  const run=new PatrolRun(route,()=>true,()=>false);
+  const player=makePlayer(100);
+  const target={x:4,z:104,heading:0,speed:0,bank:0,health:10};
+  const outside={x:24,z:100,heading:0,speed:0,bank:0,health:100};
+  run.agents=[target,outside];run.stars=1;run.inventory=['mist'];
+  assert.ok(run.use(player));
+  run.step(.04,player,()=>false);
+  assert.equal(target.health,4);
+  run.step(.5,player,()=>false);
+  assert.equal(target.health,4);
+  run.step(.51,player,()=>false);
+  assert.equal(target.health,0);
+  assert.equal(outside.health,100);
+  run.step(.01,player,()=>false);
+  assert.deepEqual(run.hits.map(({source,damage,down})=>[source,damage,down]),[['mist',6,false],['mist',4,true]]);
 });

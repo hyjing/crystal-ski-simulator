@@ -110,7 +110,7 @@ test('selected talents affect damage, medkit healing, and the next run kick cool
 
 test('higher ranks reach item counts, area, duration, and attribute effects in the run',()=>{
   const upgrades=[
-    'banana','banana','banana','snowball','snowball','snowball','pulse','pulse','pulse',
+    'banana','banana','banana','crew','crew','crew','pulse','pulse','pulse',
     'mist','mist','mist','stamina','stamina','recovery','recovery','agility','agility','agility',
   ];
   const run=new PatrolRun(route,()=>true,()=>true,upgrades,upgrades);
@@ -119,9 +119,9 @@ test('higher ranks reach item counts, area, duration, and attribute effects in t
   use('banana');
   assert.equal(run.traps.length,4);
   assert.equal(new Set(run.traps.map(trap=>trap.z)).size,4);
-  use('snowball');
-  assert.equal(run.bombs.length,4);
-  assert.equal(new Set(run.bombs.map(bomb=>bomb.end.x)).size,4);
+  use('crew');
+  assert.equal(run.allies.length,4);
+  assert.ok(run.allies.every(ally=>ally.until===7));
   use('pulse');
   assert.equal(run.waves[0].radius,37);
   assert.equal(run.waves[0].duration,.62);
@@ -152,4 +152,17 @@ test('bulk purchases stack in a full three-kind loadout and reject over-budget o
   profile.coins=100;
   assert.equal(buyItem(profile,'banana'),false);
   assert.equal(buyItem(profile,'pulse'),false);
+});
+
+
+test('retired supplies refund their purchase price and retired ranks return their points',()=>{
+  let value;
+  const storage={getItem:()=>value,setItem:(key,next)=>{value=next;}};
+  saveProgress(storage,{xp:240,coins:20,upgrades:['decoy','boost','snowball'],supplies:['decoy','snowball','shield','decoy']});
+  const profile=readProgress(storage);
+  assert.deepEqual(profile,{xp:240,coins:62,upgrades:['boost'],supplies:['shield']});
+  assert.equal(upgradePoints(profile),2);
+  assert.equal(buyItem(profile,'snowball'),false);
+  saveProgress(storage,profile);
+  assert.deepEqual(readProgress(storage),profile);
 });
