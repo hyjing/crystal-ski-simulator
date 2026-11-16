@@ -1,4 +1,5 @@
 import test from 'node:test';
+import {readFileSync} from 'node:fs';
 import assert from 'node:assert/strict';
 import * as THREE from 'three';
 import {PatrolRun} from '../src/patrol-mode.js';
@@ -6,6 +7,8 @@ import {ChaseTrailEffects} from '../src/chase-trail-effects.js';
 import {layTrails,trailContact} from '../src/chase-trails.js';
 import {createChaseMountain} from '../src/chase-mountain.js';
 import {addWhitepeakBackdrop} from '../src/scenery.js';
+import {prepareAtmosphere} from '../src/atmosphere.js';
+import {stitchWhitepeakRelief,WHITEPEAK_RELIEF_PATH} from '../src/whitepeak-relief.js';
 
 const route={points:[{x:0,z:0},{x:0,z:3200}],length:3200,spawn:{distance:35}};
 const surface=()=>0;
@@ -71,17 +74,31 @@ test('frost and fire trigger a one-time thermal hit, and mirage feeds a separate
   assert.equal(target.mirage,null);
 });
 
-test('Whitepeak frames monumental north and south faces with tinted snowfields',()=>{
-  const {terrain,context,glacier}=createChaseMountain();
-  assert.ok((context.width-1)*context.spacing>=55000);
+test('Whitepeak stitches measured Annapurna relief to the local terrain and renders rock and snow',()=>{
+  const {terrain}=createChaseMountain();
+  const asset=readFileSync(new URL('../public/'+WHITEPEAK_RELIEF_PATH,import.meta.url));
+  const bytes=asset.buffer.slice(asset.byteOffset,asset.byteOffset+asset.byteLength);
+  const context=stitchWhitepeakRelief(bytes,terrain);
+  assert.throws(()=>stitchWhitepeakRelief(new ArrayBuffer(8),terrain),/size/);
+  assert.equal(context.spacing,96);
+  assert.ok((context.width-1)*context.spacing>=61000);
   const middle=Math.floor(context.height/2)*context.width;
-  assert.ok(context.heights.subarray(0,middle).some(elevation=>elevation>9250));
-  assert.ok(context.heights.subarray(middle).some(elevation=>elevation>9500));
-  const foreground=terrain.sample(0,0);
-  assert.ok(foreground<2400);
-  assert.ok(glacier(-4200,14300)>.45);
-  const backdrop=addWhitepeakBackdrop(new THREE.Scene(),context,terrain,glacier);
+  assert.ok(context.heights.subarray(middle).some(elevation=>elevation>9550));
+  const center=middle+Math.floor(context.width/2);
+  assert.ok(Math.abs(context.heights[center]-terrain.sample(0,0))<.001);
+  const far=center+180*context.width;
+  assert.equal(context.heights[far],new DataView(bytes).getUint16(far*2,true));
+  const scene=new THREE.Scene();
+  const backdrop=addWhitepeakBackdrop(scene,context,terrain);
+  prepareAtmosphere(scene,{value:0});
+  const {vertexShader,fragmentShader}=THREE.ShaderLib.standard;
+  const shader={vertexShader,fragmentShader,uniforms:{}};
+  backdrop.material.onBeforeCompile(shader);
+  assert.match(shader.vertexShader,/vRelief=position/);
+  assert.match(shader.fragmentShader,/float reliefGrain/);
+  assert.equal(shader.uniforms.distanceHaze.value,.68);
   assert.equal(backdrop.material.vertexColors,true);
+  assert.ok(backdrop.material.userData.distanceHaze<1);
   const colors=backdrop.geometry.attributes.color;
   assert.equal(colors.count,backdrop.geometry.attributes.position.count);
   assert.ok(colors.array.every(Number.isFinite));

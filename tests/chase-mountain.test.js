@@ -7,7 +7,7 @@ import {PatrolRun} from '../src/patrol-mode.js';
 import {pointAlongRoute} from '../src/terrain.js';
 
 test('Whitepeak exposes six distinct chase-only courses with flat starts and downhill finishes',()=>{
-  const {terrain,routes,landcover,context}=createChaseMountain();
+  const {terrain,routes,landcover}=createChaseMountain();
   assert.equal(resolveMountain('whitepeak'),'whitepeak');
   assert.equal(mountainAsset('whitepeak','dem.json'),null);
   assert.match(mountainIdentity('whitepeak').description,/虚拟雪山/);
@@ -46,5 +46,4 @@ test('Whitepeak exposes six distinct chase-only courses with flat starts and dow
   assert.ok(routes[1].branches.length>0);
   assert.equal(landcover.values.length,terrain.width*terrain.height);
   assert.ok(landcover.values.some(v=>v>.75)&&landcover.values.some(v=>v===0));
-  assert.ok(context.width*context.spacing>terrain.width*terrain.spacing);
 });

@@ -75,32 +75,59 @@ export function addContextTerrain(scene,context,local,texture,rainier,regional){
   return addGrid(scene,context,local,texture,exclude,{x:-7500,z:4000,halfX:6500,halfZ:4000});
 }
 
-export function addWhitepeakBackdrop(scene,context,local,glacier=()=>0){
+export function addWhitepeakBackdrop(scene,context,local){
   const halfX=(local.width-1)*local.spacing/2,halfZ=(local.height-1)*local.spacing/2;
   const exclude=[{west:-halfX+180,east:halfX-180,north:-halfZ+180,south:halfZ-180}];
-  const ridgeDetail=[{x:500,z:17400,halfX:10000,halfZ:4200},{x:0,z:-16500,halfX:8900,halfZ:4200}];
+  const ridgeDetail=[{x:2500,z:19500,halfX:13000,halfZ:7600}];
   const mesh=addGrid(scene,context,local,null,exclude,ridgeDetail);
-  mesh.name='Whitepeak granite ridges and snowfields';
+  mesh.name='Annapurna relief';
   const geometry=mesh.geometry,positions=geometry.attributes.position,normals=geometry.attributes.normal;
   const colors=new Float32Array(positions.count*3);
-  const stone=new THREE.Color('#455568'),snow=new THREE.Color('#eef8ff');
-  const valley=new THREE.Color('#546a70'),ice=new THREE.Color('#a7d7e7'),veils=new THREE.Color('#91aeca');
+  const stone=new THREE.Color('#3b4756'),snow=new THREE.Color('#f4fbff');
+  const valley=new THREE.Color('#465c58'),ice=new THREE.Color('#a6cddd');
   const rock=new THREE.Color(),shade=new THREE.Color();
   for(let i=0;i<positions.count;i++){
     const x=positions.getX(i),z=positions.getZ(i),elevation=positions.getY(i)+1200;
-    const slope=1-normals.getY(i),ridge=Math.sin(x*.003+z*.002)*240+Math.sin(z*.008-x*.005)*105;
-    const exposed=THREE.MathUtils.smoothstep(slope,.24,.50);
-    const snowCover=THREE.MathUtils.smoothstep(elevation+ridge,2750,4900)*(1-.77*exposed);
-    const iceField=glacier(x,z)*THREE.MathUtils.smoothstep(elevation,2050,3350)*(1-exposed*.76);
-    rock.copy(valley).lerp(stone,exposed);
-    shade.copy(rock).lerp(snow,snowCover).lerp(ice,iceField*.86);
-    const far=THREE.MathUtils.smoothstep(Math.hypot(x,z),6500,24500);
-    shade.lerp(veils,far*(.28-.20*snowCover));
+    const slope=1-normals.getY(i),ridge=Math.sin(x*.004+z*.002)*220+Math.sin(z*.009-x*.005)*100;
+    const exposed=THREE.MathUtils.smoothstep(slope,.17,.55);
+    const border=Math.max(Math.abs(x)-halfX,Math.abs(z)-halfZ);
+    const adjoiningSnow=(1-THREE.MathUtils.smoothstep(border,0,2050))*.94;
+    const snowCover=Math.max(adjoiningSnow,THREE.MathUtils.smoothstep(elevation+ridge,4150,5300)*(1-.82*exposed));
+    const iceTint=snowCover*(1-THREE.MathUtils.smoothstep(elevation,5400,7550))*(1-exposed)*.38;
+    rock.copy(valley).lerp(stone,Math.max(exposed,THREE.MathUtils.smoothstep(elevation,2250,4550)));
+    shade.copy(rock).lerp(snow,snowCover).lerp(ice,iceTint);
     shade.toArray(colors,i*3);
   }
   geometry.setAttribute('color',new THREE.BufferAttribute(colors,3));
-  mesh.material.color.set('#ffffff');
-  mesh.material.vertexColors=true;
+  const material=mesh.material;
+  material.color.set('#ffffff');
+  material.vertexColors=true;
+  material.userData.distanceHaze=.68;
+  material.onBeforeCompile=shader=>{
+    shader.vertexShader=shader.vertexShader.replace('#include <common>','#include <common>\nvarying vec3 vRelief;')
+      .replace('#include <begin_vertex>','#include <begin_vertex>\nvRelief=position;');
+    shader.fragmentShader=shader.fragmentShader.replace('#include <common>',`#include <common>
+      varying vec3 vRelief;
+      float reliefHash(vec2 cell){
+        vec3 p=fract(vec3(cell.xyx)*.1031);
+        p+=dot(p,p.yzx+33.33);
+        return fract((p.x+p.y)*p.z);
+      }
+      float reliefGrain(vec2 point){
+        vec2 cell=floor(point),f=fract(point);
+        f*=f*(3.-2.*f);
+        return mix(mix(reliefHash(cell),reliefHash(cell+vec2(1,0)),f.x),
+          mix(reliefHash(cell+vec2(0,1)),reliefHash(cell+vec2(1,1)),f.x),f.y);
+      }`)
+      .replace('#include <color_fragment>',`#include <color_fragment>
+        vec2 rockFace=vec2(vRelief.x+.45*vRelief.y,vRelief.z-.38*vRelief.y);
+        float bedding=reliefGrain(rockFace*vec2(.010,.018))-.5;
+        float clefts=reliefGrain(rockFace.yx*vec2(.051,.028))-.5;
+        float stone=1.-smoothstep(.24,.80,max(diffuseColor.r,max(diffuseColor.g,diffuseColor.b)));
+        diffuseColor.rgb*=1.+stone*(.19*bedding+.082*clefts);
+      `);
+  };
+  material.customProgramCacheKey=()=> 'whitepeak-annapurna-rock-v1';
   return mesh;
 }
 

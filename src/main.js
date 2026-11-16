@@ -34,6 +34,7 @@ import {fallAnimation} from './npc-routines.js';
 import {validRegionalGrid} from './regional-scenery.js';
 import {flyDrone} from './drone.js';
 import {applyMountainIdentity} from './mountain-identity.js';
+import {stitchWhitepeakRelief,WHITEPEAK_RELIEF_PATH} from './whitepeak-relief.js';
 import {sceneryProfile} from './scenery-profile.js';
 import {MOUNTAINS,resolveMountain,mountainAsset} from './mountains.js';
 const mountainId=resolveMountain(new URLSearchParams(location.search).get('mountain')),mountain=MOUNTAINS[mountainId];
@@ -187,6 +188,10 @@ async function init(){
   $('mountain').value=mountainId;applyMountainIdentity(document,mountainId);
   if(isVirtual)$('loading').textContent='正在生成白岬雪山…';
   if(mountain.referenceMap){$('map-layer').textContent='参考图';document.querySelector('.map-attribution').textContent='© OSM · Mapzen / Canada OGL';document.querySelector('.map-attribution').href='https://github.com/tilezen/joerd/blob/master/docs/attribution.md';}
+  const relief=isVirtual?fetch(`${import.meta.env.BASE_URL}${WHITEPEAK_RELIEF_PATH}`).then(r=>{
+    if(!r.ok)throw new Error('Whitepeak elevation download');
+    return r.arrayBuffer();
+  }).catch(error=>{console.warn(error);return null;}):null;
   const generated=isVirtual?(await import('./chase-mountain.js')).createChaseMountain():null;
   let mappedRoutes,infrastructure;
   if(generated){
@@ -198,9 +203,11 @@ async function init(){
     $('challenge').value='patrol';
     for(const option of $('challenge').options)option.hidden=option.value!=='patrol';
     $('map-layer').hidden=true;
-    document.querySelector('.map-attribution').hidden=true;
-    document.querySelector('.terrain-caption a').hidden=true;
-    $('caption-source').textContent=mountain.elevationLabel;
+    const attribution='https://github.com/tilezen/joerd/blob/master/docs/attribution.md';
+    for(const link of [document.querySelector('.map-attribution'),document.querySelector('.terrain-caption a')]){
+      link.textContent='远景高程 · Mapzen / USGS SRTM';
+      link.href=attribution;
+    }
   }else{
     ({mappedRoutes,infrastructure}=await loadMappedResort());
   }
@@ -266,7 +273,11 @@ async function init(){
   createMapBackground();
   speedRenderer=new SpeedRenderer(renderer,scene,camera);
   if(generated){
-    addWhitepeakBackdrop(scene,generated.context,terrain,generated.glacier);
+    const heights=await relief;
+    if(heights){
+      try{addWhitepeakBackdrop(scene,stitchWhitepeakRelief(heights,terrain),terrain);}
+      catch(error){console.warn(error);toast('白岬远景载入失败');}
+    }else toast('白岬远景载入失败');
     $('scenery').disabled=false;
   }else{
     aerialImage=new Image();aerialImage.onload=()=>{if(skier)drawMap();};aerialImage.src=asset(hasSatellite?'satellite.jpg':'aerial.jpg');
@@ -744,8 +755,8 @@ function updateCamera(dt,snap=false){
     const mid=route.points[Math.floor(route.points.length/2)];
     if(isVirtual){
       const elevation=yAt(mid.x,mid.z);
-      targetCamera.set(mid.x+520,elevation+480,mid.z+1150);
-      lookTarget.set(mid.x-260,elevation+270,mid.z-4200);
+      targetCamera.set(mid.x-600,elevation+450,mid.z-1450);
+      lookTarget.set(mid.x+850,elevation+510,mid.z+8000);
     }else{
       targetCamera.set(mid.x+780,yAt(mid.x,mid.z)+670,mid.z+680);
       lookTarget.set(mid.x-120,yAt(mid.x,mid.z)+40,mid.z-100);
