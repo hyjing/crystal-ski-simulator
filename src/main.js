@@ -503,6 +503,7 @@ function updatePhysics(dt){
         patrol.guardBlocks=0;
         toast('已击破雪友护盾 · 趁现在进攻');
       }
+      if(patrol.iceHits)confirmChaseHit(PATROL_ITEMS.snowball.name,patrol.iceHits,false,0,0,'减速');
       if(patrol.shieldHits)confirmChaseHit(PATROL_ITEMS.shield.name,patrol.shieldHits);
       for(const hit of patrol.hits.splice(0)){
         const label=hit.source==='kick'?'踹开':PATROL_ITEMS[hit.source].name;
@@ -511,6 +512,7 @@ function updatePhysics(dt){
       }
       if(escapes!==patrol.escapes){runExperience.escape();toast('成功脱身');}
       if(patrol.health<health)damageEffect=elapsed+.34;
+      if(patrol.trips.length)confirmChaseHit(PATROL_ITEMS.banana.name,patrol.trips.length,false,0,0,'滑倒');
       for(const {trap} of patrol.trips){
         const {x,z}=trap;
         snowEffects.snowBurst(x,yAt(x,z),z,24,.31);
@@ -1220,7 +1222,7 @@ function confirmChaseKnockdown(source,targets){
   for(const target of targets){count++;if(runExperience.knockdown(target))paid++;}
   confirmChaseHit(source,count,true,paid);
 }
-function confirmChaseHit(source,count,down=false,paid=0,damage=0){
+function confirmChaseHit(source,count,down=false,paid=0,damage=0,action=down?'击倒':'命中'){
   const marker=$('chase-hit');
   const active=!marker.hidden&&elapsed<hitUntil;
   if(active&&marker.dataset.result==='down'&&!down)return;
@@ -1233,7 +1235,7 @@ function confirmChaseHit(source,count,down=false,paid=0,damage=0){
   const totalDamage=damage+(same?Number(marker.dataset.damage||0):0);
   marker.dataset.rewardCount=String(rewards);
   marker.dataset.damage=String(totalDamage);
-  $('chase-hit-label').textContent=`${source} · ${down?'击倒':'命中'}${total>1?' ×'+total:''}${totalDamage?` · ${totalDamage} 伤害`:''}${rewards?` · +${rewards*KNOCKDOWN_XP} XP · +${rewards*KNOCKDOWN_COINS} 金币`:''}`;
+  $('chase-hit-label').textContent=`${source} · ${action}${total>1?' ×'+total:''}${totalDamage?` · ${totalDamage} 伤害`:''}${rewards?` · +${rewards*KNOCKDOWN_XP} XP · +${rewards*KNOCKDOWN_COINS} 金币`:''}`;
   hitUntil=elapsed+(down?1.2:.68);
   marker.hidden=false;
 }

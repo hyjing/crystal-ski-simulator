@@ -271,8 +271,8 @@ test('upgraded banana casts two traps per item, can overlap and each expires or 
   run.agents=[pursuer];
   run.step(.1,player,()=>false);
   assert.equal(run.traps.length,3);
-  assert.ok(pursuer.stunUntil>1.2);
-  assert.equal(pursuer.health,55);
+  assert.equal(pursuer.fallDuration,2.4);
+  assert.equal(run.hits.length,0);
   run.agents=[];
   run.step(12.1,player,()=>false);
   assert.equal(run.traps.length,0);
@@ -528,7 +528,7 @@ test('ordinary chase hits chip health and only the finishing hit earns a knockdo
   assert.equal(run.kickHit(agent,player),'hit');
   assert.equal(agent.health,45);
   assert.equal(agent.launch,undefined);
-  assert.equal(run.damage(agent,'banana',PATROL_ITEMS.banana.damage),'down');
+  assert.equal(run.damage(agent,'pulse',PATROL_ITEMS.pulse.damage),'down');
   assert.equal(agent.health,0);
   assert.ok(agent.downUntil>run.time);
   assert.equal(run.damage(agent,'pulse',PATROL_ITEMS.pulse.damage),'blocked');
@@ -572,4 +572,58 @@ test('pursuers left well behind retire and reinforcements appear offscreen witho
   assert.equal(run.agents.length,1);
   assert.notEqual(run.agents[0],old);
   assert.ok(player.z-run.agents[0].z>25);
+});
+
+test('a banana slip slides, leaves a low-health pursuer alive, and allows the same skier to recover',()=>{
+  const run=new PatrolRun(route,()=>true);
+  const pursuer={x:0,z:97,speed:15,heading:0,bank:0,health:1};
+  const player=makePlayer(100);
+  run.agents=[pursuer];
+  run.stars=1;
+  run.traps=[{x:0,z:97,until:8}];
+  run.step(.04,player,()=>false);
+  assert.equal(run.trips[0].agent,pursuer);
+  assert.equal(pursuer.health,1);
+  assert.equal(run.hits.length,0);
+  assert.equal(run.contact,0);
+  const slippedAt=pursuer.z;
+  run.step(.1,player,()=>false);
+  assert.ok(pursuer.z>slippedAt);
+  assert.equal(pursuer.speed,0);
+  for(let i=0;i<72;i++)run.step(1/30,player,()=>false);
+  assert.ok(pursuer.stunUntil<=run.time);
+  assert.equal(run.agents[0],pursuer);
+  assert.ok(pursuer.speed>0);
+});
+
+test('an ordinary ice ball brakes a single pursuer without changing either health bar',()=>{
+  const run=new PatrolRun(route,()=>true,()=>false);
+  const player=makePlayer(100);
+  const closest={x:0,z:86,speed:25,heading:0,bank:0,health:65};
+  const second={x:3,z:87,speed:25,heading:0,bank:0,health:100};
+  run.agents=[closest,second];
+  run.inventory=['snowball'];
+  run.stars=1;
+  assert.ok(run.use(player));
+  run.step(.3,player,()=>false);
+  assert.equal(run.iceHits,1);
+  assert.ok(closest.speed<9&&closest.slowUntil>3);
+  assert.equal(second.slowUntil,undefined);
+  assert.deepEqual(run.agents.map(agent=>agent.health),[65,100]);
+  assert.equal(run.hits.length,0);
+});
+
+test('the decoy lands to the side and snow mist pauses reinforcements',()=>{
+  const run=new PatrolRun(route,()=>true);
+  const player={...makePlayer(100),turn:1};
+  run.inventory=['decoy','mist'];
+  run.stars=1;
+  assert.ok(run.use(player));
+  assert.equal(run.effects.decoy.x,-12);
+  assert.equal(run.effects.decoy.z,96);
+  assert.ok(run.use(player));
+  run.step(.1,player);
+  assert.equal(run.agents.length,0);
+  run.step(PATROL_ITEMS.mist.duration,player);
+  assert.equal(run.agents.length,1);
 });
