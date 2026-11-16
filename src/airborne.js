@@ -73,9 +73,10 @@ export function stepAirborne(s,input,terrain,dt,snow='packed'){
  if(s.airY<=ground&&relative<0){
   const travel=Math.atan2(s.vx,s.vz),impact=-relative/Math.sqrt(1+g.x*g.x+g.z*g.z),touchdownHeading=wrap(s.heading+s.trickYaw),quality=landingQuality(touchdownHeading,travel,impact,Math.hypot(s.vx,s.vz),s.spinRate),halves=Math.round(Math.abs(s.trickYaw)/Math.PI);
   const points=quality.clean&&s.flightTime>.18?50+halves*150+(s.grabTime>.16?100:0):0;
+  const glider=Boolean(s.gliderUsed);
   s.freestyleScore+=points;s.airborne=false;s.gliderUsed=false;s.gliderRemaining=0;s.airY=ground;s.jumpCooldown=.45;s.naturalCandidate=0;s.heading=touchdownHeading;s.switchStance=!quality.crash&&quality.switchLanding;s.recoveryHeading=travel+(quality.switchLanding?Math.PI:0);s.crashSide=Math.sign(quality.difference)||1;
   s.landingStrength=clamp((impact-3)/7,0,1);s.landingAnimationDuration=.55+s.landingStrength*.20;s.landingAnimationRemaining=s.landingAnimationDuration;
-  s.airEvent={type:quality.crash?'crash':'land',quality:quality.clean?'clean':quality.recoverable?'recover':'crash',reason:quality.reason,alignment:quality.alignment,points,rotation:halves*180,grab:s.grabTime>.16,airTime:s.flightTime,impact};
+  s.airEvent={type:quality.crash?'crash':'land',quality:quality.clean?'clean':quality.recoverable?'recover':'crash',reason:quality.reason,alignment:quality.alignment,points,rotation:halves*180,grab:s.grabTime>.16,airTime:s.flightTime,impact,...(glider?{glider}:null)};
   if(quality.crash){s.crashRemaining=s.crashDuration=3.2;s.crashReason='landing';s.landingFailure=s.airEvent;s.vx=s.vz=s.speed=0;}else{const retain=quality.recoverable?.78:.96;s.landingRecover=quality.recoverable?.9:.25;s.vx*=retain;s.vz*=retain;s.speed=Math.hypot(s.vx,s.vz);}
   s.trickYaw=0;s.spinRate=0;s.grab=0;
  }

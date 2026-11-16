@@ -3,7 +3,7 @@ import {createAthleteRig,updateAthletePose} from './athlete.js';
 import {loadHumanoid} from './humanoid.js';
 import {applyGear,GEAR_PRESETS} from './wardrobe.js';
 import {fallAnimation} from './npc-routines.js';
-import {PATROL_ITEMS,MEDKIT,SUPPLY,MAX_PURSUERS,PURSUER_HEALTH} from './patrol-mode.js';
+import {PATROL_ITEMS,PURSUER_ROLES,MEDKIT,SUPPLY,MAX_PURSUERS,PURSUER_HEALTH} from './patrol-mode.js';
 import {poseKickedSkier} from './kick.js';
 import {createRearShotEffect,updateRearShotEffect} from './rear-shot-effect.js';
 
@@ -89,10 +89,14 @@ export class PatrolScene {
     const guardMaterial=this.shield.material.clone();
     this.statusIcons={
       chase:statusIcon('◆','#ff8192'),dash:statusIcon('!', '#ffc26c'),
+      ...Object.fromEntries(Object.entries(PURSUER_ROLES).map(([role,v])=>[role,statusIcon(v.symbol,v.color)])),
       tuck:statusIcon('»','#ffce83'),
       guard:statusIcon('⬡','#83dcff'),blocked:statusIcon('⬡','#fff4ad'),
       slow:statusIcon('❄','#92e6ff'),stunned:statusIcon('×','#fff4ad'),down:statusIcon('KO','#ff9d87'),
     };
+    this.interceptIcon=new THREE.Sprite(new THREE.SpriteMaterial({map:this.statusIcons.scout,depthWrite:false,toneMapped:false}));
+    this.interceptIcon.visible=false;
+    this.root.add(this.interceptIcon);
     for(let i=0;i<MAX_PURSUERS;i++){
       const actor=createAthleteRig(this.root);
       actor.visible=false;
@@ -262,9 +266,9 @@ export class PatrolScene {
       const charging=this.run.dash?.agent===agent;
       const stunned=agent.stunUntil>time;
       const status=launch||agent.health===0?'down':stunned?'stunned':blocked?'blocked':
-        guard.visible?'guard':charging?'dash':agent.fogSlowed?'slow':agent.tucking?'tuck':'chase';
+        guard.visible?'guard':charging?'dash':agent.fogSlowed?'slow':agent.tucking?'tuck':agent.role??'chase';
       marker.material.map=this.statusIcons[status];
-      const scale=charging?1.05+.15*Math.sin(this.phase*21):status==='chase'?.58:.85;
+      const scale=charging?1.05+.15*Math.sin(this.phase*21):(status==='chase'||status===agent.role)?.65:.85;
       marker.scale.setScalar(scale);
       const anchor=launch??agent;
       marker.position.set(anchor.x,this.surface(anchor.x,anchor.z)+(launch?.height??0)+(status==='down'?1.55:2.35),anchor.z);
@@ -296,6 +300,13 @@ export class PatrolScene {
       actor.rotateZ((i%2?1:-1)*(fall.amount*1.25+repelled*.23));
       if(pose||appeared)updateAthletePose(actor,{speed,heading,edgeRoll:bank,tuck:agent.tucking?.92:speed>15?.42:0,
         crashRemaining:remaining,fallAmount:fall.amount,fallCrouch:fall.crouch,fallBrace:fall.brace,fallPhase:fall.phase},.05,this.surface);
+    }
+    const warning=this.run.intercept;
+    this.interceptIcon.visible=Boolean(warning);
+    if(warning){
+      const {x,z}=warning.point;
+      this.interceptIcon.position.set(x,this.surface(x,z)+2.7,z);
+      this.interceptIcon.scale.setScalar(1.4+.25*Math.sin(this.phase*18));
     }
     for(const [i,token] of this.tokens.entries()){
       const p=this.run.pickups[i];

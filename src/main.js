@@ -4,7 +4,7 @@ import {GhostSkier} from './ghost-skier.js';
 import {ITEM_UPGRADES,ITEM_CAPACITY,ITEM_STACK_LIMIT,itemStacks,shopStock,KNOCKDOWN_XP,KNOCKDOWN_COINS,TALENTS,UPGRADE_CAP,RunExperience,levelProgress,upgradePoints,upgradeRank,describeUpgrade,chooseUpgrade,buyItem,readProgress,saveProgress} from './progression.js';
 import {LUCKY_SECTORS,luckyWidth,luckyShade,routeBranchCandidates,chaseDirection} from './route-experience.js';
 import {mapProjection} from './minimap.js';
-import {PatrolRun,PATROL_ITEMS,MEDKIT,SUPPLY,MAX_HEALTH,resolveChaseRoute,longestChaseRoute} from './patrol-mode.js';
+import {PatrolRun,PATROL_ITEMS,PURSUER_ROLES,MEDKIT,SUPPLY,MAX_HEALTH,resolveChaseRoute,longestChaseRoute} from './patrol-mode.js';
 import {SkierKick,KICK_RANGE} from './kick.js';
 import {PatrolScene} from './patrol-scene.js';
 import * as THREE from 'three';
@@ -24,7 +24,7 @@ import {CrowdVoices} from './crowd-voices.js';
 import {SlopeAudio} from './slope-audio.js';
 import {sampleSlopeConditions} from './slope-conditions.js';
 import {chairAtStation} from './lift-station-layout.js';
-import {assignTrailMusic,Soundtrack} from './soundtrack.js';
+import {Soundtrack} from './soundtrack.js';
 import {RunChallenge,practiceTerrain,practiceBumps,recordRun} from './run-challenges.js';
 import {ChallengeRenderer} from './challenge-renderer.js';
 import {createLiftPassengers} from './lift-passengers.js';
@@ -60,7 +60,7 @@ const riderProgress=readProgress(progressStorage);
 let runExperience;
 const keys = new HeldControls();
 const soundtrack = new Soundtrack($('soundtrack'), $('music'), import.meta.env.BASE_URL, toast);
-let trailMusic,patrol,patrolScene,kick,patrolStep=0;
+let patrol,patrolScene,kick,patrolStep=0;
 let damageEffect,healEffect;
 let hitUntil=0;
 let replaySkier,replayPoint,bestGhost,bestGhostLine,ghostRun,activeGhostKey,ghostEnabled=true,nextLandmark=0;
@@ -205,9 +205,9 @@ async function init(){
     ({mappedRoutes,infrastructure}=await loadMappedResort());
   }
   terrain.sceneryProfile=sceneryProfile(mountainId);
-  for(const run of routes)if(run.patrolOnly&&(!generated||run.halfWidth<22))run.branches=routeBranchCandidates(run,terrain);
+  for(const run of routes)if(run.patrolOnly&&!generated)run.branches=routeBranchCandidates(run,terrain);
   $('patrol-option').hidden=!routes.some(r=>r.patrolOnly);
-  trailMusic=assignTrailMusic(mountainId,routes.map(r=>r.id));
+  soundtrack.next();
   scene=new THREE.Scene();scene.userData.sceneryProfile=sceneryProfile(mountainId); scene.background=new THREE.Color('#cbdce9'); scene.fog=new THREE.Fog('#cbdce9',12000,65000);
   camera=new THREE.PerspectiveCamera(58,innerWidth/innerHeight,1,65000);
   renderer=new THREE.WebGLRenderer({antialias:true, powerPreference:'high-performance'});
@@ -347,11 +347,27 @@ function setRouteMarkers(){
     board.position.set(x,yAt(x,z)+2.1,z);board.rotation.y=Math.atan2(-dx,-dz);routeGroup.add(board);
   }
   for(const branch of route.branches??[]){
+    const color=branch.kind==='shortcut'?'#83f3db':'#ffca73';
     const points=branch.points.map(p=>new THREE.Vector3(p.x,yAt(p.x,p.z)+.3,p.z));
     const guide=new THREE.Line(new THREE.BufferGeometry().setFromPoints(points),
-      new THREE.LineDashedMaterial({color:'#ffca73',dashSize:5,gapSize:4,transparent:true,opacity:.85}));
+      new THREE.LineDashedMaterial({color,dashSize:5,gapSize:4,transparent:true,opacity:.85}));
     guide.computeLineDistances();
     routeGroup.add(guide);
+    if(branch.kind){
+      const distance=branch.lo-46,at=pointAlongRoute(route,distance);
+      const ahead=pointAlongRoute(route,distance+8),heading=Math.atan2(ahead.x-at.x,ahead.z-at.z);
+      const entry=branch.points[3],parallel=pointAlongRoute(route,branch.lo+(branch.hi-branch.lo)*3/(branch.points.length-1));
+      const across=(entry.x-parallel.x)*Math.cos(heading)-(entry.z-parallel.z)*Math.sin(heading);
+      const canvas=document.createElement('canvas');canvas.width=512;canvas.height=112;
+      const ctx=canvas.getContext('2d');ctx.fillStyle='#1a3743';ctx.fillRect(0,0,512,112);
+      ctx.strokeStyle=color;ctx.lineWidth=7;ctx.strokeRect(5,5,502,102);
+      ctx.fillStyle=color;ctx.font='bold 38px system-ui';ctx.textAlign='center';
+      ctx.fillText(`${across<0?'←':'→'} ${branch.name} · ${branch.kind==='shortcut'?'捷径':'血包'}`,256,70);
+      const map=new THREE.CanvasTexture(canvas);map.colorSpace=THREE.SRGBColorSpace;
+      const sign=new THREE.Sprite(new THREE.SpriteMaterial({map}));
+      const side=across<0?-1:1,x=at.x+Math.cos(heading)*10*side,z=at.z-Math.sin(heading)*10*side;
+      sign.position.set(x,yAt(x,z)+2.55,z);sign.scale.set(6.6,1.45,1);routeGroup.add(sign);
+    }
   }
   scene.add(routeGroup);
 }
@@ -375,7 +391,7 @@ function selectRoute(id){
   liftJourney.cancel();route=routes.find(r=>r.id===id);
   if(route.patrolOnly)challengeMode=$('challenge').value='patrol';
   else if(challengeMode==='patrol')challengeMode=$('challenge').value='free';
-  soundtrack.select(trailMusic.get(id));liftPassengers?.select(route.liftId);checkpoint=0;
+  liftPassengers?.select(route.liftId);checkpoint=0;
   renderRouteList();
   $('map-label').textContent=route.name.toUpperCase();$('session-name').textContent=route.name;
   fitMapToRoute();createMapBackground();setRouteMarkers(); resetPosition(true); updateAthlete(0); updateCamera(1,true); drawMap();weather?.prepareMaterials();
@@ -444,7 +460,7 @@ function startRun(reset=true){
   }
   else toast(touchDevice?'长按左侧转弯 · 右侧撑杖起步 · 拖动场景环视':'上站缓坡出发 · 按住 Shift 撑杖 · 沿雪道滑到下站光圈');
   if(soundOn) enableAudio();
-  soundtrack.refresh();
+  soundtrack.next();
 }
 
 function goIntro(){
@@ -471,12 +487,14 @@ function resumeRun(){
 }
 function liftView(){return mode==='lift'||(mode==='paused'&&pauseOrigin==='lift');}
 function finishRun(caught=false){
-  const earned=runExperience.settle(riderProgress,!caught,Boolean(patrol));
+  const objectiveBonus=patrol?.goal?.reward(patrol,!caught)??0;
+  const earned=runExperience.settle(riderProgress,!caught,Boolean(patrol),objectiveBonus);
   if(earned.xp||earned.coins)saveProgress(progressStorage,riderProgress);
   const after=levelProgress(riderProgress.xp).level,points=upgradePoints(riderProgress);
   $('xp-result').hidden=!earned.xp&&!earned.coins;
   $('xp-result').textContent=[
     `+${earned.xp} XP`,earned.coins?`+${earned.coins} 金币`:'',
+    objectiveBonus?`路线目标 +${objectiveBonus} 金币`:'',
     earned.knockdowns?`击倒 ${earned.knockdowns} 人`:'',`等级 ${after}`,points?`${points} 点强化可选`:'',
   ].filter(Boolean).join(' · ');
   $('progress-after-run').hidden=!earned.xp&&!earned.coins&&!points&&!riderProgress.coins;
@@ -486,7 +504,9 @@ function finishRun(caught=false){
   mode='finished';keys.clear();skier.vx=skier.vz=skier.speed=0;
   $('result-stats').innerHTML=`<div><strong>${clockFormat(elapsed)}</strong><small>滑行时间</small></div><div><strong>${Math.round(peakSpeed*3.6)}</strong><small>最高速度 KM/H</small></div><div><strong>${(totalDistance/1000).toFixed(2)}</strong><small>滑行里程 KM</small></div><div><strong>${skier.freestyleScore||0}</strong><small>特技分数</small></div>`;
   if(patrol){
-    $('challenge-result').textContent=`最高追逐热度 ${patrol.peakStars} 星 · 剩余生命 ${Math.ceil(patrol.health)}/${MAX_HEALTH}`;
+    const goal=patrol.goal?.config;
+    $('challenge-result').textContent=`最高追逐热度 ${patrol.peakStars} 星 · 剩余生命 ${Math.ceil(patrol.health)}/${MAX_HEALTH}`+
+      (goal?` · ${goal.label} ${objectiveBonus?'已完成':'未完成'}`:'');
   }else if(challenge&&challenge.mode!=='free'){
     const r=challenge.result(),best=r.complete&&['time','turns'].includes(challenge.mode)?recordRun(localStorage,`ski-best:${mountainId}:${route.id}:${challenge.mode}`,r.time):null;
     $('challenge-result').textContent=challenge.mode==='freestyle'?`花式练习 · ${skier.freestyleScore||0} 分`:`${r.complete?'全部门点完成':'漏门 '+r.missed+' 个'} · ${r.time.toFixed(1)} 秒（罚时 ${r.penalty} 秒）${best?' · 本机最佳 '+best.toFixed(1)+' 秒':''}`;
@@ -534,13 +554,15 @@ function updatePhysics(dt){
   if(skier.airEvent?.type==='land'&&!pendingRecovery){
     const event=skier.airEvent,charge=kick.chargeLanding(event);
     runExperience.landing(event);
-    const heal=patrol?.evadeLanding(event);
+    const heal=patrol?.evadeLanding(event,skier,yAt);
+    if(patrol&&event.glider&&event.quality==='clean'&&event.airTime>=.35)
+      snowEffects.snowBurst(skier.x,yAt(skier.x,skier.z),skier.z,72,.72);
     if(heal)healEffect=elapsed+.65;
     if(event.points||charge||heal)toast(`平稳落地${event.points?` +${event.points}`:''}${charge?` · 充能 +${Number(charge.toFixed(1))}`:''}${heal?` · 生命 +${Math.ceil(heal)}`:''}`);
   }
   if(skier.airEvent?.type==='jump-blocked')toast('起跳需要至少 18 km/h · 先撑杖或顺坡加速');
   if(skier.airEvent?.type==='land'&&skier.airEvent.quality==='recover')toast('落地稍偏 · 屈膝缓冲、搓雪恢复');
-  if(skier.airEvent?.type==='crash'){const reasons={impact:'触地冲击过大',crossed:'高速横板落地',combined:'横板与冲击叠加',rotation:'空中旋转尚未收住'};toast(`落地摔倒：${reasons[skier.airEvent.reason]||'失去支撑'} · 正在起身`);}elapsed+=dt;peakSpeed=Math.max(peakSpeed,skier.speed);totalDistance=skier.distance;
+  if(skier.airEvent?.type==='crash'){patrol?.goal?.landing(skier.airEvent);const reasons={impact:'触地冲击过大',crossed:'高速横板落地',combined:'横板与冲击叠加',rotation:'空中旋转尚未收住'};toast(`落地摔倒：${reasons[skier.airEvent.reason]||'失去支撑'} · 正在起身`);}elapsed+=dt;peakSpeed=Math.max(peakSpeed,skier.speed);totalDistance=skier.distance;
   const kickEvent=kick.step(dt,skier,canBeKicked,playLaunchLanding,resolveChaseKick);
   if(kickEvent?.type==='hit'){
     const {start,fromY,heading}=kickEvent.flight;
@@ -568,9 +590,12 @@ function updatePhysics(dt){
       }
       if(escapes!==patrol.escapes){runExperience.escape();toast('成功脱身');}
       if(patrol.health<health)damageEffect=elapsed+.34;
-      for(const {trap} of patrol.trips){
+      if(patrol.lastShortcut)toast(`${patrol.lastShortcut.name} · 直板手暂时掉队`);
+
+      for(const {trap,combo} of patrol.trips){
         const {x,z}=trap;
-        snowEffects.snowBurst(x,yAt(x,z),z,24,.31);
+        snowEffects.snowBurst(x,yAt(x,z),z,combo?48:24,combo?.60:.31);
+        if(combo)toast('连招 · 雪浪把雪友推上了香蕉皮');
       }
       patrolStep=0;
       if(event==='caught'){finishRun(true);return;}
@@ -804,7 +829,7 @@ function drawMap(){
   }
   for(const other of routes)if(other!==route&&(isVirtual||!other.patrolOnly))line(other.points,aerial?'#9ebdcc':'#94ac8b',1.4,[4,4]);
   line(route.points,aerial?'#ddfaab':'#2e5847',4);
-  for(const branch of route.branches??[])line(branch.points,'#cc8e34',2,[4,4]);
+  for(const branch of route.branches??[])line(branch.points,branch.kind==='shortcut'?'#309c92':'#cc8e34',2,[4,4]);
   if(ghostEnabled&&bestGhostLine)line(bestGhostLine,'#53b8d2',1.5,[3,4]);
   if(trailPoints.length>1)line(trailPoints,'#d57f4d',2);
   function dot(p,color,r,text){
@@ -825,7 +850,9 @@ function drawMap(){
     }
     for(const trap of patrol.traps)dot(trap,PATROL_ITEMS.banana.color,4);
     for(const ally of patrol.allies)if(ally.until>patrol.time)dot(ally,PATROL_ITEMS.crew.color,4.5);
-    for(const agent of patrol.agents)if(!agent.launch&&agent.health!==0)dot(agent,agent.guardUntil>patrol.time?'#83dcff':'#b4213a',5.4);
+    for(const agent of patrol.agents)if(!agent.launch&&agent.health!==0)
+      dot(agent,agent.guardUntil>patrol.time?'#83dcff':PURSUER_ROLES[agent.role]?.color??'#b4213a',5.4);
+    if(patrol.intercept)dot(patrol.intercept.point,'#da84ee',8,'!');
   }
   const m=point(skier),front=point({x:skier.x+Math.sin(skier.heading)*10,z:skier.z+Math.cos(skier.heading)*10});
   ctx.save();
@@ -884,15 +911,26 @@ function updateUI(){
     camera.getWorldDirection(mapForward);
     const threat=chaseDirection(skier,patrol.agents,Math.atan2(mapForward.x,mapForward.z),patrol.time);
     const dash=patrol.dash;
-    $('chase-counter').hidden=!dash||mode!=='running';
-    if(dash)$('chase-counter').textContent=patrol.time<dash.at?'雪友即将冲刺 · 雪雾、护盾或援手可打断':'雪友冲刺中';
+    const warning=patrol.intercept;
+    $('chase-counter').hidden=(!dash&&!warning)||mode!=='running';
+    if(warning)$('chase-counter').textContent=`绕行手即将从${warning.branch.name}切入 · ${Math.max(0,warning.at-patrol.time).toFixed(1)}s`;
+    else if(dash)$('chase-counter').textContent=patrol.time<dash.at?'雪友即将冲刺 · 雪雾、护盾或援手可打断':'雪友冲刺中';
     $('chase-direction').hidden=!threat||mode!=='running';
     if(threat){
-      $('chase-direction-label').textContent=`${threat.label} · ${threat.distance} m`;
+      $('chase-direction-label').textContent=`${PURSUER_ROLES[threat.role]?.name??'雪友'} · ${threat.label} ${threat.distance} m`;
       $('chase-arrow').style.transform=`rotate(${threat.angle}rad)`;
     }
-    const branch=route.branches?.find(b=>b.medkit&&!b.medkit.taken&&patrol.furthest>=b.lo-35&&patrol.furthest<b.lo+75);
+    const branch=route.branches?.find(b=>(b.kind==='shortcut'||b.medkit&&!b.medkit.taken)&&
+      patrol.furthest>=b.lo-120&&patrol.furthest<b.lo+65);
     $('chase-branch').hidden=!branch||mode!=='running';
+    if(branch)$('chase-branch').textContent=branch.kind==='shortcut'?`青色虚线 · ${branch.name}`:
+      `橙色虚线 · ${branch.name} · 血包`;
+    const objective=patrol.goal?.config;
+    $('chase-goal').hidden=!objective;
+    if(objective){
+      const {value,target,complete}=patrol.goal.status(patrol);
+      $('chase-goal').textContent=`${objective.label} · ${value}/${target} · ${complete?'达成，完赛领取':`+${objective.coins} 金币`}`;
+    }
     const active=Object.values(patrol.effects).map(effect=>`${PATROL_ITEMS[effect.type].name} ${Math.max(0,effect.until-patrol.time).toFixed(1)}s`);
     if(skier.airborne&&skier.gliderRemaining>0)active.push(`浮空翼 ${skier.gliderRemaining.toFixed(1)}s`);
     if(patrol.allies.length)active.push(`援手 ×${patrol.allies.length}`);

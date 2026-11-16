@@ -1,5 +1,6 @@
-"""Render four original soft-jazz loops with NumPy and FFmpeg."""
+"""Render original soft-jazz loops with NumPy and FFmpeg."""
 from pathlib import Path
+import sys
 import subprocess
 
 import numpy as np
@@ -18,12 +19,21 @@ PROGRESSIONS = [
      (39,[53,55,58,62]),(44,[54,60,62,65]),(36,[51,55,58,62]),(41,[51,55,57,62])],
     [(43,[54,57,59,62]),(40,[55,59,62,66]),(45,[55,59,60,64]),(38,[54,59,60,64]),
      (47,[57,61,62,66]),(40,[56,59,62,67]),(45,[55,59,60,64]),(38,[54,57,60,64])],
+    [(45,[55,59,60,64]),(41,[55,57,60,64]),(38,[53,57,60,65]),(43,[53,57,58,62]),
+     (36,[52,55,59,64]),(40,[55,59,62,65]),(41,[53,57,60,64]),(40,[56,59,62,66])],
+    [(43,[55,57,59,62]),(47,[54,57,62,66]),(40,[55,59,62,66]),(45,[55,59,60,64]),
+     (38,[54,57,60,64]),(43,[55,59,60,64]),(48,[55,59,62,64]),(38,[54,57,60,65])],
+    [(42,[53,56,58,61]),(37,[52,56,59,63]),(39,[54,58,61,65]),(44,[54,57,60,63]),
+     (47,[54,58,61,63]),(42,[53,56,58,61]),(44,[54,58,60,63]),(37,[53,56,59,63])],
 ]
 TRACKS = [
     ("first-chair-jazz", 86, 19, 0, True),
     ("bluebird-jazz", 98, 28, 1, False),
     ("tree-line-jazz", 76, 37, 2, True),
     ("last-light-jazz", 69, 46, 3, True),
+    ("whitepeak-jazz", 92, 65, 4, True),
+    ("pine-drift-jazz", 82, 79, 5, False),
+    ("ridge-cafe-jazz", 73, 97, 6, True),
 ]
 
 
@@ -110,4 +120,5 @@ def render(name, bpm, seed, progression, swing):
 
 if __name__ == "__main__":
     for track in TRACKS:
-        render(*track)
+        if not sys.argv[1:] or track[0] in sys.argv[1:]:
+            render(*track)

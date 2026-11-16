@@ -1,3 +1,5 @@
+import {chaseGoal,authoredChaseBranches} from './chase-goals.js';
+import {routeBranchCandidates} from './route-experience.js';
 import {clamp} from './physics.js';
 import {createTerrain,difficultyStyles,pointAlongRoute} from './terrain.js';
 
@@ -104,6 +106,10 @@ export function createChaseMountain(){
       pickupSpacing:190,pisteWidth:distance=>pisteWidth(trail,clamp(distance/length,0,1)),gliderAt:trail.gliderAt,
       points,length,drop:trail.drop,patrolOnly:true};
     route.spawn=pointAlongRoute(route,35);
+    route.goal=chaseGoal(route);
+    if(route.halfWidth<22){
+      route.branches=authoredChaseBranches(route,terrain)??routeBranchCandidates(route,terrain);
+    }
     return route;
   });
   const [xmin,ymax]=local.originUTM;

@@ -3,7 +3,6 @@ import assert from 'node:assert/strict';
 import {createChaseMountain} from '../src/chase-mountain.js';
 import {resolveMountain,mountainAsset} from '../src/mountains.js';
 import {mountainIdentity} from '../src/mountain-identity.js';
-import {routeBranchCandidates} from '../src/route-experience.js';
 import {PatrolRun} from '../src/patrol-mode.js';
 import {pointAlongRoute} from '../src/terrain.js';
 
@@ -28,7 +27,6 @@ test('Whitepeak exposes six distinct chase-only courses with flat starts and dow
       return Math.hypot(g.x,g.z);
     });
     maxGrades.push(Math.max(...grades));
-    if(route.halfWidth<22)route.branches=routeBranchCandidates(route,terrain);
     const run=new PatrolRun(route,()=>true);
     assert.ok(run.pickups.some(p=>p.type==='supply')&&run.pickups.some(p=>p.type==='medkit'));
     assert.equal(run.pickups.filter(p=>p.type==='avalanche').length,1);

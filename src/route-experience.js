@@ -64,5 +64,5 @@ export function chaseDirection(player,agents,heading,time){
   const relative=Math.atan2(Math.sin(angle),Math.cos(angle));
   const sector=Math.round(relative/(Math.PI/4));
   const directions=['前方','右前','右侧','右后','后方','左后','左侧','左前'];
-  return {label:directions[(sector+8)%8],distance:Math.round(distance),angle:relative};
+  return {label:directions[(sector+8)%8],distance:Math.round(distance),angle:relative,role:closest.role};
 }

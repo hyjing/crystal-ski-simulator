@@ -1,4 +1,5 @@
 import {clamp, nearestOnRoute, PHYSICS} from './physics.js';
+import {ChaseGoal} from './chase-goals.js';
 import {deployGlider} from './airborne.js';
 import {pointAlongRoute} from './terrain.js';
 import {AVALANCHE_DURATION,AVALANCHE_RADIUS} from './kick.js';
@@ -15,6 +16,13 @@ const CAPTURE_RADIUS = 5;
 export const MAX_HEALTH = 100;
 export const PURSUER_HEALTH=100;
 export const MAX_PURSUERS=7;
+const INTERCEPT_WARNING=1.65;
+export const PURSUER_ROLES={
+  racer:{name:'直板手',color:'#ffc26c',symbol:'»'},
+  guard:{name:'护盾手',color:'#83dcff',symbol:'⬡'},
+  scout:{name:'绕行手',color:'#daacf8',symbol:'◇'},
+};
+const roleOf=agent=>agent.role??['racer','guard','scout'][(agent.id??0)%3];
 const MAX_SUMMONED=8;
 const ALLY_LURE_RADIUS=48;
 const KICK_DAMAGE=55;
@@ -57,6 +65,10 @@ function routePoint(route, distance, offset=0) {
 export class PatrolRun {
   constructor(route, clear, pathClear=clear, talents=DEFAULT_TALENTS,itemUpgrades=[]) {
     this.route = route;
+    this.goal=route.goal?new ChaseGoal(route.goal):null;
+    this.shortcuts=new Set();
+    this.intercepted=new Set();
+    this.intercept=null;
     this.clear = clear;
     this.pathClear = pathClear;
     this.time = 0;
@@ -115,7 +127,7 @@ export class PatrolRun {
       if(point)this.pickups.push({...point,type:'medkit',taken:false});
     }
     for(const branch of route.branches??[]){
-      const point=branch.points.slice(6,11).find(clear);
+      const point=branch.kind==='shortcut'?null:branch.points.slice(6,11).find(clear);
       branch.medkit=point?{...point,type:'medkit',taken:false}:null;
       if(branch.medkit)this.pickups.push(branch.medkit);
     }
@@ -165,10 +177,18 @@ export class PatrolRun {
     return restored;
   }
 
-  evadeLanding(event){
+  evadeLanding(event,player,surface=()=>0){
+    this.goal?.landing(event);
     if(event?.type==='land'&&event.quality==='clean'&&event.airTime>=.35){
       this.evadeUntil=this.time+.35;
       this.contact=0;
+      if(event.glider&&player){
+        const ground=surface(player.x,player.z);
+        for(const agent of this.agents){
+          if(range(agent,player)>10||Math.abs(surface(agent.x,agent.z)-ground)>4)continue;
+          if(this.damage(agent,'glider',16)==='hit')this.repel(agent,player,.65,21,.30);
+        }
+      }
       return this.heal(event.rotation>=180||event.grab?20:12);
     }
     return 0;
@@ -193,7 +213,8 @@ export class PatrolRun {
     });
   }
 
-  repel(agent,player,duration,speed,pushTime){
+  repel(agent,player,duration,speed,pushTime,source=null){
+    agent.repelSource=source;
     const dx=agent.x-player.x,dz=agent.z-player.z;
     agent.fallDuration=0;
     agent.tucking=false;
@@ -289,7 +310,7 @@ export class PatrolRun {
         x:mist.x+Math.sin(heading)*forward+Math.cos(heading)*lateral,
         z:mist.z+Math.cos(heading)*forward-Math.sin(heading)*lateral,
       });
-      const detour=(agent.id??0)%2===1&&distance>radius+4
+      const detour=roleOf(agent)!=='racer'&&distance>radius+4
         ? [side,-side].map(sign=>flank(1,sign*(radius+6))).find(this.clear)
         : null;
       const exit=detour?{x:detour.x+Math.sin(heading)*radius,z:detour.z+Math.cos(heading)*radius}
@@ -385,9 +406,82 @@ export class PatrolRun {
       start:this.time,impact:this.time+.08,until:this.time+.35,result,target});
   }
 
+  triggerTrap(agent,point,heading,speed,surface,combo=false){
+    const index=this.traps.findIndex(trap=>sweptContact(agent,point,trap,TRAP_RADIUS)&&
+      Math.abs(surface(trap.x,trap.z)-surface(point.x,point.z))<2);
+    if(index<0)return false;
+    const trap=this.traps.splice(index,1)[0];
+    if(this.damage(agent,'banana',PATROL_ITEMS.banana.damage+(combo?12:0))==='blocked')return false;
+    this.trips.push({trap,agent,combo});
+    if(this.dash?.agent===agent)this.dash=null;
+    Object.assign(agent,point);
+    if(agent.health===0)return true;
+    agent.tucking=false;
+    agent.fallDuration=trap.fallDuration??TRIP_DURATION;
+    agent.stunUntil=this.time+agent.fallDuration;
+    agent.repelUntil=this.time+TRIP_SLIDE;
+    agent.repelHeading=heading;
+    agent.repelSource=null;
+    agent.repelSpeed=Math.min(speed*.52,12);
+    agent.aimAt=0;
+    agent.speed=0;
+    agent.heading=heading+((agent.id??0)%2?-1.15:1.15);
+    return true;
+  }
+
+  updateShortcuts(player,surface){
+    const last=this.branchSample??player;
+    this.branchSample={x:player.x,z:player.z};
+    if(player.airborne||player.crashRemaining||range(last,player)>25)return;
+    for(const branch of this.route.branches??[]){
+      if(branch.kind!=='shortcut'||this.shortcuts.has(branch)||
+        !sweptContact(last,player,branch.gate,9)||
+        Math.abs(surface(player.x,player.z)-surface(branch.gate.x,branch.gate.z))>4)continue;
+      this.shortcuts.add(branch);
+      this.lastShortcut=branch;
+      for(const agent of this.agents){
+        if(roleOf(agent)==='racer'&&range(agent,player)<90){
+          agent.shortcutDelayUntil=this.time+2.8;
+          agent.tucking=false;
+        }
+      }
+    }
+  }
+
+  updateIntercept(progress,player,offscreen,routeGap=0){
+    if(this.intercept){
+      const warning=this.intercept;
+      if(this.time<warning.at)return;
+      this.intercept=null;
+      if(this.stars<3||progress>warning.branch.hi-12||range(warning.point,player)<24||!this.clear(warning.point))return;
+      if(this.agents.length>=MAX_PURSUERS){
+        const index=this.agents.findLastIndex(agent=>!agent.launch&&offscreen(agent)&&range(agent,player)>90);
+        if(index<0)return;
+        this.agents.splice(index,1);
+      }
+      this.agents.push({...warning.point,heading:warning.heading,id:this.nextAgent++,role:'scout',
+        speed:18,bank:0,health:PURSUER_HEALTH});
+      this.spawnAfter=Math.max(this.spawnAfter,this.time+1);
+      return;
+    }
+    if(this.stars<3||!this.goal||routeGap>55)return;
+    if(this.agents.length>=MAX_PURSUERS&&
+      !this.agents.some(agent=>!agent.launch&&offscreen(agent)&&range(agent,player)>90))return;
+    const branch=this.route.branches?.find(candidate=>!this.intercepted.has(candidate)&&
+      progress>=candidate.lo-135&&progress<candidate.lo-55);
+    if(!branch)return;
+    const point=branch.points.slice(Math.floor(branch.points.length*.45),-3).find(candidate=>
+      this.clear(candidate)&&range(candidate,player)>45);
+    if(!point)return;
+    const last=branch.points.at(-1);
+    this.intercepted.add(branch);
+    this.intercept={point,branch,at:this.time+INTERCEPT_WARNING,heading:Math.atan2(last.x-point.x,last.z-point.z)};
+  }
+
   step(dt,player,offscreen=()=>true,surface=()=>0,collision=()=>null,detonate=()=>null){
     if(this.outcome)return null;
     this.trips=[];
+    this.lastShortcut=null;
     this.time+=dt;
     this.shots=this.shots.filter(shot=>shot.until>this.time);
     this.advanceAllies(dt,surface);
@@ -395,7 +489,7 @@ export class PatrolRun {
     if(this.stars>=2){
       for(const agent of this.agents){
         const gap=range(agent,player);
-        if(agent.id%3===1&&!agent.guardUsed&&!agent.launch&&agent.health!==0&&!(agent.stunUntil>this.time)&&
+        if(roleOf(agent)==='guard'&&!agent.guardUsed&&!agent.launch&&agent.health!==0&&!(agent.stunUntil>this.time)&&
           gap<=21&&!fogBlocks(activeMist,agent,player)&&Math.abs(surface(agent.x,agent.z)-surface(player.x,player.z))<8){
           agent.guardUsed=true;
           agent.guardUntil=this.time+GUARD_DURATION;
@@ -424,7 +518,7 @@ export class PatrolRun {
         wave.hit.add(agent);
         const result=this.damage(agent,'pulse',wave.damage);
         if(result==='blocked')continue;
-        if(result==='hit')this.repel(agent,wave,1.05,36,wave.duration);
+        if(result==='hit')this.repel(agent,wave,1.05,36,wave.duration,'pulse');
         if(range(agent,player)<=CAPTURE_RADIUS)this.contact=0;
       }
     }
@@ -456,14 +550,17 @@ export class PatrolRun {
       if(previous<marker&&this.furthest>=marker)this.addStar();
     }
 
+    this.updateShortcuts(player,surface);
+    this.updateIntercept(along.progress,player,offscreen,along.distance);
     const mist=activeMist;
     const concealed=mist&&range(mist,player)<mist.radius;
-    const desired=this.stars?Math.min(MAX_PURSUERS,this.stars+2):0;
+    const desired=this.stars?Math.min(MAX_PURSUERS,this.stars+2)-Number(Boolean(this.intercept)):0;
     if(!concealed&&this.agents.length<desired&&this.time>=this.spawnAfter){
       const point=this.reinforcement(player,along.progress,offscreen,surface);
       this.spawnAfter=this.time+(point?2.25:.45);
       if(point){
-        this.agents.push({...point,speed:Math.max(9,player.speed*.85),bank:0,id:this.nextAgent++,health:PURSUER_HEALTH});
+        const id=this.nextAgent++;
+        this.agents.push({...point,speed:Math.max(9,player.speed*.85),bank:0,id,role:roleOf({id}),health:PURSUER_HEALTH});
         this.lastSeen=this.time;
       }
     }
@@ -506,7 +603,10 @@ export class PatrolRun {
           const factor=sliding?clamp((agent.repelUntil-this.time)/TRIP_SLIDE,0,1):1;
           const step=(agent.repelSpeed||16)*dt*factor;
           const point={x:agent.x+Math.sin(agent.repelHeading)*step,z:agent.z+Math.cos(agent.repelHeading)*step};
-          if(this.clear(point))Object.assign(agent,point);
+          if(this.clear(point)){
+            if(agent.repelSource==='pulse'&&this.triggerTrap(agent,point,agent.repelHeading,agent.repelSpeed,surface,true))continue;
+            Object.assign(agent,point);
+          }
         }
         agent.bank*=Math.exp(-dt*8);
         continue;
@@ -530,7 +630,9 @@ export class PatrolRun {
         if(agent.mistSearch)agent.aimAt=0;
         agent.mistSearch=null;
       }
-      const enableTuck=!lost&&!fogged&&!distracted&&separation>(agent.tucking?21:36);
+      const delayed=agent.shortcutDelayUntil>this.time;
+      const role=roleOf(agent);
+      const enableTuck=role==='racer'&&!delayed&&!lost&&!fogged&&!distracted&&separation>(agent.tucking?21:36);
       if(this.time>=(agent.gapCheckAt??0)){
         agent.losingGround=agent.previousGap===undefined||separation>=agent.previousGap-2;
         agent.previousGap=separation;
@@ -554,35 +656,23 @@ export class PatrolRun {
       const downhill=surface(agent.x,agent.z)-surface(probe.x,probe.z);
       agent.tucking=enableTuck&&(agent.losingGround||agent.tucking)&&
         downhill>.5&&Math.abs(delta)<(agent.tucking?.58:.36)&&this.clear(probe);
-      const normal=clamp(4+this.stars*1.45+player.speed*.78,12,49);
+      const normal=clamp(4+this.stars*1.45+player.speed*.78-(role==='guard'?2:0),12,49);
       const tuckedPace=clamp(Math.max(normal+11,player.speed+6)+downhill,24,60);
       const cruise=distracted?normal*.86:charging?Math.min(54,normal+12):agent.tucking?tuckedPace:normal;
       const turningAround=lost&&agent.mistSearch?.detour&&!distracted&&Math.abs(delta)>.32;
-      const pace=fogged?Math.min(cruise*.42,10):turningAround?Math.min(cruise,14)
+      const pace=delayed?cruise*.66:fogged?Math.min(cruise*.42,10):turningAround?Math.min(cruise,14)
         :lost&&range(agent,target)<3?3:cruise;
       agent.speed+=(pace-agent.speed)*Math.min(1,dt*(distracted?9:fogged||turningAround?6:agent.tucking?2.5:1.7));
       const step=agent.speed*dt;
-      const turnRate=distracted?3.5:agent.tucking?.63:Math.min(1.6,Math.max(5,agent.speed)/16);
+      const turnRate=distracted?3.5:agent.tucking?.63:Math.min(role==='scout'?1.85:1.6,Math.max(5,agent.speed)/16);
       const heading=agent.heading+clamp(delta,-dt*turnRate,dt*turnRate);
       const point={x:agent.x+Math.sin(heading)*step,z:agent.z+Math.cos(heading)*step};
-      const trapIndex=this.traps.findIndex(trap=>sweptContact(agent,point,trap,TRAP_RADIUS)&&
-        Math.abs(surface(trap.x,trap.z)-surface(point.x,point.z))<2);
-      const trap=trapIndex>=0?this.traps.splice(trapIndex,1)[0]:null;
-      const tripped=trap&&this.damage(agent,'banana',PATROL_ITEMS.banana.damage)!=='blocked';
-      if(tripped){
-        this.trips.push({trap,agent});
-        if(this.dash?.agent===agent)this.dash=null;
-      }
-      const hit=tripped||step>0&&collision(agent,point);
-      if(hit){
-        if(tripped)Object.assign(agent,point);
-        if(agent.health===0)continue;
+      if(this.triggerTrap(agent,point,heading,agent.speed,surface))continue;
+      if(step>0&&collision(agent,point)){
         agent.tucking=false;
-        agent.fallDuration=tripped?(trap.fallDuration??TRIP_DURATION):agent.speed>9?2.2:1.2;
+        agent.fallDuration=agent.speed>9?2.2:1.2;
         agent.stunUntil=this.time+agent.fallDuration;
-        agent.repelUntil=tripped?this.time+TRIP_SLIDE:0;
-        agent.repelHeading=heading;
-        agent.repelSpeed=Math.min(agent.speed*.52,12);
+        agent.repelUntil=0;
         agent.aimAt=0;
         agent.speed=0;
         agent.heading=heading+(id%2?-1.15:1.15);
@@ -632,6 +722,7 @@ export class PatrolRun {
       this.escapes++;
       this.escapeArmed=false;
     }
+    this.goal?.step(dt,player,this);
     if(this.health <= 1e-8){
       this.health=0;
       this.outcome = 'caught';

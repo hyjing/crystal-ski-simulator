@@ -3,21 +3,33 @@ const tracks = [
   { file: 'bluebird-jazz.mp3', title: 'Bluebird' },
   { file: 'tree-line-jazz.mp3', title: 'Tree Line' },
   { file: 'last-light-jazz.mp3', title: 'Last Light' },
+  { file: 'whitepeak-jazz.mp3', title: 'Whitepeak' },
+  { file: 'pine-drift-jazz.mp3', title: 'Pine Drift' },
+  { file: 'ridge-cafe-jazz.mp3', title: 'Ridge Café' },
 ];
 
-function hash(text) {
-  let value = 2166136261;
-  for (const char of text) value = Math.imul(value ^ char.codePointAt(0), 16777619);
-  return value >>> 0;
-}
+export class ShuffleTracks {
+  constructor(random=Math.random){
+    this.random=random;
+    this.remaining=[];
+    this.last=null;
+  }
 
-// Randomize the order within each resort, then deal tracks evenly across its trails.
-export function assignTrailMusic(resort, routeIds) {
-  const shuffled = routeIds.map(id => ({ id, rank: hash(`trail:${resort}:${id}`) }))
-    .sort((a, b) => a.rank - b.rank || a.id.localeCompare(b.id));
-  const playlist = tracks.map(track => ({ track, rank: hash(`music:${resort}:${track.file}`) }))
-    .sort((a, b) => a.rank - b.rank);
-  return new Map(shuffled.map(({ id }, i) => [id, playlist[i % playlist.length].track]));
+  next(){
+    if(!this.remaining.length){
+      this.remaining=tracks.slice();
+      for(let i=this.remaining.length-1;i>0;i--){
+        const j=Math.floor(this.random()*(i+1));
+        [this.remaining[i],this.remaining[j]]=[this.remaining[j],this.remaining[i]];
+      }
+      if(this.remaining.at(-1)===this.last){
+        const last=this.remaining.length-1;
+        [this.remaining[0],this.remaining[last]]=[this.remaining[last],this.remaining[0]];
+      }
+    }
+    this.last=this.remaining.pop();
+    return this.last;
+  }
 }
 
 export class Soundtrack {
@@ -27,6 +39,8 @@ export class Soundtrack {
     this.baseUrl = baseUrl;
     this.showError = showError;
     this.request = 0;
+    this.playlist=new ShuffleTracks();
+    player.addEventListener('ended',()=>this.next());
     this.hidden = document.hidden;
     this.enabled = false;
     try { this.enabled = sessionStorage.getItem('ski-music') === 'on'; } catch {}
@@ -43,6 +57,8 @@ export class Soundtrack {
       this.refresh();
     });
   }
+
+  next(){this.select(this.playlist.next());}
 
   select(track) {
     if (this.track === track) return;

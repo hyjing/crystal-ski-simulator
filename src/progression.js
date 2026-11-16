@@ -151,12 +151,12 @@ export class RunExperience {
     return true;
   }
 
-  settle(profile,completed,chase){
+  settle(profile,completed,chase,bonusCoins=0){
     if(this.awarded)return {xp:0,coins:0,knockdowns:0};
     this.awarded=true;
     const knockdowns=chase?this.knockedDown.size:0;
     const xp=this.landingXP+this.escapeXP+knockdowns*KNOCKDOWN_XP+(completed?(chase?40:30):0);
-    const coins=knockdowns*KNOCKDOWN_COINS+(completed&&chase?20:0);
+    const coins=knockdowns*KNOCKDOWN_COINS+(completed&&chase?20+counter(bonusCoins):0);
     profile.xp=counter(profile.xp+xp);
     profile.coins=counter(profile.coins+coins);
     return {xp,coins,knockdowns};
