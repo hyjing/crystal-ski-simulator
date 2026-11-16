@@ -4,10 +4,30 @@ import {loadHumanoid} from './humanoid.js';
 import {applyGear,GEAR_PRESETS} from './wardrobe.js';
 import {fallAnimation} from './npc-routines.js';
 import {GLIDER_POP_TIME} from './airborne.js';
+import {PURSUER_SKILLS,pursuerLaserOrigin} from './pursuer-skills.js';
+import {createPursuerSnowmobile,createPursuerPlane} from './pursuer-vehicles.js';
 import {PATROL_ITEMS,PURSUER_ROLES,MEDKIT,SUPPLY,MAX_PURSUERS,PURSUER_HEALTH} from './patrol-mode.js';
 import {ChaseTrailEffects} from './chase-trail-effects.js';
 import {poseKickedSkier} from './kick.js';
 import {createRearShotEffect,updateRearShotEffect} from './rear-shot-effect.js';
+
+function skillLine(color){
+  const geometry=new THREE.BufferGeometry();
+  geometry.setAttribute('position',new THREE.Float32BufferAttribute(new Float32Array(6),3));
+  const line=new THREE.Line(geometry,new THREE.LineBasicMaterial({color,transparent:true,depthWrite:false}));
+  line.frustumCulled=false;
+  line.visible=false;
+  return line;
+}
+
+function drawSkillLine(line,from,to,opacity){
+  const points=line.geometry.attributes.position;
+  points.setXYZ(0,from.x,from.y,from.z);
+  points.setXYZ(1,to.x,to.y,to.z);
+  points.needsUpdate=true;
+  line.material.opacity=opacity;
+  line.visible=true;
+}
 
 function statusIcon(symbol,color){
   const canvas=document.createElement('canvas');
@@ -30,6 +50,7 @@ export class PatrolScene {
     this.surface=surface;
     this.gradient=gradient;
     this.actors=[];
+    this.vehicles=[];
     this.tokens=[];
     this.phase=0;
     this.clock=0;
@@ -52,6 +73,14 @@ export class PatrolScene {
     this.projectiles=[];
     this.allies=[];
     this.shotMeshes=[];
+    this.snowballMeshes=[];
+    this.iceTrails=new ChaseTrailEffects(this.root,['frosttrail']);
+    this.laserAim=skillLine(PURSUER_SKILLS.laser.color);
+    this.escortLine=skillLine(PURSUER_SKILLS.escort.color);
+    this.snowTarget=new THREE.Mesh(new THREE.RingGeometry(.88,1,36).rotateX(-Math.PI/2),
+      new THREE.MeshBasicMaterial({color:PURSUER_SKILLS.snowball.color,transparent:true,depthWrite:false,side:THREE.DoubleSide}));
+    this.snowTarget.visible=false;
+    this.root.add(this.laserAim,this.escortLine,this.snowTarget);
     this.allyMaterial=new THREE.MeshStandardMaterial({
       color:'#53cdb1',emissive:'#21856d',emissiveIntensity:.7,roughness:.7,
     });
@@ -145,7 +174,10 @@ export class PatrolScene {
     this.glider.visible=false;
     this.bombTarget.visible=false;
     this.trailEffects.update([],this.surface,0);
+    this.iceTrails.update([],this.surface,0);
+    this.laserAim.visible=this.escortLine.visible=this.snowTarget.visible=false;
     for(const actor of this.actors)actor.userData.guard.visible=false;
+    for(const vehicle of this.vehicles)if(vehicle)vehicle.visible=false;
     this.root.visible=Boolean(run);
     for(const token of this.tokens)this.root.remove(token);
     this.tokens=run?run.pickups.map(p=>{
@@ -170,6 +202,58 @@ export class PatrolScene {
     for(let i=items.length;i<pool.length;i++)pool[i].visible=false;
   }
 
+  updatePursuerEffects(time){
+    const {dash,agents,snowballs}=this.run;
+    this.laserAim.visible=this.escortLine.visible=false;
+    const raised=(point,lift)=>({x:point.x,z:point.z,y:this.surface(point.x,point.z)+lift});
+    if(dash?.kind==='laser'&&!dash.fired){
+      const pulse=.48+.25*Math.sin(time*22);
+      drawSkillLine(this.laserAim,pursuerLaserOrigin(dash.agent,this.surface),dash.point,pulse);
+    }
+    const linked=agents.find(agent=>agent.escort&&agent.guardUntil>time);
+    if(linked)drawSkillLine(this.escortLine,raised(linked.escort,1.25),raised(linked,1.25),.86);
+    const warned=dash?.kind==='snowball'&&!dash.fired?dash.point:snowballs.find(ball=>!ball.resolved)?.point;
+    this.snowTarget.visible=Boolean(warned);
+    if(warned){
+      this.snowTarget.position.set(warned.x,this.surface(warned.x,warned.z)+.18,warned.z);
+      const g=this.gradient(warned.x,warned.z);
+      this.snowTarget.quaternion.setFromUnitVectors(this.up,this.bombNormal.set(-g.x,1,-g.z).normalize());
+      this.snowTarget.scale.setScalar(4.6);
+      this.snowTarget.material.opacity=.64+.20*Math.sin(time*24);
+    }
+    this.updateInstances(this.snowballMeshes,snowballs,()=>new THREE.Mesh(this.snowballGeometry??=new THREE.IcosahedronGeometry(.57,1),this.snowballMaterial??=
+      new THREE.MeshStandardMaterial({color:'#effaff',emissive:'#b3daeb',emissiveIntensity:.3})),(mesh,ball)=>{
+      mesh.visible=!ball.resolved;
+      const t=THREE.MathUtils.clamp((time-ball.start)/(ball.impact-ball.start),0,1);
+      const from=ball.from,to=raised(ball.point,0);
+      mesh.position.set(THREE.MathUtils.lerp(from.x,to.x,t),THREE.MathUtils.lerp(from.y,to.y,t)+12*t*(1-t),THREE.MathUtils.lerp(from.z,to.z,t));
+      mesh.rotation.set(t*5,t*6,0);
+    });
+  }
+
+  updateVehicle(slot,agent,time){
+    let model=this.vehicles[slot];
+    if(model)model.visible=false;
+    if(!agent?.mount||agent.launch)return null;
+    const mounted=agent.mount==='plane'||agent.health!==0&&!(agent.fallDuration>0&&agent.stunUntil>time);
+    if(!mounted)return null;
+    if(model?.userData.mount!==agent.mount){
+      if(model)this.root.remove(model);
+      model=agent.mount==='plane'?createPursuerPlane():createPursuerSnowmobile();
+      model.userData.mount=agent.mount;
+      this.vehicles[slot]=model;
+      this.root.add(model);
+    }
+    model.visible=true;
+    if(agent.mount==='plane'){
+      model.position.set(agent.x,agent.flightY??(this.surface(agent.x,agent.z)+12),agent.z);
+      const down=agent.health===0;
+      model.rotation.set(down?.18:0,agent.heading,down?-.60:agent.bank,'YXZ');
+      model.userData.propeller.rotation.z=time*(down?19:84);
+    }
+    return model;
+  }
+
   update(dt,active,player){
     if(!this.run)return;
     this.root.visible=active;
@@ -177,6 +261,8 @@ export class PatrolScene {
     this.phase+=dt;
     const {traps,bombs,blasts,waves,effects,time,allies,shots}=this.run;
     this.trailEffects.update(this.run.trailSegments,this.surface,time);
+    this.iceTrails.update(this.run.enemyIce.flatMap(patch=>patch.segments),this.surface,time);
+    this.updatePursuerEffects(time);
     const latestBomb=bombs.at(-1);
     this.bombTarget.visible=Boolean(latestBomb);
     if(latestBomb){
@@ -227,8 +313,9 @@ export class PatrolScene {
       const remaining=(effects.shield.until-time)/effects.shield.duration;
       this.shield.position.set(x,this.surface(x,z)+.83+(player.airborne?player.airClearance||0:0),z);
       this.shield.rotation.y=this.phase*6;
-      this.shield.scale.setScalar(1+.18*Math.sin(this.phase*19));
-      this.shield.material.opacity=.45*Math.min(1,remaining*5);
+      const flash=Math.max(0,1-(time-(effects.shield.reflectedAt??-Infinity))/.30);
+      this.shield.scale.setScalar(1+.18*Math.sin(this.phase*19)+flash*.35);
+      this.shield.material.opacity=.45*Math.min(1,remaining*5)+flash*.4;
     }
     const mist=effects.mist;
     this.mistPuffs.forEach((puff,i)=>{
@@ -272,7 +359,9 @@ export class PatrolScene {
       const agent=this.run.agents[i];
       const appeared=actor.userData.chaseAgent!==agent;
       actor.userData.chaseAgent=agent;
-      actor.visible=Boolean(agent);
+      const vehicle=this.updateVehicle(i,agent,time);
+      const aircraft=agent?.mount==='plane';
+      actor.visible=Boolean(agent&&!aircraft);
       const marker=actor.userData.chaseMarker;
       marker.visible=Boolean(agent);
       const guard=actor.userData.guard;
@@ -290,13 +379,14 @@ export class PatrolScene {
       const charging=this.run.dash?.agent===agent;
       const stunned=agent.stunUntil>time;
       const status=launch||agent.health===0?'down':stunned?'stunned':blocked?'blocked':
-        guard.visible?'guard':charging?(this.run.dash.kind==='cut'?'cutter':'dash'):agent.mirage?.until>time?'mirage':agent.burn?.until>time?'burn':
+        guard.visible?'guard':charging?(this.run.dash.kind==='cut'?'cutter':PURSUER_SKILLS[this.run.dash.kind]?agent.role:'dash'):agent.mirage?.until>time?'mirage':agent.burn?.until>time?'burn':
         agent.fogSlowed||agent.chillUntil>time?'slow':agent.tucking?'tuck':agent.role??'chase';
       marker.material.map=this.statusIcons[status];
       const scale=charging?1.05+.15*Math.sin(this.phase*21):(status==='chase'||status===agent.role)?.65:.85;
       marker.scale.setScalar(scale);
       const anchor=launch??agent;
-      marker.position.set(anchor.x,this.surface(anchor.x,anchor.z)+(launch?.height??0)+(status==='down'?1.55:2.35),anchor.z);
+      const anchorY=aircraft?(agent.flightY??this.surface(anchor.x,anchor.z)+12):this.surface(anchor.x,anchor.z)+(launch?.height??0);
+      marker.position.set(anchor.x,anchorY+(status==='down'?1.55:aircraft?1.85:2.35),anchor.z);
       if(healthBar.visible){
         const ratio=(agent.health??PURSUER_HEALTH)/PURSUER_HEALTH;
         healthBar.position.copy(marker.position);
@@ -304,6 +394,7 @@ export class PatrolScene {
         fill.scale.x=1.2*ratio;
         fill.center.x=.5/ratio;
       }
+      if(aircraft)continue;
       if(launch){
         const t=launch.progress;
         poseKickedSkier(actor,launch,this.surface);
@@ -317,21 +408,28 @@ export class PatrolScene {
       const up=new THREE.Vector3(-g.x,1,-g.z).normalize();
       const forward=new THREE.Vector3(fx,g.x*fx+g.z*fz,fz).normalize();
       const right=new THREE.Vector3().crossVectors(up,forward).normalize();
-      actor.position.set(x,this.surface(x,z)-.12,z);
+      actor.position.set(x,this.surface(x,z)+(vehicle?.userData.mount==='snowmobile'?.06:-.12),z);
       actor.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(right,up,forward));
       const remaining=agent.fallDuration?Math.max(0,agent.stunUntil-this.run.time):0;
       const fall=fallAnimation(remaining,agent.fallDuration);
       const repelled=!remaining&&agent.stunUntil>this.run.time?Math.min(1,(agent.stunUntil-this.run.time)*2):0;
       actor.rotateZ((i%2?1:-1)*(fall.amount*1.25+repelled*.23));
+      if(vehicle){
+        vehicle.position.copy(actor.position);
+        vehicle.position.y-=.06;
+        vehicle.quaternion.copy(actor.quaternion);
+      }
       if(pose||appeared)updateAthletePose(actor,{speed,heading,edgeRoll:bank,tuck:agent.tucking?.92:speed>15?.42:0,
+        pedestrian:Boolean(vehicle),sitAmount:vehicle?.visible ? .98 : 0,holding:vehicle?'ride':null,snowmobile:Boolean(vehicle),
         crashRemaining:remaining,fallAmount:fall.amount,fallCrouch:fall.crouch,fallBrace:fall.brace,fallPhase:fall.phase},.05,this.surface);
     }
-    const warning=this.run.intercept,cut=this.run.dash?.kind==='cut'?this.run.dash:null;
-    const target=warning?.point??cut?.point;
+    const warning=this.run.intercept,dash=this.run.dash;
+    const groundCue=dash?.kind==='cut'||dash?.kind==='ice'?dash:null;
+    const target=warning?.point??groundCue?.point;
     this.interceptIcon.visible=Boolean(target);
     if(target){
       const {x,z}=target;
-      this.interceptIcon.material.map=this.statusIcons[warning?'scout':'cutter'];
+      this.interceptIcon.material.map=this.statusIcons[warning?'scout':groundCue.kind==='ice'?'ice':'cutter'];
       this.interceptIcon.position.set(x,this.surface(x,z)+2.7,z);
       this.interceptIcon.scale.setScalar(1.4+.25*Math.sin(this.phase*18));
     }

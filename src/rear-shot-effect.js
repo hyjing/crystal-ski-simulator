@@ -34,7 +34,12 @@ export function createRearShotEffect(){
 }
 
 export function updateRearShotEffect(fx,shot,time){
+  fx.visible=time>=shot.start;
+  if(!fx.visible)return;
   const {beam,halo,core,bolt,impact,ring,burst,chips,source,direction}=fx.userData;
+  const laser=shot.kind==='laser',reflection=shot.kind==='reflection';
+  halo.material.color.set(laser?'#ff3b75':reflection?'#24dabd':'#287eff');
+  core.material.color.set(laser?'#fff2f8':reflection?'#e1fffc':'#d8faff');
   const progress=THREE.MathUtils.clamp((time-shot.start)/(shot.impact-shot.start),0,1);
   const fade=1-THREE.MathUtils.smoothstep(time-shot.impact,0,.14);
   source.set(shot.x,shot.y,shot.z);
@@ -43,18 +48,19 @@ export function updateRearShotEffect(fx,shot,time){
   beam.visible=fade>0&&progress>0;
   beam.position.copy(source).addScaledVector(direction,progress*.5);
   beam.quaternion.setFromUnitVectors(axis,direction.normalize());
-  core.scale.set(.045,length,.045);
-  halo.scale.set(.145,length,.145);
+  const width=laser?1.95:reflection?1.45:1;
+  core.scale.set(.045*width,length,.045*width);
+  halo.scale.set(.145*width,length,.145*width);
   core.material.opacity=.98*fade;
   halo.material.opacity=.48*fade;
   bolt.visible=progress<1;
   bolt.position.copy(source).addScaledVector(direction,length);
   bolt.scale.setScalar(.95+progress*.2);
 
-  impact.visible=time>=shot.impact;
+  impact.visible=time>=shot.impact&&shot.result!=='miss';
   if(!impact.visible)return;
   const age=THREE.MathUtils.clamp((time-shot.impact)/(shot.until-shot.impact),0,1);
-  const color=shot.result==='blocked'?'#ffbb54':shot.result==='down'?'#ffe8a5':'#66dbff';
+  const color=shot.result==='blocked'?'#ffbb54':shot.result==='down'?'#ffe8a5':shot.result==='reflected'||reflection?'#8dffed':laser?'#ff8cae':'#66dbff';
   impact.position.set(shot.end.x,shot.end.y,shot.end.z);
   impact.lookAt(source);
   ring.scale.setScalar(.24+1.05*age);

@@ -88,6 +88,10 @@ export function updateAthletePose(athlete,s,dt,surface){
   for(const leg of legs){
     const inside=Math.max(0,-leg.sign*Math.sign(roll)),hip=new THREE.Vector3(hipX+leg.sign*.23,hipY,shape.hipForward),knee=new THREE.Vector3(hipX*.55+leg.sign*(.29+weight*.12),.94-tuck*.18-inside*weight*.12,shape.knee+inside*weight*.18),ankle=new THREE.Vector3(leg.sign*.30,.45+grab,.15+grab*.9);
     const gait=walkingFoot(walkPhase+(leg.sign>0?0:Math.PI));ankle.z+=walk*gait.stride;ankle.y+=walk*gait.lift;ankle.z+=sit*.95+inside*weight*.12;ankle.x*=shape.stance;ankle.y+=shape.fold*.55;ankle.z-=shape.fold*.28;knee.z+=shape.fold*.35;knee.y-=shape.fold*.18;knee.z+=walk*.25*gait.stride+sit*.6+crouch*.35;ankle.x+=leg.sign*crouch*.14;
+    if(s.snowmobile){
+      knee.set(leg.sign*.51,.92,.53);
+      ankle.set(leg.sign*.51,.59,.10);
+    }
     const split=(s.poseShape?.legSplit||0)*weight;
     knee.z+=inside*split*.55;
     ankle.z+=inside*split;
@@ -108,6 +112,7 @@ export function updateAthletePose(athlete,s,dt,surface){
     if(s.pedestrian){
       hand.set(hipX+sign*.60,hipY-.10+walk*.025*Math.cos(walkPhase),.12-walk*.28*Math.sin(walkPhase+(sign>0?0:Math.PI)));
       if(sit)hand.lerp(new THREE.Vector3(hipX+sign*.40,hipY+.02,1.02),sit);
+      if(s.snowmobile)hand.set(sign*.52,1.43,.79);
       if(s.staffGesture==='wave'&&sign>0)hand.set(hipX+.88,hipY+1.15,.38+.16*Math.sin((s.staffPhase||0)*Math.PI*6));
       if(s.staffGesture==='guide'&&sign>0)hand.set(hipX+1.05,hipY+.48,.74);
       if(s.staffGesture==='shovel')hand.set(hipX+(sign>0?.12:-.08),hipY+(sign>0?.10:.70),.80+(sign>0?.03:0)+.12*Math.sin((s.staffPhase||0)*Math.PI*2));

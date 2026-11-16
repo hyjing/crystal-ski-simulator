@@ -189,12 +189,13 @@ function sampleGrooves(segment,surface){
 }
 
 export class ChaseTrailEffects {
-  constructor(root){
+  constructor(root,types=Object.keys(CHASE_TRAILS)){
     this.clock={value:0};
     this.grooves=new WeakMap();
     this.previous=[];
     this.dummy=new THREE.Object3D();
-    this.layers=Object.fromEntries(Object.entries(CHASE_TRAILS).map(([type,item])=>{
+    this.layers=Object.fromEntries(types.map(type=>{
+      const item=CHASE_TRAILS[type];
       const ribbon=new THREE.Mesh(groundGeometry(),makeMaterial(type,item.color,this.clock,false));
       const flame=new THREE.PlaneGeometry(1,1).translate(0,.47,0);
       flame.setAttribute('expiry',new THREE.InstancedBufferAttribute(new Float32Array(MAX_CHASE_TRAIL_SEGMENTS),1).setUsage(THREE.DynamicDrawUsage));

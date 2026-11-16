@@ -170,7 +170,7 @@ test('levelled buffs start immediately and repeated boosts extend their remainin
   assert.ok(run.use(player));
   assert.ok(run.use(player));
   assert.ok(Math.abs(run.effects.boost.until-3)<1e-8);
-  assert.ok(Math.abs(run.effects.shield.until-2.5)<1e-8);
+  assert.ok(Math.abs(run.effects.shield.until-3.4)<1e-8);
   assert.equal(run.effects.mist.until,3);
 });
 

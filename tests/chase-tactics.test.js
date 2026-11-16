@@ -146,3 +146,91 @@ test('a sprinter charges at two stars and a cutter telegraphs a fixed intercept 
  sideRun.step(.02,player,()=>false);
  assert.equal(sideRun.dash,null);
 });
+
+test('the laser telegraphs its aim, can miss, and an active shield returns the beam to its shooter',()=>{
+ const player={x:0,z:600,heading:0,speed:20,vx:0,vz:20};
+ const setup=(mounted=false)=>{
+  const run=new PatrolRun(simple,()=>true,()=>false),agent={x:0,z:573,heading:0,speed:18,bank:0,role:'laser',health:35};
+  if(mounted)Object.assign(agent,{mount:'plane',flightY:12});
+  run.stars=4;run.nextDash=0;run.agents=[agent];
+  run.step(.05,player,()=>false);
+  assert.equal(run.dash?.kind,'laser');
+  assert.equal(run.shots.length,0);
+  assert.ok(run.dash.point.z>player.z);
+  return {run,agent};
+ };
+ const direct=setup();
+ direct.run.step(1.06,{...player,z:620},()=>false);
+ assert.equal(direct.run.health,86);
+ assert.equal(direct.run.shots[0].kind,'laser');
+ const dodged=setup();
+ dodged.run.step(1.06,{...player,x:6,z:620},()=>false);
+ assert.equal(dodged.run.health,100);
+ assert.equal(dodged.run.shots[0].result,'miss');
+ const reflected=setup(true);
+ reflected.run.inventory=['shield'];
+ assert.ok(reflected.run.use(player));
+ reflected.run.step(1.06,{...player,z:620},()=>false);
+ assert.equal(reflected.run.health,100);
+ assert.equal(reflected.agent.health,0);
+ assert.deepEqual(reflected.run.shots.map(shot=>shot.kind),['laser','reflection']);
+ assert.equal(reflected.run.hits[0].combo,'激光反射');
+ assert.equal(reflected.run.shots[1].end.z,reflected.run.shots[0].z);
+ assert.ok(reflected.run.shots[1].end.y>10);
+ reflected.run.step(.1,{...player,z:622},()=>false);
+ assert.equal(reflected.run.hits.length,1);
+});
+
+test('ice causes a ground-only skid, snowballs impact their marked point, and escort shields break on separation',()=>{
+ const player={x:0,z:600,heading:0,speed:20,vx:0,vz:20};
+ const runFor=(role,agent)=>{
+  const run=new PatrolRun(simple,()=>true);
+  run.stars=3;run.nextDash=0;
+  run.agents=[{x:-12,z:582,heading:0,speed:0,bank:0,role},...(agent?[agent]:[])];
+  run.step(.05,player,()=>false);
+  assert.equal(run.dash?.kind,role);
+  return run;
+ };
+ const icy=runFor('ice'),icePoint=icy.dash.point;
+ icy.step(.91,player,()=>false);
+ assert.ok(icy.enemyIce[0].segments.length>=3);
+ icy.step(.04,{...player,...icePoint,airborne:true,airClearance:2},()=>false);
+ assert.equal(icy.traction,1);
+ icy.step(.04,{...player,...icePoint},()=>false);
+ assert.ok(icy.traction<1);
+ const snowy=runFor('snowball'),snowPoint=snowy.dash.point;
+ snowy.step(.66,player,()=>false);
+ assert.ok(!snowy.snowballs[0].resolved);
+ snowy.step(.43,{...player,...snowPoint},()=>false);
+ assert.equal(snowy.health,95);
+ const moving={...player};
+ snowy.boost(moving,.2);
+ assert.ok(moving.speed<20);
+ const teammate={x:-6,z:588,heading:0,speed:0,bank:0,role:'guard',guardUsed:true};
+ const escorted=runFor('escort',teammate);
+ escorted.step(.66,player,()=>false);
+ assert.equal(teammate.escort,escorted.agents[0]);
+ assert.ok(teammate.guardUntil>escorted.time);
+ escorted.agents[0].x=-75;
+ escorted.step(.04,player,()=>false);
+ assert.equal(teammate.guardUntil,0);
+ assert.equal(teammate.escort,null);
+});
+
+test('a plane occupies one pursuer slot, stays above the slope, and poses no ground capture threat',()=>{
+ const player={x:0,z:600,heading:0,speed:20,vx:0,vz:20};
+ const run=new PatrolRun(simple,()=>true),ground=(x,z)=>x*.3-z*.14;
+ run.furthest=700;run.stars=4;run.nextAgent=4;
+ run.step(.04,player,point=>point.flightY>ground(point.x,point.z)+8,ground);
+ const plane=run.agents[0];
+ assert.equal(run.agents.length,1);
+ assert.equal(plane?.mount,'plane');
+ assert.ok(plane.flightY>=ground(plane.x,plane.z)+7);
+ assert.equal(run.damage(plane,'pulse',45),'blocked');
+ assert.equal(run.damage(plane,'autofrost',15),'hit');
+ Object.assign(plane,{x:player.x,z:player.z});
+ run.step(.04,player,()=>false,ground,()=>assert.fail('a plane must not run ground collision checks'));
+ assert.equal(run.health,100);
+ assert.equal(run.contact,0);
+ assert.ok(plane.flightY>=ground(plane.x,plane.z)+7);
+});
