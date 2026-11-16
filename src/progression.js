@@ -19,6 +19,9 @@ export const ITEM_UPGRADES={
   avalanche:{bonuses:[5,12,20],describe:amount=>`雪崩半径增加 ${amount} 米`,price:54},
   glider:{bonuses:[.55,1.15,1.85],describe:time=>`可控滑翔延长 ${time} 秒`,price:22},
   autofrost:{bonuses:[1,2.2,3.6],extra:[3,6,9],describe:(time,damage)=>`自动发射延长 ${time} 秒，每发伤害 +${damage}`,price:24},
+  flametrail:{bonuses:[.6,1.3,2.2],extra:[2,4,7],describe:(time,damage)=>`铺火延长 ${time} 秒，每跳伤害 +${damage}`,price:18},
+  frosttrail:{bonuses:[.6,1.3,2.2],extra:[3,6,10],describe:(time,damage)=>`铺冰延长 ${time} 秒，踩中伤害 +${damage}`,price:16},
+  miragetrail:{bonuses:[.6,1.3,2.2],extra:[3,6,10],describe:(time,damage)=>`铺幻光延长 ${time} 秒，踩中伤害 +${damage}`,price:17},
   crew:{bonuses:[1,2,3],extra:[.5,1,1.5],describe:(amount,time)=>`召唤 ${amount+1} 名雪友，持续时间 +${time} 秒`,price:20},
 };
 const UPGRADES={...TALENTS,...ITEM_UPGRADES};

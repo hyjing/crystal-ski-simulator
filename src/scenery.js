@@ -75,6 +75,28 @@ export function addContextTerrain(scene,context,local,texture,rainier,regional){
   return addGrid(scene,context,local,texture,exclude,{x:-7500,z:4000,halfX:6500,halfZ:4000});
 }
 
+export function addWhitepeakBackdrop(scene,context,local){
+  const mesh=addContextTerrain(scene,context,local);
+  mesh.name='Whitepeak granite ridges and snowfields';
+  const geometry=mesh.geometry,positions=geometry.attributes.position,normals=geometry.attributes.normal;
+  const colors=new Float32Array(positions.count*3);
+  const stone=new THREE.Color('#536779'),snow=new THREE.Color('#e3f0f8'),valley=new THREE.Color('#667c8b');
+  const rock=new THREE.Color(),shade=new THREE.Color();
+  for(let i=0;i<positions.count;i++){
+    const x=positions.getX(i),z=positions.getZ(i),elevation=positions.getY(i)+1200;
+    const slope=1-normals.getY(i),ridge=Math.sin(x*.003+z*.002)*120+Math.sin(z*.008-x*.005)*55;
+    const exposed=THREE.MathUtils.smoothstep(slope,.17,.40);
+    const snowCover=THREE.MathUtils.smoothstep(elevation+ridge,2040,3120)*(1-.80*exposed);
+    rock.copy(valley).lerp(stone,exposed);
+    shade.copy(rock).lerp(snow,snowCover);
+    shade.toArray(colors,i*3);
+  }
+  geometry.setAttribute('color',new THREE.BufferAttribute(colors,3));
+  mesh.material.color.set('#ffffff');
+  mesh.material.vertexColors=true;
+  return mesh;
+}
+
 export function addRegionalTerrain(scene,regional,context,local,texture){
   const grid=stitchedRegionalGrid(regional,context),halfX=(local.width-1)*local.spacing/2,halfZ=(local.height-1)*local.spacing/2;
   const exclude=[{west:-halfX+180,east:halfX-180,north:-halfZ+180,south:halfZ-180}],mesh=addGrid(scene,grid,local,texture,exclude,local.sceneryProfile?.ridgeDetail||{x:0,z:0,halfX:3500,halfZ:3500});

@@ -4,6 +4,7 @@ import {loadHumanoid} from './humanoid.js';
 import {applyGear,GEAR_PRESETS} from './wardrobe.js';
 import {fallAnimation} from './npc-routines.js';
 import {PATROL_ITEMS,PURSUER_ROLES,MEDKIT,SUPPLY,MAX_PURSUERS,PURSUER_HEALTH} from './patrol-mode.js';
+import {ChaseTrailEffects} from './chase-trail-effects.js';
 import {poseKickedSkier} from './kick.js';
 import {createRearShotEffect,updateRearShotEffect} from './rear-shot-effect.js';
 
@@ -67,6 +68,14 @@ export class PatrolScene {
     this.glider.add(ribs);
     this.glider.visible=false;
     this.root.add(this.glider);
+    this.trailEffects=new ChaseTrailEffects(this.root);
+    this.bombTarget=new THREE.Mesh(new THREE.RingGeometry(.90,1,40).rotateX(-Math.PI/2),new THREE.MeshBasicMaterial({
+      color:'#ffd17e',side:THREE.DoubleSide,transparent:true,opacity:.72,depthWrite:false,
+    }));
+    this.bombTarget.visible=false;
+    this.bombNormal=new THREE.Vector3();
+    this.up=new THREE.Vector3(0,1,0);
+    this.root.add(this.bombTarget);
     this.rings=[];
     this.ringGeometry=new THREE.RingGeometry(.78,1,64,2).rotateX(-Math.PI/2);
     this.pulseShape=this.ringGeometry.attributes.position.array;
@@ -92,7 +101,7 @@ export class PatrolScene {
       ...Object.fromEntries(Object.entries(PURSUER_ROLES).map(([role,v])=>[role,statusIcon(v.symbol,v.color)])),
       tuck:statusIcon('»','#ffce83'),
       guard:statusIcon('⬡','#83dcff'),blocked:statusIcon('⬡','#fff4ad'),
-      slow:statusIcon('❄','#92e6ff'),stunned:statusIcon('×','#fff4ad'),down:statusIcon('KO','#ff9d87'),
+      slow:statusIcon('❄','#92e6ff'),burn:statusIcon('♨','#ff9c66'),mirage:statusIcon('◇','#c08aff'),stunned:statusIcon('×','#fff4ad'),down:statusIcon('KO','#ff9d87'),
     };
     this.interceptIcon=new THREE.Sprite(new THREE.SpriteMaterial({map:this.statusIcons.scout,depthWrite:false,toneMapped:false}));
     this.interceptIcon.visible=false;
@@ -133,6 +142,8 @@ export class PatrolScene {
     this.run=run;
     this.shield.visible=false;
     this.glider.visible=false;
+    this.bombTarget.visible=false;
+    this.trailEffects.update([],this.surface,0);
     for(const actor of this.actors)actor.userData.guard.visible=false;
     this.root.visible=Boolean(run);
     for(const token of this.tokens)this.root.remove(token);
@@ -164,6 +175,16 @@ export class PatrolScene {
     if(!active)return;
     this.phase+=dt;
     const {traps,bombs,blasts,waves,effects,time,allies,shots}=this.run;
+    this.trailEffects.update(this.run.trailSegments,this.surface,time);
+    const latestBomb=bombs.at(-1);
+    this.bombTarget.visible=Boolean(latestBomb);
+    if(latestBomb){
+      const {x,z}=latestBomb.end;
+      this.bombTarget.position.set(x,this.surface(x,z)+.28,z);
+      const g=this.gradient(x,z);
+      this.bombTarget.quaternion.setFromUnitVectors(this.up,this.bombNormal.set(-g.x,1,-g.z).normalize());
+      this.bombTarget.scale.setScalar(2.4+.35*Math.sin(this.phase*17));
+    }
     this.updateInstances(this.peels,traps,()=>this.peel.clone(),(mesh,trap)=>{
       mesh.position.set(trap.x,this.surface(trap.x,trap.z)+.12,trap.z);
     });
@@ -266,7 +287,8 @@ export class PatrolScene {
       const charging=this.run.dash?.agent===agent;
       const stunned=agent.stunUntil>time;
       const status=launch||agent.health===0?'down':stunned?'stunned':blocked?'blocked':
-        guard.visible?'guard':charging?'dash':agent.fogSlowed?'slow':agent.tucking?'tuck':agent.role??'chase';
+        guard.visible?'guard':charging?'dash':agent.mirage?.until>time?'mirage':agent.burn?.until>time?'burn':
+        agent.fogSlowed||agent.chillUntil>time?'slow':agent.tucking?'tuck':agent.role??'chase';
       marker.material.map=this.statusIcons[status];
       const scale=charging?1.05+.15*Math.sin(this.phase*21):(status==='chase'||status===agent.role)?.65:.85;
       marker.scale.setScalar(scale);

@@ -50,6 +50,32 @@ function routeElevation(trail,t){
     Math.sin(t*26*Math.PI)*smooth(t/.14)*smooth((1-t)/.14);
 }
 
+const skyline=[
+  [-5100,3900,2400,1850,1900,.38],[-6800,5200,1900,2100,1610,-.23],
+  [-2600,6200,1900,2400,1500,-.31],[-800,7200,1750,2290,1780,.31],
+  [1900,7800,2700,2050,2390,.4],[4050,7400,2150,2010,1650,-.40],
+  [6700,4800,2300,1700,2080,-.40],[9100,6500,2700,2000,2470,.55],
+  [-8400,-1900,2400,2850,2350,.25],[-5000,-4500,2110,1880,2180,-.5],
+  [5700,-5700,2480,2130,2500,.38],[12700,8800,3000,2410,3130,-.3],
+  [-11500,10200,2450,2510,2770,.20],[3900,13100,2800,3200,2730,.18],
+].map(([x,z,height,w,d,angle])=>({x,z,height,w,d,c:Math.cos(angle),s:Math.sin(angle)}));
+
+function mountainRanges(x,z){
+  if(Math.max(Math.abs(x),Math.abs(z))<3150)return 0;
+  let height=0;
+  for(const peak of skyline){
+    const dx=x-peak.x,dz=z-peak.z;
+    const a=(dx*peak.c+dz*peak.s)/peak.w,b=(dz*peak.c-dx*peak.s)/peak.d;
+    const radius=Math.hypot(a,b);
+    if(radius>=1)continue;
+    const angle=Math.atan2(b,a),rib=.07*Math.sin(angle*5+radius*4)+.045*Math.sin(angle*9-radius*9);
+    const cone=Math.max(0,1-radius+rib*radius*(1-radius));
+    const gullies=(.06*Math.sin(x/240+z/410)+.035*Math.sin(x/110-z/185))*Math.sin(Math.PI*radius);
+    height=Math.max(height,peak.height*(cone**1.1+gullies));
+  }
+  return height*smooth((Math.max(Math.abs(x),Math.abs(z))-3150)/950);
+}
+
 function alpineBase(x,z,t){
   const westRidge=hill(x+1160+90*Math.sin(z/820),225);
   const eastRidge=hill(x-1140-95*Math.cos(z/800),240);
@@ -59,7 +85,7 @@ function alpineBase(x,z,t){
     970*hill(x-3800,1700)*hill(z+2500,2650)+670*hill(x+850,2050)*hill(z-5300,1500);
   const shoulders=(190*westRidge+285*eastRidge+140*divide)*hill(z+430,2800);
   const relief=16*Math.sin(x/98+z/167)+11*Math.sin(x/74-z/123);
-  return 1390+690*(1-descent(t))*hill(x,3500)+massif*155+distantPeaks+shoulders+relief;
+  return 1390+690*(1-descent(t))*hill(x,3500)+massif*155+distantPeaks+shoulders+relief+mountainRanges(x,z);
 }
 
 function topography(width,height,spacing,forest=false){
@@ -115,6 +141,6 @@ export function createChaseMountain(){
   const [xmin,ymax]=local.originUTM;
   const extent={xmin,ymax,xmax:xmin+(WIDTH-1)*SPACING,ymin:ymax-(HEIGHT-1)*SPACING};
   const landcover={width:WIDTH,height:HEIGHT,extent,values:local.values};
-  const context=topography(129,129,128);
+  const context=topography(257,257,128);
   return {terrain,routes,landcover,context,infrastructure:emptyInfrastructure};
 }

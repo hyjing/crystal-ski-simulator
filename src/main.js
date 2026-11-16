@@ -13,7 +13,7 @@ import {HeldControls,bindTouchControls} from './controls.js';
 import { createTerrain, getRoutes, getLiftRuns, pointAlongRoute, filterRoutes } from './terrain.js';
 import { createSkier, nearestOnRoute, clamp } from './physics.js';
 import { SnowEffects } from './snow.js';
-import { addContextTerrain, addRainierTerrain, addRegionalTerrain, addAlpineSky } from './scenery.js';
+import { addContextTerrain, addWhitepeakBackdrop, addRainierTerrain, addRegionalTerrain, addAlpineSky } from './scenery.js';
 import {readGear,saveGear,applyGear,GEAR_PRESETS,SKI_PROFILES} from './wardrobe.js';
 import {StructureWorld} from './structure-collision.js';
 import {LiftJourney,returnLiftTarget} from './lift-journey.js';
@@ -266,8 +266,7 @@ async function init(){
   createMapBackground();
   speedRenderer=new SpeedRenderer(renderer,scene,camera);
   if(generated){
-    const scenery=addContextTerrain(scene,generated.context,terrain);
-    scenery.name='Whitepeak distant ridges';
+    addWhitepeakBackdrop(scene,generated.context,terrain);
     $('scenery').disabled=false;
   }else{
     aerialImage=new Image();aerialImage.onload=()=>{if(skier)drawMap();};aerialImage.src=asset(hasSatellite?'satellite.jpg':'aerial.jpg');
@@ -584,7 +583,11 @@ function updatePhysics(dt){
           const {x,z}=hit.agent;
           snowEffects.snowBurst(x,yAt(x,z),z,30,.42);
         }
-        const label=hit.source==='kick'?'踹开':PATROL_ITEMS[hit.source].name;
+        if(hit.combo){
+          const {x,z}=hit.agent;
+          snowEffects.snowBurst(x,yAt(x,z),z,52,.66);
+        }
+        const label=hit.combo??(hit.source==='kick'?'踹开':PATROL_ITEMS[hit.source].name);
         if(hit.down)confirmChaseKnockdown(label,[hit.agent]);
         else confirmChaseHit(label,1,false,0,hit.damage,hit.source==='banana'?'滑倒':'命中');
       }
@@ -853,6 +856,8 @@ function drawMap(){
     for(const agent of patrol.agents)if(!agent.launch&&agent.health!==0)
       dot(agent,agent.guardUntil>patrol.time?'#83dcff':PURSUER_ROLES[agent.role]?.color??'#b4213a',5.4);
     if(patrol.intercept)dot(patrol.intercept.point,'#da84ee',8,'!');
+    const bomb=patrol.bombs.at(-1);
+    if(bomb)dot(bomb.end,'#ffbe67',5,'×');
   }
   const m=point(skier),front=point({x:skier.x+Math.sin(skier.heading)*10,z:skier.z+Math.cos(skier.heading)*10});
   ctx.save();
@@ -1326,7 +1331,7 @@ function usePatrolItem(slot=0){
     snowEffects.snowBurst(skier.x,yAt(skier.x,skier.z),skier.z,48,.56);
   }
   if(type==='pulse'||type==='mist')snowEffects.snowBurst(skier.x,yAt(skier.x,skier.z),skier.z,64,type==='pulse'?.85:.43);
-  const message=type==='avalanche'?'雪崩弹已向后抛出'
+  const message=type==='avalanche'?(patrol.bombs.at(-1)?.target?'雪崩弹已瞄向身后雪友':'雪崩弹已向身后近处抛出')
     :type==='glider'?'浮空翼沿原方向展开 · 松开再按转弯键可调整'
     :`${PATROL_ITEMS[type].name}已释放`;
   toast(message);

@@ -1,4 +1,5 @@
 import {clamp, nearestOnRoute, PHYSICS} from './physics.js';
+import {CHASE_TRAILS,layTrails,trailContact} from './chase-trails.js';
 import {ChaseGoal} from './chase-goals.js';
 import {deployGlider} from './airborne.js';
 import {pointAlongRoute} from './terrain.js';
@@ -36,10 +37,11 @@ const DASH_DURATION=.85;
 const REPLACEMENT_DELAY = 1.2;
 const GUARD_DURATION=2;
 export const PATROL_ITEMS = {
+  ...CHASE_TRAILS,
   boost: {name:'加速充能',color:'#ffe16d',symbol:'»',duration:1.05,damage:28,radius:3.4,description:'短时猛冲，擦过身边的追赶者时造成 28 点伤害'},
   shield: {name:'护盾',color:'#83dcff',symbol:'+',duration:1.7,radius:6,damage:25,description:'阻止截停；弹开的追赶者受到 25 点反震伤害，每次释放对每人计一次'},
   pulse: {name:'雪浪脉冲',color:'#b0fff0',symbol:'◎',duration:.62,radius:19,damage:45,description:'环形击退并造成 45 点伤害，能打断近身围追'},
-  avalanche: {name:'雪崩弹',color:'#ff986e',symbol:'✹',duration:AVALANCHE_DURATION,description:'稀有 · 落地直接击倒范围内未受护盾保护的雪友'},
+  avalanche: {name:'雪崩弹',color:'#ff986e',symbol:'✹',duration:AVALANCHE_DURATION,description:'稀有 · 自动瞄向 75 米内身后雪友的预计落点，爆炸击倒范围内未受护盾保护的雪友'},
   mist: {name:'雪雾弹',color:'#e3e6f7',symbol:'☁',duration:3,radius:14,damage:6,description:'留下 3 秒雪雾，减速遮挡视线，雾中的雪友每秒受到 6 点伤害'},
   glider: {name:'浮空翼',color:'#91fff3',symbol:'↗',duration:1.35,damage:22,radius:4.5,description:'沿原方向腾空，飞过追赶者上方时造成 22 点下冲伤害；松开再按转弯键可调整方向'},
   autofrost: {name:'追尾雪弹炮',color:'#82b5ff',symbol:'»',duration:3.4,radius:38,damage:15,description:'自动向身后最近的追赶者发射雪弹，每发 15 点伤害'},
@@ -84,6 +86,7 @@ export class PatrolRun {
     this.bombs=[];
     this.blasts=[];
     this.waves=[];
+    this.trailSegments=[];
     this.allies=[];
     this.shots=[];
     this.itemUpgrades=itemUpgrades.slice();
@@ -104,7 +107,7 @@ export class PatrolRun {
     this.effects={};
     this.nextIncident = 0;
     this.nextAgent = 0;
-    const types = ['boost','pulse','mist','shield','banana','autofrost','crew'];
+    const types = ['boost','pulse','mist','shield','banana','flametrail','frosttrail','miragetrail','autofrost','crew'];
     this.pickups = [];
     let itemIndex=0;
     for(let d=route.spawn.distance+115;d<route.length-90;d+=(route.pickupSpacing??225)){
@@ -145,6 +148,17 @@ export class PatrolRun {
 
   damage(agent,source,amount){
     if(agent.launch||agent.health===0||this.blockAttack(agent))return 'blocked';
+    let combo;
+    if(source==='flametrail'&&agent.chillUntil>this.time){
+      agent.chillUntil=0;
+      amount+=16;
+      combo='融裂';
+    }
+    if((source==='pulse'||source==='autofrost')&&agent.mirage?.until>this.time){
+      agent.mirage=null;
+      amount+=12;
+      combo='破幻';
+    }
     const health=agent.health??PURSUER_HEALTH;
     agent.health=Math.max(0,health-amount);
     const down=agent.health===0;
@@ -156,7 +170,7 @@ export class PatrolRun {
       agent.speed=0;
       agent.tucking=false;
     }
-    this.hits.push({agent,source,damage:health-agent.health,down});
+    this.hits.push({agent,source,damage:health-agent.health,down,combo});
     return down?'down':'hit';
   }
 
@@ -260,8 +274,10 @@ export class PatrolRun {
         this.traps.push({...point,until:this.time+PATROL_ITEMS.banana.duration,fallDuration:TRIP_DURATION+extra});
       }
     }else if(type==='avalanche'){
-      const end=[behind(9),behind(6),behind(3),{x,z}].find(this.clear)??{x,z};
-      this.bombs.push({type,x,z,end,start:this.time,until:this.time+.35,
+      const surface=terrain?.surface??terrain?.sample??(()=>0);
+      const aim=this.aimAvalanche(player,travel,surface);
+      const end=aim?.end??[behind(9),behind(6),behind(3),{x,z}].find(this.clear)??{x,z};
+      this.bombs.push({type,x,z,end,target:aim?.target,start:this.time,until:this.time+(aim?.fuse??.35),
         height:player.airborne?Math.max(0,player.airClearance||0):0,
         radius:AVALANCHE_RADIUS+4+bonus,heading:travel});
     }else if(type==='crew'){
@@ -280,6 +296,7 @@ export class PatrolRun {
         this.waves.push({...effect,radius:item.radius+bonus,damage:item.damage+extra,hit:new Set()});
         return true;
       }
+      if(Object.hasOwn(CHASE_TRAILS,type))Object.assign(effect,{last:{x,z},extra,linger:CHASE_TRAILS[type].linger});
       if(type==='shield'||type==='mist')effect.radius=item.radius+extra;
       if(type==='shield')effect.hit=new Set();
       if(type==='mist')effect.hitAt=new Map();
@@ -297,6 +314,55 @@ export class PatrolRun {
       if(type==='shield')this.contact=0;
     }
     return true;
+  }
+
+  aimAvalanche(player,heading,surface){
+    const fx=Math.sin(heading),fz=Math.cos(heading),ground=surface(player.x,player.z);
+    let best=null,score=Infinity;
+    for(const target of this.agents){
+      const dx=target.x-player.x,dz=target.z-player.z,gap=Math.hypot(dx,dz);
+      if(target.launch||target.health===0||gap>75||dx*fx+dz*fz>2)continue;
+      if(Math.abs(surface(target.x,target.z)-ground)>8+gap*.67)continue;
+      const fuse=.36+gap*.003;
+      const end=this.bombLead(target,fuse);
+      const candidate=this.clear(end)?end:this.clear(target)?{x:target.x,z:target.z}:null;
+      if(!candidate)continue;
+      const rank=gap+(target.guardUntil>this.time?23:0);
+      if(rank<score){score=rank;best={target,end:candidate,fuse};}
+    }
+    return best;
+  }
+
+  bombLead(agent,seconds){
+    const travel=agent.stunUntil>this.time?0:clamp(agent.speed??0,0,60)*seconds;
+    const heading=agent.heading??0;
+    return {x:agent.x+Math.sin(heading)*travel,z:agent.z+Math.cos(heading)*travel};
+  }
+
+  applyTrailContacts(agent,next,surface){
+    if(!this.trailSegments.length||agent.health===0)return;
+    const contacts=trailContact(this.trailSegments,agent,next,surface);
+    for(const type of ['frosttrail','miragetrail','flametrail']){
+      const segment=contacts[type];
+      if(!segment||this.time<(agent.trailReady?.[type]??0))continue;
+      agent.trailReady??={};
+      agent.trailReady[type]=this.time+(type==='flametrail'?2.5:3);
+      if(this.damage(agent,type,segment.damage)!=='hit')continue;
+      if(type==='frosttrail'){
+        agent.chillUntil=this.time+3;
+        agent.speed*=.66;
+        if(this.dash?.agent===agent)this.dash=null;
+      }else if(type==='flametrail'){
+        agent.burn={until:this.time+2.5,next:this.time+1,damage:segment.damage};
+      }else{
+        const side=(agent.id??0)%2?1:-1,h=segment.heading;
+        const flank=direction=>({x:segment.x+Math.sin(h)*13+Math.cos(h)*direction*14,
+          z:segment.z+Math.cos(h)*13-Math.sin(h)*direction*14});
+        const point=[flank(side),flank(-side),segment.b].find(this.clear)??segment.b;
+        agent.mirage={point,until:this.time+2};
+        if(this.dash?.agent===agent)this.dash=null;
+      }
+    }
   }
 
   searchThroughMist(agent,mist){
@@ -503,7 +569,10 @@ export class PatrolRun {
       if(this.time<bomb.until){i++;continue;}
       this.bombs.splice(i,1);
       const duration=PATROL_ITEMS[bomb.type].duration;
-      const blast={...bomb.end,type:bomb.type,heading:bomb.heading,radius:bomb.radius,start:this.time,
+      const target=bomb.target;
+      const current=target&&this.agents.includes(target)&&!target.launch&&target.health!==0?this.bombLead(target,.06):null;
+      const end=current&&range(current,bomb.end)<14&&this.clear(current)?current:bomb.end;
+      const blast={...end,type:bomb.type,heading:bomb.heading,radius:bomb.radius,start:this.time,
         until:this.time+duration,duration};
       this.blasts.push(blast);
       const hit=detonate(blast);
@@ -526,6 +595,7 @@ export class PatrolRun {
     for(const [type,effect] of Object.entries(this.effects)){
       if(this.time>=effect.until)delete this.effects[type];
     }
+    this.trailSegments=layTrails(this.trailSegments,this.effects,player,this.time);
     if(activeMist)this.damageInMist(activeMist,surface);
     if(this.effects.boost)this.strikeAlong('boost',this.effects.boost,player,surface);
     if(player.airborne&&player.gliderRemaining>0&&this.glideStrike)this.strikeAlong('glider',this.glideStrike,player,surface);
@@ -585,6 +655,13 @@ export class PatrolRun {
     const playerHeight=surface(player.x,player.z);
     for(const agent of this.agents){
       if(agent.launch||agent.health===0)continue;
+      const burn=agent.burn;
+      if(burn&&this.time>=burn.next&&this.time<burn.until){
+        burn.next=this.time+1;
+        this.damage(agent,'flametrail',burn.damage);
+      }
+      this.applyTrailContacts(agent,agent,surface);
+      if(agent.health===0)continue;
       const separation=range(agent,player);
       if(shield&&separation<=this.effects.shield.radius&&(agent.stunUntil??0)<=this.time&&
         Math.abs(surface(agent.x,agent.z)-playerHeight)<2){
@@ -619,7 +696,9 @@ export class PatrolRun {
         if(this.damage(agent,'crew',PATROL_ITEMS.crew.damage)==='hit')this.repel(agent,ally,.7,11,.22);
         continue;
       }
-      const distracted=Boolean(ally);
+      const illusion=agent.mirage?.until>this.time?agent.mirage.point:null;
+      const bait=ally??illusion;
+      const distracted=Boolean(bait),chilled=agent.chillUntil>this.time;
       const id=agent.id??0;
       const fogged=Boolean(mist&&range(mist,agent)<mist.radius);
       const lost=fogBlocks(mist,agent,player);
@@ -632,7 +711,7 @@ export class PatrolRun {
       }
       const delayed=agent.shortcutDelayUntil>this.time;
       const role=roleOf(agent);
-      const enableTuck=role==='racer'&&!delayed&&!lost&&!fogged&&!distracted&&separation>(agent.tucking?21:36);
+      const enableTuck=role==='racer'&&!chilled&&!delayed&&!lost&&!fogged&&!distracted&&separation>(agent.tucking?21:36);
       if(this.time>=(agent.gapCheckAt??0)){
         agent.losingGround=agent.previousGap===undefined||separation>=agent.previousGap-2;
         agent.previousGap=separation;
@@ -641,13 +720,13 @@ export class PatrolRun {
       if(!lost&&this.time>=(agent.aimAt??0)){
         const lane=Math.sin(id*2.4+this.time*.7)*(3+Math.min(5,agent.speed*.16))*clamp(separation/26,.18,1);
         const lookAhead=enableTuck?32:22;
-        const target=distracted?ally:following?routePoint(this.route,onRoute.progress+lookAhead,enableTuck?lane*.35:lane):{
+        const target=distracted?bait:following?routePoint(this.route,onRoute.progress+lookAhead,enableTuck?lane*.35:lane):{
           x:player.x+Math.cos(player.heading)*lane,z:player.z-Math.sin(player.heading)*lane,
         };
         agent.aim=target;
         agent.aimAt=this.time+.30+(id%3)*.09;
       }
-      const target=distracted?ally:lost?this.searchThroughMist(agent,mist):agent.aim;
+      const target=distracted?bait:lost?this.searchThroughMist(agent,mist):agent.aim;
       const dx=target.x-agent.x,dz=target.z-agent.z;
       const aim=Math.atan2(dx,dz);
       const delta=turnAngle(agent.heading,aim);
@@ -660,14 +739,15 @@ export class PatrolRun {
       const tuckedPace=clamp(Math.max(normal+11,player.speed+6)+downhill,24,60);
       const cruise=distracted?normal*.86:charging?Math.min(54,normal+12):agent.tucking?tuckedPace:normal;
       const turningAround=lost&&agent.mistSearch?.detour&&!distracted&&Math.abs(delta)>.32;
-      const pace=delayed?cruise*.66:fogged?Math.min(cruise*.42,10):turningAround?Math.min(cruise,14)
+      const pace=chilled?cruise*.52:delayed?cruise*.66:fogged?Math.min(cruise*.42,10):turningAround?Math.min(cruise,14)
         :lost&&range(agent,target)<3?3:cruise;
       agent.speed+=(pace-agent.speed)*Math.min(1,dt*(distracted?9:fogged||turningAround?6:agent.tucking?2.5:1.7));
       const step=agent.speed*dt;
       const turnRate=distracted?3.5:agent.tucking?.63:Math.min(role==='scout'?1.85:1.6,Math.max(5,agent.speed)/16);
       const heading=agent.heading+clamp(delta,-dt*turnRate,dt*turnRate);
       const point={x:agent.x+Math.sin(heading)*step,z:agent.z+Math.cos(heading)*step};
-      if(this.triggerTrap(agent,point,heading,agent.speed,surface))continue;
+      this.applyTrailContacts(agent,point,surface);
+      if(agent.health===0||this.triggerTrap(agent,point,heading,agent.speed,surface))continue;
       if(step>0&&collision(agent,point)){
         agent.tucking=false;
         agent.fallDuration=agent.speed>9?2.2:1.2;
