@@ -3,7 +3,7 @@ import {createAthleteRig,updateAthletePose} from './athlete.js';
 import {loadHumanoid} from './humanoid.js';
 import {applyGear,GEAR_PRESETS} from './wardrobe.js';
 import {fallAnimation} from './npc-routines.js';
-import {PATROL_ITEMS,MEDKIT} from './patrol-mode.js';
+import {PATROL_ITEMS,MEDKIT,SUPPLY} from './patrol-mode.js';
 import {poseKickedSkier} from './kick.js';
 
 function statusIcon(symbol,color){
@@ -31,7 +31,7 @@ export class PatrolScene {
     this.phase=0;
     this.clock=0;
     this.tokenGeometry=new THREE.OctahedronGeometry(.72);
-    this.materials=Object.fromEntries(Object.entries({...PATROL_ITEMS,medkit:MEDKIT}).map(([id,item])=>[
+    this.materials=Object.fromEntries(Object.entries({...PATROL_ITEMS,medkit:MEDKIT,supply:SUPPLY}).map(([id,item])=>[
       id,new THREE.MeshStandardMaterial({color:item.color,emissive:item.color,emissiveIntensity:.34,roughness:.4}),
     ]));
     this.medkitGeometry=new THREE.BoxGeometry(1.15,.76,.46);
@@ -101,7 +101,7 @@ export class PatrolScene {
     this.root.visible=Boolean(run);
     for(const token of this.tokens)this.root.remove(token);
     this.tokens=run?run.pickups.map(p=>{
-      const token=new THREE.Mesh(p.type==='medkit'?this.medkitGeometry:this.tokenGeometry,this.materials[p.type]);
+      const token=new THREE.Mesh(p.type==='medkit'||p.type==='supply'?this.medkitGeometry:this.tokenGeometry,this.materials[p.type]);
       if(p.type==='medkit')for(const z of [-.24,.24]){
         const bar=new THREE.Mesh(this.crossGeometry,this.crossMaterial),stem=bar.clone();
         bar.position.z=stem.position.z=z;

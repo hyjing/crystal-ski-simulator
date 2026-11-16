@@ -5,7 +5,7 @@ import {createTerrain,getLiftRuns,pointAlongRoute} from '../src/terrain.js';
 import {createSkier,stepSkier,nearestOnRoute} from '../src/physics.js';
 import {chaseDirection,luckyWidth,luckyShade,routeBranchCandidates} from '../src/route-experience.js';
 import {PatrolRun} from '../src/patrol-mode.js';
-import {RunGhost,ghostKey,readGhost,ghostPosition} from '../src/run-ghost.js';
+import {RunGhost,ghostKey,readGhost,ghostPosition,ghostMotion} from '../src/run-ghost.js';
 
 function crystal(){
   const data=name=>JSON.parse(fs.readFileSync(new URL(`../public/data/crystal-${name}.json`,import.meta.url)));
@@ -65,4 +65,14 @@ test('best ghosts are mode-specific and require an ordered uninterrupted run',()
   assert.deepEqual(ghostPosition(readGhost(store,key),.5),{x:5,y:2,z:10});
   run.valid=false;
   assert.equal(run.save(store,key,1.5,100,'free'),false);
+});
+
+test('ghost motion derives heading and turn from a legacy position-only recording',()=>{
+  const ghost={points:[[0,0,2,0],[1,0,2,10],[2,10,2,10]],time:2};
+  const motion=ghostMotion(ghost,1);
+  assert.deepEqual({x:motion.x,y:motion.y,z:motion.z},{x:0,y:2,z:10});
+  assert.ok(Math.abs(motion.heading-Math.PI/4)<1e-8);
+  assert.ok(Math.abs(motion.turn-Math.PI/2)<1e-8);
+  assert.equal(ghostMotion(ghost,2).heading,Math.PI/2);
+  assert.equal(ghostMotion(ghost,2.1),null);
 });

@@ -279,11 +279,13 @@ test('upgraded banana casts two traps per item, can overlap and each expires or 
 
 test('the inventory holds three stacks, leaves overflow on the snow, and consumes one item',()=>{
   const run=new PatrolRun(route,()=>true);
-  for(const p of run.pickups.slice(0,3)){
+  const fixed=run.pickups.filter(p=>p.type!=='supply'&&p.type!=='medkit');
+  for(const p of fixed.slice(0,3)){
     assert.equal(run.step(.03,{...makePlayer(p.z),x:p.x}),'pickup');
   }
   assert.deepEqual(run.inventory,['boost','pulse','decoy']);
-  const fourth=run.pickups[3],player={...makePlayer(fourth.z),x:fourth.x};
+  const fourth=fixed[3],player={...makePlayer(fourth.z),x:fourth.x};
+  assert.equal(run.step(.03,player),'pickup-full');
   assert.equal(run.step(.03,player),null);
   assert.equal(fourth.taken,false);
   const moreBoost={...fourth,type:'boost'};
@@ -292,7 +294,7 @@ test('the inventory holds three stacks, leaves overflow on the snow, and consume
   run.pickups.push(moreBoost,anotherBoost,overflow);
   assert.equal(run.step(.03,player),'pickup');
   assert.equal(run.step(.03,player),'pickup');
-  assert.equal(run.step(.03,player),null);
+  assert.equal(run.step(.03,player),'pickup-full');
   assert.equal(overflow.taken,false);
   assert.ok(run.use(player,0));
   assert.deepEqual(run.stacks.map(v=>v.count),[2,1,1]);
@@ -300,6 +302,19 @@ test('the inventory holds three stacks, leaves overflow on the snow, and consume
   assert.ok(run.effects.decoy);
   assert.equal(run.step(.03,player),'pickup');
   assert.deepEqual(run.stacks,[{type:'boost',count:2},{type:'pulse',count:1},{type:'shield',count:1}]);
+});
+
+test('a generated supply box tops up a partial stack even with all slots occupied',()=>{
+  const run=new PatrolRun(route,()=>true);
+  const supply=run.pickups.find(p=>p.type==='supply');
+  assert.ok(supply.z<700);
+  run.inventory=['shield','shield','banana','boost','boost','boost'];
+  const player={...makePlayer(supply.z),x:supply.x};
+  assert.equal(run.step(.03,player),'pickup');
+  assert.equal(run.lastPickup,'banana');
+  assert.equal(supply.taken,true);
+  assert.deepEqual(run.stacks.map(({count})=>count),[2,2,3]);
+  assert.equal(run.step(.03,player),null);
 });
 
 test('an avalanche is thrown immediately and detonates later around its landing point',()=>{

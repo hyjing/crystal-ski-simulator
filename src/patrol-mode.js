@@ -2,7 +2,7 @@ import {clamp, nearestOnRoute, PHYSICS} from './physics.js';
 import {pointAlongRoute} from './terrain.js';
 import {AVALANCHE_DURATION,AVALANCHE_RADIUS} from './kick.js';
 import {sweptContact} from './traffic-brain.js';
-import {DEFAULT_TALENTS,canStoreItem,itemStacks} from './progression.js';
+import {DEFAULT_TALENTS,ITEM_STACK_LIMIT,canStoreItem,itemStacks} from './progression.js';
 
 export const PATROL_ROUTE_ID = 'crystal-angry-skiers';
 export const resolveChaseRoute = id => id === 'crystal-patrol-descent' ? PATROL_ROUTE_ID : id;
@@ -30,6 +30,7 @@ export const PATROL_ITEMS = {
   banana: {name:'香蕉皮',color:'#ffcd36',symbol:'⌣',duration:12,description:'放在身后，绊倒第一个滑过的追赶者'},
 };
 export const MEDKIT = {name:'血包',color:'#f95178'};
+export const SUPPLY = {name:'道具补给',color:'#f1c77c'};
 const range = (a, b) => Math.hypot(a.x-b.x, a.z-b.z);
 const turnAngle = (a, b) => Math.atan2(Math.sin(b-a), Math.cos(b-a));
 
@@ -70,16 +71,20 @@ export class PatrolRun {
     this.agents = [];
     this.inventory = [];
     this.lastPickup = null;
+    this.blockedPickup=null;
     this.guardBlocks=0;
     this.effects={};
     this.nextIncident = 0;
     this.nextAgent = 0;
     const types = ['boost','pulse','decoy','shield','avalanche','banana','snowball','mist','boost'];
     this.pickups = [];
+    let itemIndex=0;
     for(let d=route.spawn.distance+115;d<route.length-90;d+=225){
-      const side=this.pickups.length%2?1:-1;
+      const index=this.pickups.length,side=index%2?1:-1;
       const point=[side*3,-side*3,0].map(offset=>routePoint(route,d,offset)).find(clear);
-      if(point)this.pickups.push({...point,type:types[this.pickups.length%types.length],taken:false});
+      if(!point)continue;
+      if(index%3===2)this.pickups.push({...point,type:'supply',fallback:types[itemIndex%types.length],taken:false});
+      else this.pickups.push({...point,type:types[itemIndex++%types.length],taken:false});
     }
     for(let d=route.spawn.distance+225;d<route.length-55;d+=295){
       const point=[0,4,-4].map(offset=>routePoint(route,d,offset)).find(clear);
@@ -425,10 +430,34 @@ export class PatrolRun {
         medkit.taken=true;
         return this.heal(this.medkitHeal) ? 'medkit' : null;
       }
-      const pickup=this.pickups.find(p=>p.type!=='medkit'&&!p.taken&&range(p,player)<5.5&&
-        canStoreItem(this.inventory,p.type));
-      if(pickup){pickup.taken=true;this.inventory.push(pickup.type);this.lastPickup=pickup.type;return 'pickup';}
+      let blocked=null;
+      for(const pickup of this.pickups){
+        if(pickup.type==='medkit'||pickup.taken||range(pickup,player)>=5.5)continue;
+        const type=pickup.type==='supply'?this.refillType(pickup.fallback):pickup.type;
+        if(type&&canStoreItem(this.inventory,type)){
+          pickup.taken=true;
+          this.inventory.push(type);
+          this.lastPickup=type;
+          this.blockedPickup=null;
+          return 'pickup';
+        }
+        blocked??=pickup;
+      }
+      if(blocked&&blocked!==this.blockedPickup){
+        this.blockedPickup=blocked;
+        return 'pickup-full';
+      }
+      if(blocked)return null;
     }
+    this.blockedPickup=null;
     return null;
+  }
+
+  refillType(fallback){
+    const stacks=this.stacks;
+    const partial=stacks.reduce((best,stack)=>stack.count<ITEM_STACK_LIMIT&&
+      (!best||stack.count<best.count)?stack:best,null);
+    return partial?.type??[fallback,...Object.keys(PATROL_ITEMS)]
+      .find(type=>type&&canStoreItem(this.inventory,type));
   }
 }

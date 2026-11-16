@@ -29,6 +29,7 @@ export function attachHumanoid(athlete,model){
   for(const name of ['pelvis','spine_01','spine_02','spine_03','Head','upperarm_l','lowerarm_l','hand_l','thigh_l','calf_l','foot_l'])if(!bones[name])throw new Error(`Humanoid missing ${name}`);
   const fabric=athlete.userData.torso.children[0].material.map;
   const suit=model.getObjectByName('Unified_ski_suit');if(!suit?.isSkinnedMesh)throw new Error('Complete skier outfit missing');
+  suit.material=suit.material.clone();
   suit.material.map=fabric;suit.material.bumpMap=fabric;suit.material.bumpScale=.0012;
   model.traverse(o=>{if(o.isBone&&/^(index|middle|ring|pinky)_(02|03)_/.test(o.name))o.quaternion.multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1,0,0),.85));});
   model.name='Complete winter skier';model.scale.setScalar(1/.52);athlete.add(model);model.traverse(o=>{if(o.isMesh){o.castShadow=o.receiveShadow=true;o.frustumCulled=false;}});

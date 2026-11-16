@@ -1,9 +1,10 @@
 import {qualityScale,adaptQuality} from './render-quality.js';
-import {RunGhost,ghostKey,readGhost,ghostPosition} from './run-ghost.js';
+import {RunGhost,ghostKey,readGhost} from './run-ghost.js';
+import {GhostSkier} from './ghost-skier.js';
 import {ITEM_UPGRADES,ITEM_CAPACITY,ITEM_STACK_LIMIT,itemStacks,canStoreItem,KNOCKDOWN_XP,KNOCKDOWN_COINS,TALENTS,RunExperience,levelProgress,upgradePoints,chooseUpgrade,buyItem,readProgress,saveProgress} from './progression.js';
 import {LUCKY_SECTORS,luckyWidth,luckyShade,routeBranchCandidates,chaseDirection} from './route-experience.js';
 import {mapProjection} from './minimap.js';
-import {PatrolRun,PATROL_ITEMS,MEDKIT,MAX_HEALTH,resolveChaseRoute,longestChaseRoute} from './patrol-mode.js';
+import {PatrolRun,PATROL_ITEMS,MEDKIT,SUPPLY,MAX_HEALTH,resolveChaseRoute,longestChaseRoute} from './patrol-mode.js';
 import {SkierKick,KICK_RANGE} from './kick.js';
 import {PatrolScene} from './patrol-scene.js';
 import * as THREE from 'three';
@@ -62,7 +63,7 @@ const soundtrack = new Soundtrack($('soundtrack'), $('music'), import.meta.env.B
 let trailMusic,patrol,patrolScene,kick,patrolStep=0;
 let damageEffect,healEffect;
 let hitUntil=0;
-let ghostMesh,bestGhost,bestGhostLine,ghostRun,activeGhostKey,ghostEnabled=true,nextLandmark=0;
+let replaySkier,replayPoint,bestGhost,bestGhostLine,ghostRun,activeGhostKey,ghostEnabled=true,nextLandmark=0;
 const mapForward=new THREE.Vector3();
 const patrolView=new THREE.Frustum(),patrolProjection=new THREE.Matrix4(),patrolSphere=new THREE.Sphere(new THREE.Vector3(),3);
 function patrolOffscreen(point){
@@ -183,10 +184,6 @@ async function init(){
   for(const run of routes)if(run.branches){
     run.branches=run.branches.filter(branch=>branch.points.every(p=>!structures.blocked(p.x,p.z,terrain.surface(p.x,p.z),false)));
   }
-  ghostMesh=new THREE.Mesh(new THREE.SphereGeometry(.43,10,8),
-    new THREE.MeshBasicMaterial({color:'#8eeaff',transparent:true,opacity:.66,depthWrite:false}));
-  ghostMesh.visible=false;
-  scene.add(ghostMesh);
   kick=new SkierKick(yAt,patrolSpawnClear);
   const terminals=scene.userData.liftTerminals||[];
   alignLiftServiceStops(terminals,resortUpdate.allCarriers,routes,liftWalkClear);
@@ -361,6 +358,7 @@ function resetPosition(full=false){
     nextLandmark=0;
     activeGhostKey=['free','patrol'].includes(challengeMode)?ghostKey(mountainId,route.id,challengeMode):null;
     bestGhost=activeGhostKey?readGhost(localStorage,activeGhostKey):null;
+    if(bestGhost&&!replaySkier)replaySkier=new GhostSkier(scene);
     bestGhostLine=bestGhost?.points.map(([,x,,z])=>({x,z}));
     ghostRun=activeGhostKey?new RunGhost():null;
     ghostRun?.sample(0,skier.x,yAt(skier.x,skier.z),skier.z);
@@ -519,6 +517,10 @@ function updatePhysics(dt){
       patrolStep=0;
       if(event==='caught'){finishRun(true);return;}
       if(event==='pickup')toast(`拾取 ${PATROL_ITEMS[patrol.lastPickup].name} · ${patrol.stacks.find(stack=>stack.type===patrol.lastPickup).count}/${ITEM_STACK_LIMIT}`);
+      if(event==='pickup-full'){
+        const stack=patrol.stacks.find(({type})=>type===patrol.blockedPickup.type);
+        toast(stack||patrol.blockedPickup.type==='supply'?'道具已叠满 · 先用掉一件':'三格已占用 · 同类道具和金色补给箱可继续叠加');
+      }
       if(event==='medkit'){
         healEffect=elapsed+.65;
         snowEffects.snowBurst(skier.x,yAt(skier.x,skier.z),skier.z,22,.23);
@@ -754,11 +756,15 @@ function drawMap(){
     ctx.strokeStyle='#f5f8f0';ctx.lineWidth=1.2;ctx.stroke();
     if(text){ctx.fillStyle='#fff';ctx.font='bold 10px sans-serif';ctx.textAlign='center';ctx.fillText(text,m.x,m.y+3.5);}
   }
-  if(ghostMesh.visible)dot(ghostMesh.position,'#59c9eb',4);
+  if(replayPoint)dot(replayPoint,'#59c9eb',4);
   dot(route.points[0],'#315b4b',8,'S');
   dot(route.points.at(-1),'#996027',8,'F');
   if(patrol){
-    for(const p of patrol.pickups)if(!p.taken)dot(p,p.type==='medkit'?MEDKIT.color:PATROL_ITEMS[p.type].color,p.type==='medkit'?6:4.5,p.type==='medkit'?'+':null);
+    for(const p of patrol.pickups){
+      if(p.taken)continue;
+      const marker=p.type==='medkit'?MEDKIT:p.type==='supply'?SUPPLY:PATROL_ITEMS[p.type];
+      dot(p,marker.color,p.type==='medkit'?6:4.5,p.type==='medkit'?'+':p.type==='supply'?'◇':null);
+    }
     for(const trap of patrol.traps)dot(trap,PATROL_ITEMS.banana.color,4);
     for(const agent of patrol.agents)if(!agent.launch)dot(agent,agent.guardUntil>patrol.time?'#83dcff':'#b4213a',5.4);
   }
@@ -948,9 +954,8 @@ function animate(time){
   }
   patrolScene?.update(mode==='paused'?0:dt,Boolean(patrol)&&['running','paused','drone','inspection','finished','help'].includes(mode),skier);
   if(mode!=='paused')updateAthlete(dt);
-  const replay=ghostEnabled&&!patrol&&mode==='running'?ghostPosition(bestGhost,elapsed):null;
-  ghostMesh.visible=Boolean(replay);
-  if(replay)ghostMesh.position.set(replay.x,replay.y+.52,replay.z);
+  const replay=ghostEnabled&&mode==='running'?bestGhost:null;
+  replayPoint=replaySkier?.update(replay,elapsed,dt,skier,yAt,terrain.gradient);
   updateCamera(dt);snowEffects.update(dt,skier,mode==='running',snow,athlete.userData.poleContact,Boolean(patrol?.effects.boost));snowEffects.mesh.material.opacity=snow==='soft'?.29:.65;liftPassengers?.update(liftClock,camera,gear.npcs);stationLife?.update(stationClock,skier,resortUpdate.allCarriers,gear.npcs,mode==='paused'?0:dt);stationAudio?.update(scene.userData.liftTerminals||[],mode==='drone'?camera.position:skier,soundOn&&worldActive,time/1000,liftJourney.phase==='boarding');
   if(arrivalZone){arrivalZone.visible=mode==='running';arrivalZone.children[0].material.opacity=.55+.15*Math.sin(time*.002);}
   if(mode!=='paused')traffic?.update(0,skier,worldActive&&(isCrystal||mode!=='finished'),gear.npcs,camera,dt);

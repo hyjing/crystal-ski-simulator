@@ -59,3 +59,20 @@ export function ghostPosition(ghost,time){
   const a=points[low],b=points[high],t=Math.min(1,(time-a[0])/(b[0]-a[0]));
   return {x:a[1]+(b[1]-a[1])*t,y:a[2]+(b[2]-a[2])*t,z:a[3]+(b[3]-a[3])*t};
 }
+
+export function ghostMotion(ghost,time,fallbackHeading=0){
+  const point=ghostPosition(ghost,time);
+  if(!point)return null;
+  const beforeTime=Math.max(ghost.points[0][0],time-.24);
+  const afterTime=Math.min(ghost.time,time+.24);
+  const before=ghostPosition(ghost,beforeTime),after=ghostPosition(ghost,afterTime);
+  const dx=after.x-before.x,dz=after.z-before.z;
+  const distance=Math.hypot(dx,dz);
+  const heading=distance>.08?Math.atan2(dx,dz):fallbackHeading;
+  const incoming=Math.atan2(point.x-before.x,point.z-before.z);
+  const outgoing=Math.atan2(after.x-point.x,after.z-point.z);
+  const moving=Math.hypot(point.x-before.x,point.z-before.z)>.08&&
+    Math.hypot(after.x-point.x,after.z-point.z)>.08;
+  const turn=moving?Math.atan2(Math.sin(outgoing-incoming),Math.cos(outgoing-incoming)):0;
+  return {...point,heading,speed:distance/Math.max(.01,afterTime-beforeTime),turn};
+}
