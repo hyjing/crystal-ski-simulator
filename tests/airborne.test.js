@@ -43,3 +43,38 @@ test('a sharp rising approach cannot trigger an immediate one-frame false launch
 test('manual jump requires 18 km/h and reports slow presses without launching later from a held button',()=>{for(const speed of [0,3,4.9]){const s={...fresh(),vz:speed,speed};stepAirborne(s,{jump:true},flat,1/120);assert.ok(!s.airborne);assert.equal(s.airEvent?.type,'jump-blocked');s.vz=s.speed=12;stepAirborne(s,{jump:true},flat,1/120);assert.ok(!s.airborne);}const s={...fresh(),vz:5,speed:5};pop(s);assert.equal(s.airborne,true);});
 test('a convex crest stays grounded below the natural launch speed even on an otherwise valid jump feature',()=>{const h=z=>1500+2*Math.exp(-z*z/8),terrain={surface:(_,z)=>h(z),gradient:(_,z)=>({x:0,z:-z*.5*Math.exp(-z*z/8)}),spacing:1};for(const speed of [5,8,11.9]){const s={...fresh(),z:-5,vz:speed,speed};for(let i=0;i<240;i++){s.vx=0;s.vz=s.speed=speed;stepAirborne(s,{},terrain,1/120);assert.ok(!s.airborne,`speed ${speed}`);}}});
 test('straight planar descents never auto-launch at any tested speed',()=>{for(const grade of [-.1,-.3,-.6])for(const speed of [12,20,35]){const terrain={surface:(_,z)=>1500+grade*z,gradient:()=>({x:0,z:grade}),spacing:5},s={...fresh(),vz:speed,speed};for(let i=0;i<240;i++){stepAirborne(s,{},terrain,1/120);assert.ok(!s.airborne);}}});
+
+test('sliding slowly off a tall ledge without input falls ballistically and crashes on flat snow',()=>{
+ const ledge={...flat,surface:(_,z)=>z<0?1518:1500},s={...fresh(),z:-1.5,vz:7,speed:7};
+ let takeoff,landing;
+ for(let i=0;i<360&&!landing;i++){
+  stepAirborne(s,{},ledge,1/120);
+  if(s.airEvent?.type==='takeoff')takeoff={...s.airEvent,y:s.airY,vy:s.airVy};
+  if(s.airEvent?.type==='land'||s.airEvent?.type==='crash')landing=s.airEvent;
+ }
+ assert.ok(takeoff);
+ assert.equal(takeoff.manual,false);
+ assert.ok(takeoff.y>1517.95&&takeoff.vy<=0);
+ assert.equal(landing?.type,'crash');
+ assert.equal(landing.reason,'impact');
+ assert.ok(landing.airTime>1.6&&landing.impact>16);
+ assert.equal(s.freestyleScore,0);
+});
+
+test('the same downward speed is cushioned by a matching downhill landing',()=>{
+ const cutToFlat={...flat,surface:(_,z)=>1500+Math.max(0,-z)*.85};
+ const slope={...flat,surface:(_,z)=>1500-.85*z};
+ for(const step of [1/30,1/120]){
+  const incoming={...fresh(),z:.01,vz:20,speed:20,airborne:true,airY:1500.009,airVy:-18,
+   flightTime:1.6,trickYaw:0,spinRate:0,grab:0,grabTime:0,launchHeight:1518,airPeak:0};
+  const hard={...incoming},soft={...incoming};
+  stepAirborne(hard,{},cutToFlat,step);
+  assert.equal(hard.airEvent?.type,'crash');
+  assert.equal(hard.airEvent.reason,'impact');
+  assert.ok(hard.z<.03,'stops at first contact with the flat');
+  assert.ok(!hard.airEvent.alignment,'skis were already aligned');
+  for(let i=0;i<10&&!soft.airEvent;i++)stepAirborne(soft,{},slope,step);
+  assert.equal(soft.airEvent?.quality,'clean');
+  assert.ok(soft.airEvent.impact<3);
+ }
+});

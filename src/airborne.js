@@ -6,10 +6,25 @@ export {landingQuality} from './landing.js';
 // Deliberate gameplay pop: retain real terrain, gravity and horizontal momentum.
 export const TAKEOFF={manualMinSpeed:5,naturalMinSpeed:12,confirmationTime:.05};
 export const jumpImpulse=speed=>5.2+1.4*clamp((speed-3)/17,0,1);
-function launch(s,terrain,manual){
- const g=terrain.gradient(s.x,s.z);s.airborne=true;s.airY=height(terrain,s.x,s.z)+(manual?.025:.006);s.airVy=g.x*s.vx+g.z*s.vz+(manual?jumpImpulse(Math.hypot(s.vx,s.vz)):0);
+function launch(s,terrain,manual,release){
+ const g=terrain.gradient(s.x,s.z);
+ s.airborne=true;
+ s.airY=release?.y??(height(terrain,s.x,s.z)+(manual?.025:.006));
+ s.airVy=(release?.vy??(g.x*s.vx+g.z*s.vz))+(manual?jumpImpulse(Math.hypot(s.vx,s.vz)):0);
  s.jumpQueued=0;s.jumpPreparation=0;s.airClearance=0;s.flightTime=0;s.trickYaw=0;s.spinRate=0;s.grabTime=0;s.grab=0;s.airPeak=0;s.launchHeight=s.airY;s.airEvent={type:'takeoff',manual};s.poling=0;s.naturalCandidate=0;
 }
+// A confirmed crest needs speed, but a skier can slide off an unsupported ledge slowly.
+function ledgeRelease(terrain,x,z,ground,nextGround,skier,dt){
+ const dx=skier.x-x,dz=skier.z-z,distance=Math.hypot(dx,dz);
+ if(distance<.001)return null;
+ const fx=dx/distance,fz=dz/distance;
+ const approach=(ground-height(terrain,x-fx*.7,z-fz*.7))/.7;
+ const vy=approach*distance/dt;
+ const y=ground+vy*dt-.5*PHYSICS.gravity*dt*dt;
+ const unsupported=y-nextGround;
+ return unsupported>.18?{y,vy:vy-PHYSICS.gravity*dt}:null;
+}
+
 export function deployGlider(s,terrain,duration){
  if(!terrain||s.crashRemaining||s.gliderUsed)return false;
  if(!s.airborne){
@@ -48,7 +63,21 @@ export function stepAirborne(s,input,terrain,dt,snow='packed'){
   if(queued){s.jumpQueued=Math.max(0,s.jumpQueued-dt);s.jumpPreparation=1-s.jumpQueued/.10;}else s.jumpPreparation=0;
   const manual=queued&&!s.jumpQueued&&speed>=TAKEOFF.manualMinSpeed-.5;
   if(!s.jumpCooldown&&(manual||natural))launch(s,terrain,manual);
-  else{if(s.landingRecover>0&&Number.isFinite(s.recoveryHeading))s.heading+=wrap(s.recoveryHeading-s.heading)*(1-Math.exp(-dt*4));if(jump&&speed<TAKEOFF.manualMinSpeed)s.airEvent={type:'jump-blocked',minSpeed:TAKEOFF.manualMinSpeed};stepSkier(s,input,terrain,dt,snow);s.airY=height(terrain,s.x,s.z);s.grab=Math.max(0,(s.grab||0)-dt*8);return s;}
+  else{
+   if(s.landingRecover>0&&Number.isFinite(s.recoveryHeading))s.heading+=wrap(s.recoveryHeading-s.heading)*(1-Math.exp(-dt*4));
+   if(jump&&speed<TAKEOFF.manualMinSpeed)s.airEvent={type:'jump-blocked',minSpeed:TAKEOFF.manualMinSpeed};
+   const x=s.x,z=s.z;
+   stepSkier(s,input,terrain,dt,snow);
+   const nextGround=height(terrain,s.x,s.z),release=ledgeRelease(terrain,x,z,h,nextGround,s,dt);
+   if(release){
+    launch(s,terrain,false,release);
+    s.airClearance=release.y-nextGround;
+   }else{
+    s.airY=nextGround;
+    s.grab=Math.max(0,(s.grab||0)-dt*8);
+   }
+   return s;
+  }
  }
  const gliding=s.gliderRemaining>0,gravity=PHYSICS.gravity*(gliding?.30:1);
  if(gliding){
@@ -64,14 +93,34 @@ export function stepAirborne(s,input,terrain,dt,snow='packed'){
  }
  const v=Math.hypot(s.vx,s.vz,s.airVy),cdA=PHYSICS.uprightCdA+(PHYSICS.tuckCdA-PHYSICS.uprightCdA)*(input.tuck?1:0),drag=Math.exp(-.5*PHYSICS.airDensity*cdA/PHYSICS.mass*v*dt);
  if(!gliding){s.vx*=drag;s.vz*=drag;}
- s.airVy*=drag;s.x+=s.vx*dt;s.z+=s.vz*dt;s.distance+=Math.hypot(s.vx,s.vz)*dt;
+ const startX=s.x,startZ=s.z,startY=s.airY;
+ s.airVy*=drag;
+ const startVy=s.airVy;
+ s.x+=s.vx*dt;s.z+=s.vz*dt;s.distance+=Math.hypot(s.vx,s.vz)*dt;
  s.airY+=s.airVy*dt-.5*gravity*dt*dt;s.airVy-=gravity*dt;s.flightTime+=dt;s.airPeak=Math.max(s.airPeak,s.airY-s.launchHeight);
  if(!gliding){s.spinRate+=(clamp(input.spin||0,-1,1)*8.0-s.spinRate)*(1-Math.exp(-dt*9));s.trickYaw+=s.spinRate*dt;}
  s.grab+=(Number(!!input.grab)-s.grab)*(1-Math.exp(-dt*10));if(input.grab)s.grabTime+=dt;
  s.tuck+=(Number(!!input.tuck)-s.tuck)*(1-Math.exp(-dt*8));s.poling=0;s.turn*=Math.exp(-dt*12);s.edgeRoll*=Math.exp(-dt*8);s.edgeAngle=Math.abs(s.edgeRoll);s.speed=gliding?Math.hypot(s.vx,s.vz):Math.hypot(s.vx,s.vz,s.airVy);
- const ground=height(terrain,s.x,s.z);s.airClearance=Math.max(0,s.airY-ground);const g=landingGradient(terrain,s.x,s.z),relative=s.airVy-g.x*s.vx-g.z*s.vz;
- if(s.airY<=ground&&relative<0){
-  const travel=Math.atan2(s.vx,s.vz),impact=-relative/Math.sqrt(1+g.x*g.x+g.z*g.z),touchdownHeading=wrap(s.heading+s.trickYaw),quality=landingQuality(touchdownHeading,travel,impact,Math.hypot(s.vx,s.vz),s.spinRate),halves=Math.round(Math.abs(s.trickYaw)/Math.PI);
+ let ground=height(terrain,s.x,s.z);
+ s.airClearance=Math.max(0,s.airY-ground);
+ if(s.airY<=ground){
+  // Find first contact in this frame rather than judging from a point already
+  // past the slope break, with the full frame of gravity added.
+  let before=0,contact=dt;
+  if(startY>height(terrain,startX,startZ))for(let i=0;i<8;i++){
+   const t=(before+contact)*.5;
+   const y=startY+startVy*t-.5*gravity*t*t;
+   if(y>height(terrain,startX+s.vx*t,startZ+s.vz*t))before=t;
+   else contact=t;
+  }
+  s.x=startX+s.vx*contact;s.z=startZ+s.vz*contact;
+  s.distance-=Math.hypot(s.vx,s.vz)*(dt-contact);
+  s.flightTime-=dt-contact;
+  s.airVy=startVy-gravity*contact;
+  ground=height(terrain,s.x,s.z);
+  const g=landingGradient(terrain,s.x,s.z,s.vx,s.vz);
+  const closing=g.x*s.vx+g.z*s.vz-s.airVy;
+  const travel=Math.atan2(s.vx,s.vz),impact=Math.max(0,closing)/Math.hypot(1,g.x,g.z),touchdownHeading=wrap(s.heading+s.trickYaw),quality=landingQuality(touchdownHeading,travel,impact,Math.hypot(s.vx,s.vz),s.spinRate),halves=Math.round(Math.abs(s.trickYaw)/Math.PI);
   const points=quality.clean&&s.flightTime>.18?50+halves*150+(s.grabTime>.16?100:0):0;
   const glider=Boolean(s.gliderUsed);
   s.freestyleScore+=points;s.airborne=false;s.gliderUsed=false;s.gliderRemaining=0;s.airY=ground;s.jumpCooldown=.45;s.naturalCandidate=0;s.heading=touchdownHeading;s.switchStance=!quality.crash&&quality.switchLanding;s.recoveryHeading=travel+(quality.switchLanding?Math.PI:0);s.crashSide=Math.sign(quality.difference)||1;

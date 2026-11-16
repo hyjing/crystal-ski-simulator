@@ -577,7 +577,7 @@ function updatePhysics(dt){
     if(event.points||charge||heal)toast(`平稳落地${event.points?` +${event.points}`:''}${charge?` · 充能 +${Number(charge.toFixed(1))}`:''}${heal?` · 生命 +${Math.ceil(heal)}`:''}`);
   }
   if(skier.airEvent?.type==='jump-blocked')toast('起跳需要至少 18 km/h · 先撑杖或顺坡加速');
-  if(skier.airEvent?.type==='land'&&skier.airEvent.quality==='recover')toast('落地稍偏 · 屈膝缓冲、搓雪恢复');
+  if(skier.airEvent?.type==='land'&&skier.airEvent.quality==='recover')toast(skier.airEvent.impact>=8?'落地偏重 · 屈膝缓冲':'落地稍偏 · 搓雪恢复');
   if(skier.airEvent?.type==='crash'){patrol?.goal?.landing(skier.airEvent);const reasons={impact:'触地冲击过大',crossed:'高速横板落地',combined:'横板与冲击叠加',rotation:'空中旋转尚未收住'};toast(`落地摔倒：${reasons[skier.airEvent.reason]||'失去支撑'} · 正在起身`);}elapsed+=dt;peakSpeed=Math.max(peakSpeed,skier.speed);totalDistance=skier.distance;
   const kickEvent=kick.step(dt,skier,canBeKicked,playLaunchLanding,resolveChaseKick);
   if(kickEvent?.type==='hit'){
@@ -996,7 +996,7 @@ function updateUI(){
     $('altitude').textContent=Math.round(skier.airborne?skier.airY:terrain.sample(skier.x,skier.z));
     const g=terrain.gradient(skier.x,skier.z);$('slope').textContent=Math.round(Math.atan(Math.hypot(g.x,g.z))*180/Math.PI);
     $('timer').textContent=clockFormat(elapsed);$('distance').textContent=`${Math.round(totalDistance)} m`;
-    $('stance').textContent=skier.crashRemaining>0?(skier.crashReason==='traffic'?'碰撞倒地':skier.crashReason==='structure'?'撞到设施':'落地失衡'):skier.airborne?`腾空${skier.grab>.3?' · 抓板':''}`:skier.poling>.2?'双杖蹬撑':skier.edge>.5&&skier.speed<.35?'立刃停稳':skier.edge>.5?`${skier.slip>.5||skier.edgeBrake?'横板搓雪':'加强立刃'} · ${Math.round(skier.edgeAngle*180/Math.PI)}°`:skier.tuck>.5?'收身 · 低风阻':skier.slip>1.5?'侧滑控速':Math.abs(skier.turn)>.15?'沿弧转弯':'直滑';
+    $('stance').textContent=skier.crashRemaining>0?(skier.crashReason==='traffic'?'碰撞倒地':skier.crashReason==='structure'?'撞到设施':skier.landingFailure?.reason==='impact'?'落地冲击过大':'落地失衡'):skier.airborne?`腾空${skier.grab>.3?' · 抓板':''}`:skier.poling>.2?'双杖蹬撑':skier.edge>.5&&skier.speed<.35?'立刃停稳':skier.edge>.5?`${skier.slip>.5||skier.edgeBrake?'横板搓雪':'加强立刃'} · ${Math.round(skier.edgeAngle*180/Math.PI)}°`:skier.tuck>.5?'收身 · 低风阻':skier.slip>1.5?'侧滑控速':Math.abs(skier.turn)>.15?'沿弧转弯':'直滑';
     $('freestyle').textContent=`特技 ${skier.freestyleScore||0} 分${skier.airborne?' · '+Math.max(0,skier.airY-terrain.surface(skier.x,skier.z)).toFixed(1)+' m 腾空':''}${skier.switchStance?' · Switch':''}${skier.collisionCount?' · 碰撞 '+skier.collisionCount+' 次':''}`;
     $('performance').textContent=`${Math.round(1/frameTime)} FPS`;$('performance').title=`近180帧：P95 ${frameP95.toFixed(1)} ms · 最大 ${frameMax.toFixed(1)} ms · 超25ms ${slowFrames}帧 · CPU雪友 ${(traffic?.lastPoseMs||0).toFixed(2)} ms · CPU粉雪 ${powderMs.toFixed(2)} ms · 物理 ${physicsMs.toFixed(2)} ms · 渲染 ${renderScale.toFixed(2)}×`;
   }
