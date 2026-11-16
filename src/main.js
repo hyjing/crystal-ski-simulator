@@ -1,7 +1,7 @@
 import {qualityScale,adaptQuality} from './render-quality.js';
 import {RunGhost,ghostKey,readGhost} from './run-ghost.js';
 import {GhostSkier} from './ghost-skier.js';
-import {ITEM_UPGRADES,ITEM_CAPACITY,ITEM_STACK_LIMIT,itemStacks,canStoreItem,KNOCKDOWN_XP,KNOCKDOWN_COINS,TALENTS,RunExperience,levelProgress,upgradePoints,chooseUpgrade,buyItem,readProgress,saveProgress} from './progression.js';
+import {ITEM_UPGRADES,ITEM_CAPACITY,ITEM_STACK_LIMIT,itemStacks,canStoreItem,KNOCKDOWN_XP,KNOCKDOWN_COINS,TALENTS,UPGRADE_CAP,RunExperience,levelProgress,upgradePoints,upgradeRank,describeUpgrade,chooseUpgrade,buyItem,readProgress,saveProgress} from './progression.js';
 import {LUCKY_SECTORS,luckyWidth,luckyShade,routeBranchCandidates,chaseDirection} from './route-experience.js';
 import {mapProjection} from './minimap.js';
 import {PatrolRun,PATROL_ITEMS,MEDKIT,SUPPLY,MAX_HEALTH,resolveChaseRoute,longestChaseRoute} from './patrol-mode.js';
@@ -850,7 +850,8 @@ function updateUI(){
       button.disabled=!item||mode!=='running'||Boolean(skier.crashRemaining);
       const label=`${slot+1} · ${item?labelText:'空槽'}`;
       button.setAttribute('aria-label',label);
-      const upgrade=patrol.itemUpgrades.has(stack?.type)?` · 已强化：${ITEM_UPGRADES[stack.type].description}`:'';
+      const rank=item?upgradeRank(patrol.itemUpgrades,stack.type):0;
+      const upgrade=rank?` · 强化 ${rank} 级：${describeUpgrade(stack.type,rank)}`:'';
       button.title=item?`${label} · ${item.description}${upgrade}`:label;
     }
   }
@@ -1054,18 +1055,23 @@ function renderProgress(){
   $('progress-xp').textContent=`${stats.xp} / ${stats.needed} XP`;
   $('progress-meter').max=stats.needed;
   $('progress-meter').value=stats.xp;
-  $('talent-note').textContent=points?`有 ${points} 点强化可用。每点选一条，下趟生效。`:'每次升级获得 1 点，可选属性或强化单件道具。';
+  const choice=$('upgrade-choice'),previous=choice.value;
   const groups=[
-    ['属性',Object.entries(TALENTS).map(([id,v])=>[id,v.name,v.description])],
-    ['道具',Object.entries(ITEM_UPGRADES).map(([id,v])=>[id,PATROL_ITEMS[id].name,`${v.kind} · ${v.description}`])],
+    ['属性',Object.entries(TALENTS).map(([id,v])=>[id,v.name])],
+    ['道具',Object.keys(ITEM_UPGRADES).map(id=>[id,PATROL_ITEMS[id].name])],
   ];
-  $('upgrade-choice').innerHTML=groups.map(([group,options])=>`<optgroup label="${group}">${options.map(([id,name,detail])=>{
-    const owned=riderProgress.upgrades.includes(id);
-    return `<option value="${id}"${owned?' disabled':''}>${name} · ${owned?'已强化':detail}</option>`;
+  const options=groups.flatMap(([,items])=>items);
+  const available=options.find(([id])=>upgradeRank(riderProgress.upgrades,id)<UPGRADE_CAP);
+  $('talent-note').textContent=available
+    ?`${points?points+' 点强化可用。':'每次升级获得 1 点。'} 每项最高 ${UPGRADE_CAP} 级，下趟生效。`
+    :'所有词条均已满级。';
+  choice.innerHTML=groups.map(([group,items])=>`<optgroup label="${group}">${items.map(([id,name])=>{
+    const rank=upgradeRank(riderProgress.upgrades,id),maxed=rank===UPGRADE_CAP;
+    const detail=describeUpgrade(id,Math.min(rank+1,UPGRADE_CAP));
+    return `<option value="${id}"${maxed?' disabled':''}>${name} · ${rank}/${UPGRADE_CAP} · ${maxed?'满级':'下一级'} ${detail}</option>`;
   }).join('')}</optgroup>`).join('');
-  const available=groups.flatMap(([,options])=>options).find(([id])=>!riderProgress.upgrades.includes(id));
-  $('upgrade-choice').value=available?.[0]??'';
-  $('choose-upgrade').disabled=!points||!available;
+  choice.value=previous&&upgradeRank(riderProgress.upgrades,previous)<UPGRADE_CAP?previous:available?.[0]??'';
+  updateUpgradeButton();
   $('shop-coins').textContent=`${riderProgress.coins} 金币`;
   const supplies=itemStacks(riderProgress.supplies);
   $('shop-supplies').textContent=supplies.length
@@ -1077,11 +1083,19 @@ function renderProgress(){
   if(prior)$('shop-item').value=prior;
   updateShopButton();
 }
+function updateUpgradeButton(){
+  const id=$('upgrade-choice').value,rank=upgradeRank(riderProgress.upgrades,id);
+  const button=$('choose-upgrade');
+  button.disabled=!id||!upgradePoints(riderProgress);
+  button.textContent=id?`强化至 ${rank+1} 级 · 1 点`:'全部满级';
+}
+$('upgrade-choice').addEventListener('change',updateUpgradeButton);
 function updateShopButton(){
   const id=$('shop-item').value;
   const full=!canStoreItem(riderProgress.supplies,id);
   const affordable=riderProgress.coins>=ITEM_UPGRADES[id].price;
-  const upgrade=riderProgress.upgrades.includes(id)?` · 已强化：${ITEM_UPGRADES[id].description}`:'';
+  const rank=upgradeRank(riderProgress.upgrades,id);
+  const upgrade=rank?` · 强化 ${rank} 级：${describeUpgrade(id,rank)}`:'';
   $('shop-description').textContent=PATROL_ITEMS[id].description+upgrade;
   const button=$('buy-supply');
   button.disabled=full||!affordable;

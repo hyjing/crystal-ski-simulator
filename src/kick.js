@@ -1,5 +1,5 @@
 import {clamp} from './physics.js';
-import {DEFAULT_TALENTS} from './progression.js';
+import {DEFAULT_TALENTS,upgradeBonus} from './progression.js';
 
 export const KICK_RANGE = 3.2;
 export const AVALANCHE_RADIUS = 20;
@@ -26,7 +26,7 @@ export class SkierKick {
     this.readyAt=0;
     this.recoverAt=0;
     this.charge=0;
-    this.baseCooldown=COOLDOWN-(talents.includes('agility')?.75:0);
+    this.baseCooldown=COOLDOWN-upgradeBonus(talents,'agility');
     this.action=null;
   }
 

@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {RunExperience,levelProgress,readProgress,saveProgress,chooseUpgrade,upgradePoints,buyItem,itemStacks} from '../src/progression.js';
+import {RunExperience,levelProgress,readProgress,saveProgress,chooseUpgrade,upgradePoints,upgradeRank,buyItem,itemStacks} from '../src/progression.js';
 import {PatrolRun} from '../src/patrol-mode.js';
 import {SkierKick} from '../src/kick.js';
 
@@ -27,22 +27,38 @@ test('clean landings and escapes earn capped XP and a run only settles once',()=
   assert.deepEqual(caught.settle(profile,false,true),{xp:8,coins:6,knockdowns:1});
 });
 
-test('level points each buy one unique attribute or item upgrade and legacy XP is preserved',()=>{
+test('repeated upgrades charge one point at increasing XP thresholds and stop at rank three',()=>{
+  const profile=readProgress(null);
+  assert.equal(chooseUpgrade(profile,'banana'),false);
+  const thresholds=[60,140,240];
+  for(const [index,xp] of thresholds.entries()){
+    profile.xp=xp-1;
+    assert.equal(chooseUpgrade(profile,'banana'),false);
+    assert.equal(levelProgress(profile.xp).needed,60+index*20);
+    profile.xp=xp;
+    assert.ok(chooseUpgrade(profile,'banana'));
+    assert.equal(upgradeRank(profile.upgrades,'banana'),index+1);
+    assert.equal(upgradePoints(profile),0);
+  }
+  profile.xp=360;
+  assert.equal(chooseUpgrade(profile,'banana'),false);
+  assert.equal(upgradePoints(profile),1);
+  assert.ok(chooseUpgrade(profile,'recovery'));
+});
+
+test('saved one-time upgrades become rank one and repeat ranks survive reload within budget',()=>{
   const values=new Map();
   const storage={getItem:key=>values.get(key),setItem:(key,value)=>values.set(key,value)};
-  const fresh=readProgress(null);
-  assert.equal(chooseUpgrade(fresh,'agility'),false);
   saveProgress(storage,{xp:120,talents:['recovery','agility','stamina']});
+  assert.deepEqual(readProgress(storage),{xp:120,coins:0,upgrades:[],supplies:[]});
+  saveProgress(storage,{xp:240,coins:80,upgrades:['banana'],supplies:['banana']});
   const profile=readProgress(storage);
-  assert.deepEqual(profile,{xp:120,coins:0,upgrades:[],supplies:[]});
-  assert.equal(upgradePoints(profile),1);
+  assert.equal(upgradeRank(profile.upgrades,'banana'),1);
   assert.ok(chooseUpgrade(profile,'banana'));
-  assert.equal(chooseUpgrade(profile,'recovery'),false);
-  profile.xp=140;
-  assert.equal(chooseUpgrade(profile,'banana'),false);
-  assert.ok(chooseUpgrade(profile,'recovery'));
   saveProgress(storage,profile);
-  assert.deepEqual(readProgress(storage).upgrades,['banana','recovery']);
+  assert.deepEqual(readProgress(storage),{xp:240,coins:80,upgrades:['banana','banana'],supplies:['banana']});
+  saveProgress(storage,{xp:360,upgrades:['bogus','banana','banana','banana','banana','recovery','agility']});
+  assert.deepEqual(readProgress(storage).upgrades,['banana','banana','banana','recovery']);
 });
 
 test('shop checks price and persists three stacks of up to three consumables',()=>{
@@ -89,4 +105,31 @@ test('selected talents affect damage, medkit healing, and the next run kick cool
   kick.reset(['agility']);
   assert.ok(kick.start(player,[{x:0,z:98}]));
   assert.equal(kick.cooldown,4.25);
+});
+
+
+test('higher ranks reach item counts, area, duration, and attribute effects in the run',()=>{
+  const upgrades=[
+    'banana','banana','banana','snowball','snowball','snowball','pulse','pulse','pulse',
+    'mist','mist','mist','stamina','stamina','recovery','recovery','agility','agility','agility',
+  ];
+  const run=new PatrolRun(route,()=>true,()=>true,upgrades,upgrades);
+  const caster={...player,speed:24,vz:24};
+  const use=type=>{run.inventory=[type];assert.ok(run.use(caster));};
+  use('banana');
+  assert.equal(run.traps.length,4);
+  assert.equal(new Set(run.traps.map(trap=>trap.z)).size,4);
+  use('snowball');
+  assert.equal(run.bombs.length,4);
+  assert.equal(new Set(run.bombs.map(bomb=>bomb.end.x)).size,4);
+  use('pulse');
+  assert.equal(run.waves[0].radius,34);
+  assert.equal(run.waves[0].duration,.62);
+  use('mist');
+  assert.equal(run.effects.mist.duration,6);
+  assert.equal(run.damageRate,9.375);
+  assert.equal(run.medkitHeal,55);
+  const kick=new SkierKick(()=>0,()=>true);
+  kick.reset(upgrades);
+  assert.equal(kick.baseCooldown,2.75);
 });

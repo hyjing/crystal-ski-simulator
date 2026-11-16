@@ -2,7 +2,7 @@ import {clamp, nearestOnRoute, PHYSICS} from './physics.js';
 import {pointAlongRoute} from './terrain.js';
 import {AVALANCHE_DURATION,AVALANCHE_RADIUS} from './kick.js';
 import {sweptContact} from './traffic-brain.js';
-import {DEFAULT_TALENTS,ITEM_STACK_LIMIT,canStoreItem,itemStacks} from './progression.js';
+import {DEFAULT_TALENTS,ITEM_STACK_LIMIT,canStoreItem,itemStacks,upgradeBonus} from './progression.js';
 
 export const PATROL_ROUTE_ID = 'crystal-angry-skiers';
 export const resolveChaseRoute = id => id === 'crystal-patrol-descent' ? PATROL_ROUTE_ID : id;
@@ -59,8 +59,8 @@ export class PatrolRun {
     this.stars = 0;
     this.peakStars = 0;
     this.contact = 0;
-    this.damageRate=DAMAGE_PER_SECOND*(talents.includes('stamina')?.85:1);
-    this.medkitHeal=MEDKIT_HEAL+(talents.includes('recovery')?10:0);
+    this.damageRate=DAMAGE_PER_SECOND*(1-upgradeBonus(talents,'stamina')/100);
+    this.medkitHeal=MEDKIT_HEAL+upgradeBonus(talents,'recovery');
     this.escapeArmed=false;
     this.escapes=0;
     this.health = MAX_HEALTH;
@@ -68,7 +68,7 @@ export class PatrolRun {
     this.bombs=[];
     this.blasts=[];
     this.waves=[];
-    this.itemUpgrades=new Set(itemUpgrades);
+    this.itemUpgrades=itemUpgrades.slice();
     this.nextDash=7;
     this.dash=null;
     this.evadeUntil = 0;
@@ -210,35 +210,35 @@ export class PatrolRun {
     const type=this.stacks[slot]?.type;
     if(!type||this.outcome||player.crashRemaining)return false;
     this.inventory.splice(this.inventory.lastIndexOf(type),1);
-    const upgraded=this.itemUpgrades.has(type);
+    const bonus=upgradeBonus(this.itemUpgrades,type);
     const {x,z,heading}=player;
     const travel=Math.hypot(player.vx,player.vz)>2?Math.atan2(player.vx,player.vz):heading;
     const behind=(distance,offset=0)=>({x:x-Math.sin(travel)*distance+Math.cos(travel)*offset,
       z:z-Math.cos(travel)*distance-Math.sin(travel)*offset});
     if(type==='banana'){
-      const spots=upgraded?[[3,-1.55],[6,1.55]]:[[3,0]];
+      const spots=Array.from({length:1+bonus},(_,i)=>[(i+1)*3,bonus?1.55*(i%2?1:-1):0]);
       for(const [distance,offset] of spots){
         const point=[behind(distance,offset),behind(distance*.55,offset),{x,z}].find(this.clear)??{x,z};
         this.traps.push({...point,until:this.time+PATROL_ITEMS.banana.duration});
       }
     }else if(type==='avalanche'||type==='snowball'){
       const icy=type==='snowball';
-      const offsets=icy&&upgraded?[-3,3]:[0];
+      const offsets=icy?Array.from({length:1+bonus},(_,i)=>6*i-3*bonus):[0];
       const frozen=icy?new Set():null;
       for(const offset of offsets){
         const end=[behind(icy?14:9,offset),behind(6,offset),behind(3),{x,z}].find(this.clear)??{x,z};
         this.bombs.push({type,x,z,end,start:this.time,until:this.time+(icy?.26:.35),
           height:player.airborne?Math.max(0,player.airClearance||0):0,
-          radius:icy?12:AVALANCHE_RADIUS+4+(upgraded?5:0),heading:travel,frozen});
+          radius:icy?12:AVALANCHE_RADIUS+4+bonus,heading:travel,frozen});
       }
     }else{
-      const duration=PATROL_ITEMS[type].duration+(upgraded?({boost:.3,decoy:1,shield:.8,mist:1}[type]??0):0);
+      const duration=PATROL_ITEMS[type].duration+(type==='pulse'?0:bonus);
       const side=player.turn<0?1:-1;
       const center=type==='decoy'
         ?[behind(4,12*side),behind(4,-12*side),behind(5)].find(this.clear)??{x,z}
         :{x,z};
       const effect={type,start:this.time,until:this.time+duration,duration,...center,heading};
-      if(type==='pulse')this.waves.push({...effect,radius:PATROL_ITEMS.pulse.radius+(upgraded?5:0),hit:new Set()});
+      if(type==='pulse')this.waves.push({...effect,radius:PATROL_ITEMS.pulse.radius+bonus,hit:new Set()});
       else{
         if(type!=='decoy'&&this.effects[type])effect.until=this.effects[type].until+duration;
         this.effects[type]=effect;
