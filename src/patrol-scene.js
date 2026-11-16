@@ -67,7 +67,9 @@ export class PatrolScene {
     });
     this.shield=new THREE.Mesh(new THREE.SphereGeometry(1.05,20,12),
       new THREE.MeshBasicMaterial({color:PATROL_ITEMS.shield.color,wireframe:true,transparent:true,opacity:.25,depthWrite:false}));
+    this.shield.visible=false;
     this.root.add(this.shield);
+    const guardMaterial=this.shield.material.clone();
     this.statusIcons={
       chase:statusIcon('◆','#ff8192'),dash:statusIcon('!', '#ffc26c'),
       guard:statusIcon('⬡','#83dcff'),blocked:statusIcon('⬡','#fff4ad'),
@@ -85,7 +87,7 @@ export class PatrolScene {
       tag.visible=false;
       this.root.add(tag);
       actor.userData.chaseMarker=tag;
-      const guard=this.shield.clone();
+      const guard=new THREE.Mesh(this.shield.geometry,guardMaterial);
       guard.visible=false;
       this.root.add(guard);
       actor.userData.guard=guard;
@@ -94,6 +96,8 @@ export class PatrolScene {
 
   select(run){
     this.run=run;
+    this.shield.visible=false;
+    for(const actor of this.actors)actor.userData.guard.visible=false;
     this.root.visible=Boolean(run);
     for(const token of this.tokens)this.root.remove(token);
     this.tokens=run?run.pickups.map(p=>{

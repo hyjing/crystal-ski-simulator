@@ -948,7 +948,7 @@ function animate(time){
   }
   patrolScene?.update(mode==='paused'?0:dt,Boolean(patrol)&&['running','paused','drone','inspection','finished','help'].includes(mode),skier);
   if(mode!=='paused')updateAthlete(dt);
-  const replay=ghostEnabled&&mode==='running'?ghostPosition(bestGhost,elapsed):null;
+  const replay=ghostEnabled&&!patrol&&mode==='running'?ghostPosition(bestGhost,elapsed):null;
   ghostMesh.visible=Boolean(replay);
   if(replay)ghostMesh.position.set(replay.x,replay.y+.52,replay.z);
   updateCamera(dt);snowEffects.update(dt,skier,mode==='running',snow,athlete.userData.poleContact,Boolean(patrol?.effects.boost));snowEffects.mesh.material.opacity=snow==='soft'?.29:.65;liftPassengers?.update(liftClock,camera,gear.npcs);stationLife?.update(stationClock,skier,resortUpdate.allCarriers,gear.npcs,mode==='paused'?0:dt);stationAudio?.update(scene.userData.liftTerminals||[],mode==='drone'?camera.position:skier,soundOn&&worldActive,time/1000,liftJourney.phase==='boarding');
