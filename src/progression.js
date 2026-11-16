@@ -45,10 +45,15 @@ export function itemStacks(items){
   return [...stacks].map(([type,count])=>({type,count}));
 }
 
-export function canStoreItem(items,type){
+export function itemRoom(items,type){
   const stacks=itemStacks(items);
   const existing=stacks.find(stack=>stack.type===type);
-  return existing?existing.count<ITEM_STACK_LIMIT:stacks.length<ITEM_CAPACITY;
+  if(existing)return ITEM_STACK_LIMIT-existing.count;
+  return stacks.length<ITEM_CAPACITY?ITEM_STACK_LIMIT:0;
+}
+
+export function canStoreItem(items,type){
+  return itemRoom(items,type)>0;
 }
 export const KNOCKDOWN_XP=8;
 export const KNOCKDOWN_COINS=6;
@@ -72,11 +77,17 @@ export function chooseUpgrade(profile,id){
   return true;
 }
 
-export function buyItem(profile,id){
+export function shopStock(profile,id){
   const item=Object.hasOwn(ITEM_UPGRADES,id)&&ITEM_UPGRADES[id];
-  if(!item||profile.coins<item.price||!canStoreItem(profile.supplies,id))return false;
-  profile.coins-=item.price;
-  profile.supplies.push(id);
+  if(!item)return {room:0,affordable:0,max:0};
+  const room=itemRoom(profile.supplies,id),affordable=Math.floor(profile.coins/item.price);
+  return {room,affordable,max:Math.min(room,affordable)};
+}
+
+export function buyItem(profile,id,quantity=1){
+  if(!Number.isInteger(quantity)||quantity<1||quantity>shopStock(profile,id).max)return false;
+  profile.coins-=ITEM_UPGRADES[id].price*quantity;
+  for(let i=0;i<quantity;i++)profile.supplies.push(id);
   return true;
 }
 

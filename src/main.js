@@ -1,7 +1,7 @@
 import {qualityScale,adaptQuality} from './render-quality.js';
 import {RunGhost,ghostKey,readGhost} from './run-ghost.js';
 import {GhostSkier} from './ghost-skier.js';
-import {ITEM_UPGRADES,ITEM_CAPACITY,ITEM_STACK_LIMIT,itemStacks,canStoreItem,KNOCKDOWN_XP,KNOCKDOWN_COINS,TALENTS,UPGRADE_CAP,RunExperience,levelProgress,upgradePoints,upgradeRank,describeUpgrade,chooseUpgrade,buyItem,readProgress,saveProgress} from './progression.js';
+import {ITEM_UPGRADES,ITEM_CAPACITY,ITEM_STACK_LIMIT,itemStacks,shopStock,KNOCKDOWN_XP,KNOCKDOWN_COINS,TALENTS,UPGRADE_CAP,RunExperience,levelProgress,upgradePoints,upgradeRank,describeUpgrade,chooseUpgrade,buyItem,readProgress,saveProgress} from './progression.js';
 import {LUCKY_SECTORS,luckyWidth,luckyShade,routeBranchCandidates,chaseDirection} from './route-experience.js';
 import {mapProjection} from './minimap.js';
 import {PatrolRun,PATROL_ITEMS,MEDKIT,SUPPLY,MAX_HEALTH,resolveChaseRoute,longestChaseRoute} from './patrol-mode.js';
@@ -37,7 +37,7 @@ import {applyMountainIdentity} from './mountain-identity.js';
 import {sceneryProfile} from './scenery-profile.js';
 import {MOUNTAINS,resolveMountain,mountainAsset} from './mountains.js';
 const mountainId=resolveMountain(new URLSearchParams(location.search).get('mountain')),mountain=MOUNTAINS[mountainId];
-const isCrystal=mountainId==='crystal';
+const isCrystal=mountainId==='crystal',isVirtual=Boolean(mountain.virtual);
 const asset=name=>`${import.meta.env.BASE_URL}${mountainAsset(mountainId,name)}`;
 import {stepAirborne} from './airborne.js';
 import {recoverLook,crestView,clearCameraSight,liftOrbit} from './camera-look.js';
@@ -103,11 +103,7 @@ const yAt=(x,z)=>(powder?powder.surface(x,z):terrain.surface(x,z))-baseElevation
 function toast(text){ $('toast').textContent=text; $('toast').classList.add('show'); clearTimeout(toastTimeout); toastTimeout=setTimeout(()=>$('toast').classList.remove('show'),3500); }
 function random(seed=42){ return ()=>{seed=(Math.imul(seed,1664525)+1013904223)|0;return (seed>>>0)/4294967296;}; }
 
-async function init(){
-  $('start').disabled=true;
-  $('challenge').disabled=true;
-  $('mountain').value=mountainId;applyMountainIdentity(document,mountainId);
-  if(mountain.referenceMap){$('map-layer').textContent='参考图';document.querySelector('.map-attribution').textContent='© OSM · Mapzen / Canada OGL';document.querySelector('.map-attribution').href='https://github.com/tilezen/joerd/blob/master/docs/attribution.md';}
+async function loadMappedResort(){
   const response=await fetch(asset('dem.json'));
   if(!response.ok) throw new Error('无法载入高程数据，请刷新重试。');
   terrain=createTerrain(await response.json());
@@ -117,7 +113,7 @@ async function init(){
     const heights=new Float32Array(bytes);if(heights.length!==detail.width*detail.height)throw new Error('detail size');
     terrain=createTerrain({...detail,heights});
   }catch(error){console.warn('Detailed ground unavailable, using base DEM',error);}
-  if(mountain.area)terrain.treeMinElevation=0;terrain.sceneryProfile=sceneryProfile(mountainId);
+  if(mountain.area)terrain.treeMinElevation=0;
   const trailResponse=await fetch(asset('trails.json'));
   if(!trailResponse.ok)throw new Error('无法载入雪道数据');
   const mappedRoutes=getRoutes(terrain,await trailResponse.json());
@@ -148,55 +144,19 @@ async function init(){
     const lucky=routes.find(r=>r.id==='lucky-shot');
     if(lucky){lucky.pisteWidth=luckyWidth;lucky.landmarks=LUCKY_SECTORS;}
   }
-  for(const run of routes)if(run.patrolOnly)run.branches=routeBranchCandidates(run,terrain);
-  $('patrol-option').hidden=!routes.some(r=>r.patrolOnly);
-  trailMusic=assignTrailMusic(mountainId,routes.map(r=>r.id));
-  scene=new THREE.Scene();scene.userData.sceneryProfile=sceneryProfile(mountainId); scene.background=new THREE.Color('#cbdce9'); scene.fog=new THREE.Fog('#cbdce9',12000,65000);
-  camera=new THREE.PerspectiveCamera(58,innerWidth/innerHeight,1,65000);
-  renderer=new THREE.WebGLRenderer({antialias:true, powerPreference:'high-performance'});
-  renderer.setSize(innerWidth,innerHeight); renderer.setPixelRatio(renderScale);
-  renderer.outputColorSpace=THREE.SRGBColorSpace; renderer.toneMapping=THREE.ACESFilmicToneMapping; renderer.toneMappingExposure=1;
-  renderer.shadowMap.enabled=true;renderer.shadowMap.type=THREE.PCFSoftShadowMap;
-  $('world').appendChild(renderer.domElement);
-  renderer.domElement.addEventListener('pointerdown',e=>{if(mode==='intro')return;lookIdle=0;if(lookDrag)return;lookDrag={x:e.clientX,y:e.clientY,id:e.pointerId};renderer.domElement.setPointerCapture(e.pointerId);});
-  renderer.domElement.addEventListener('pointermove',e=>{if(!lookDrag||lookDrag.id!==e.pointerId)return;lookIdle=0;if(sceneryView&&droneMode==='free'){drone.yaw-=(e.clientX-lookDrag.x)*.004;drone.pitch=clamp(drone.pitch-(e.clientY-lookDrag.y)*.003,-1.25,1.25);}else{lookYaw-=(e.clientX-lookDrag.x)*.004;lookPitch=clamp(lookPitch-(e.clientY-lookDrag.y)*.003,-.45,.65);}lookDrag={x:e.clientX,y:e.clientY,id:e.pointerId};});
-  renderer.domElement.addEventListener('wheel',e=>{if(mode==='intro')return;e.preventDefault();lookDistance=clamp(lookDistance+e.deltaY*.007,-8.5,8);},{passive:false});
-  for(const event of ['pointerup','pointercancel','lostpointercapture'])renderer.domElement.addEventListener(event,e=>{if(lookDrag?.id===e.pointerId){lookDrag=null;lookIdle=0;}});
-  hemisphere=new THREE.HemisphereLight('#c2d9ff','#586b8a',1.2);scene.add(hemisphere);
-  sun=new THREE.DirectionalLight('#fff3de',3.1);sun.castShadow=true;sun.shadow.mapSize.set(touchDevice?2048:3072,touchDevice?2048:3072);
-  Object.assign(sun.shadow.camera,{left:-240,right:240,top:240,bottom:-240,near:1,far:1400});sun.shadow.bias=-.0002;sun.shadow.normalBias=.06;sun.shadow.camera.updateProjectionMatrix();scene.add(sun,sun.target);
-  await addAlpineSky(scene,renderer);
-  weather=new MountainWeather(scene,renderer,sun,hemisphere);
-  const [canopy,canopyReference,satellite]=await Promise.all([new THREE.TextureLoader().loadAsync(asset('canopy.png')),fetch(asset('landcover.json')).then(r=>r.json()),mountain.pack==='whistler'?new THREE.TextureLoader().loadAsync(asset('satellite.jpg')).catch(error=>{console.warn('Satellite surface unavailable',error);return null;}):null]);
-  hasSatellite=!!satellite;if(hasSatellite){$('imagery-credit').classList.remove('hidden');$('map-layer').textContent='卫星图';}
-  const centerE=terrain.originUTM[0]+(terrain.width-1)*terrain.spacing/2,centerN=terrain.originUTM[1]-(terrain.height-1)*terrain.spacing/2;
-  aerialBounds={minX:canopyReference.extent.xmin-centerE,maxX:canopyReference.extent.xmax-centerE,minZ:centerN-canopyReference.extent.ymax,maxZ:centerN-canopyReference.extent.ymin};
-  addDetailedGround(scene,terrain,renderer,canopy,canopyReference.extent,satellite);
-  powder=new PowderSurface(scene,terrain,renderer);
-  const [landcover,firTexture,vegetation]=await Promise.all([
-    fetch(asset('landcover.json')).then(r=>{if(!r.ok)throw new Error('林地数据载入失败');return r.json();}),
-    new THREE.TextureLoader().loadAsync(`${import.meta.env.BASE_URL}assets/snow-fir.png`),
-    fetch(asset('vegetation.json')).then(r=>{if(!r.ok)throw new Error('林冠数据载入失败');return r.json();})
-  ]);
-  routes.forEach(r=>{r.spawn=liftExitSpawn(terrain,r,infrastructure);});
-  treePositions=addForest(scene,terrain,[...mappedRoutes.filter(r=>!isCrystal||r.id!=='lucky-shot'),...routes,...routes.flatMap(r=>r.branches??[])],landcover,firTexture,vegetation,stationAreas);resortUpdate=addResort(scene,terrain,infrastructure,stationAreas);addStationStructures(scene,terrain,infrastructure,stationAreas,resortUpdate.serviceStops);
-  structures=new StructureWorld(scene);
-  for(const run of routes)if(run.branches){
-    run.branches=run.branches.filter(branch=>branch.points.every(p=>!structures.blocked(p.x,p.z,terrain.surface(p.x,p.z),false)));
-  }
-  kick=new SkierKick(yAt,patrolSpawnClear);
-  const terminals=scene.userData.liftTerminals||[];
-  alignLiftServiceStops(terminals,resortUpdate.allCarriers,routes,liftWalkClear);
-  addLiftServiceMarkers(scene,terrain,terminals);
-  powder.setStationStops(terminals.flatMap(terminal=>terminal.service?[terminal.service]:[]));
-  challengeRenderer=new ChallengeRenderer(scene,terrain);
-  addAlpineDetails(scene,terrain,mappedRoutes,stationAreas);
-  await createAthlete();snowEffects=new SnowEffects(scene,isCrystal?terrain:{...terrain,surface:(x,z)=>powder.surface(x,z)});
-  if(isCrystal)snowEffects.spraySurface=(x,z)=>powder.surface(x,z);
-  createMapBackground();
-  speedRenderer=new SpeedRenderer(renderer,scene,camera);
-  aerialImage=new Image();aerialImage.onload=()=>{if(skier)drawMap();};aerialImage.src=asset(hasSatellite?'satellite.jpg':'aerial.jpg');
-  // Load real far terrain progressively; retain the coarse grid if detailed assets fail.
+  return {mappedRoutes,infrastructure};
+}
+
+function generatedCanopy({width,height,values}){
+  const pixels=new Uint8Array(values.length);
+  for(let z=0;z<height;z++)for(let x=0;x<width;x++)pixels[(height-1-z)*width+x]=Math.round(values[z*width+x]*255);
+  const canopy=new THREE.DataTexture(pixels,width,height,THREE.RedFormat);
+  canopy.minFilter=canopy.magFilter=THREE.LinearFilter;
+  canopy.needsUpdate=true;
+  return canopy;
+}
+
+function loadMappedScenery(){
   fetch(`${import.meta.env.BASE_URL}${mountain.context||(mountain.area?'data/snoqualmie/context/dem.json':'data/context-dem.json')}`).then(r=>{if(!r.ok)throw new Error('context DEM');return r.json();}).then(async context=>{
     let coarse=addContextTerrain(scene,context,terrain);
     if(mountain.pack==='whistler'){
@@ -219,13 +179,107 @@ async function init(){
       scene.remove(coarse);coarse.geometry.dispose();coarse.material.dispose();$('scenery').disabled=false;
     }catch(error){console.warn('Detailed scenery unavailable',error);toast('高清远景暂未载入，已保留基础远山');}
   }).catch(()=>toast('远山数据载入失败，近处地形仍可滑行'));
+}
+
+async function init(){
+  $('start').disabled=true;
+  $('challenge').disabled=true;
+  $('mountain').value=mountainId;applyMountainIdentity(document,mountainId);
+  if(isVirtual)$('loading').textContent='正在生成白岬雪山…';
+  if(mountain.referenceMap){$('map-layer').textContent='参考图';document.querySelector('.map-attribution').textContent='© OSM · Mapzen / Canada OGL';document.querySelector('.map-attribution').href='https://github.com/tilezen/joerd/blob/master/docs/attribution.md';}
+  const generated=isVirtual?(await import('./chase-mountain.js')).createChaseMountain():null;
+  let mappedRoutes,infrastructure;
+  if(generated){
+    terrain=practiceTerrain(generated.terrain);
+    routes=generated.routes;
+    route=routes[0];
+    mappedRoutes=routes;
+    infrastructure=generated.infrastructure;
+    $('challenge').value='patrol';
+    for(const option of $('challenge').options)option.hidden=option.value!=='patrol';
+    $('map-layer').hidden=true;
+    document.querySelector('.map-attribution').hidden=true;
+    document.querySelector('.terrain-caption a').hidden=true;
+    $('caption-source').textContent=mountain.elevationLabel;
+  }else{
+    ({mappedRoutes,infrastructure}=await loadMappedResort());
+  }
+  terrain.sceneryProfile=sceneryProfile(mountainId);
+  for(const run of routes)if(run.patrolOnly&&(!generated||run.halfWidth<22))run.branches=routeBranchCandidates(run,terrain);
+  $('patrol-option').hidden=!routes.some(r=>r.patrolOnly);
+  trailMusic=assignTrailMusic(mountainId,routes.map(r=>r.id));
+  scene=new THREE.Scene();scene.userData.sceneryProfile=sceneryProfile(mountainId); scene.background=new THREE.Color('#cbdce9'); scene.fog=new THREE.Fog('#cbdce9',12000,65000);
+  camera=new THREE.PerspectiveCamera(58,innerWidth/innerHeight,1,65000);
+  renderer=new THREE.WebGLRenderer({antialias:true, powerPreference:'high-performance'});
+  renderer.setSize(innerWidth,innerHeight); renderer.setPixelRatio(renderScale);
+  renderer.outputColorSpace=THREE.SRGBColorSpace; renderer.toneMapping=THREE.ACESFilmicToneMapping; renderer.toneMappingExposure=1;
+  renderer.shadowMap.enabled=true;renderer.shadowMap.type=THREE.PCFSoftShadowMap;
+  $('world').appendChild(renderer.domElement);
+  renderer.domElement.addEventListener('pointerdown',e=>{if(mode==='intro')return;lookIdle=0;if(lookDrag)return;lookDrag={x:e.clientX,y:e.clientY,id:e.pointerId};renderer.domElement.setPointerCapture(e.pointerId);});
+  renderer.domElement.addEventListener('pointermove',e=>{if(!lookDrag||lookDrag.id!==e.pointerId)return;lookIdle=0;if(sceneryView&&droneMode==='free'){drone.yaw-=(e.clientX-lookDrag.x)*.004;drone.pitch=clamp(drone.pitch-(e.clientY-lookDrag.y)*.003,-1.25,1.25);}else{lookYaw-=(e.clientX-lookDrag.x)*.004;lookPitch=clamp(lookPitch-(e.clientY-lookDrag.y)*.003,-.45,.65);}lookDrag={x:e.clientX,y:e.clientY,id:e.pointerId};});
+  renderer.domElement.addEventListener('wheel',e=>{if(mode==='intro')return;e.preventDefault();lookDistance=clamp(lookDistance+e.deltaY*.007,-8.5,8);},{passive:false});
+  for(const event of ['pointerup','pointercancel','lostpointercapture'])renderer.domElement.addEventListener(event,e=>{if(lookDrag?.id===e.pointerId){lookDrag=null;lookIdle=0;}});
+  hemisphere=new THREE.HemisphereLight('#c2d9ff','#586b8a',1.2);scene.add(hemisphere);
+  sun=new THREE.DirectionalLight('#fff3de',3.1);sun.castShadow=true;sun.shadow.mapSize.set(touchDevice?2048:3072,touchDevice?2048:3072);
+  Object.assign(sun.shadow.camera,{left:-240,right:240,top:240,bottom:-240,near:1,far:1400});sun.shadow.bias=-.0002;sun.shadow.normalBias=.06;sun.shadow.camera.updateProjectionMatrix();scene.add(sun,sun.target);
+  await addAlpineSky(scene,renderer);
+  weather=new MountainWeather(scene,renderer,sun,hemisphere);
+  const textureLoader=new THREE.TextureLoader();
+  const [landcover,firTexture,vegetation,canopy,satellite]=await Promise.all([
+    generated?.landcover??fetch(asset('landcover.json')).then(r=>r.json()),
+    textureLoader.loadAsync(`${import.meta.env.BASE_URL}assets/snow-fir.png`),
+    generated?null:fetch(asset('vegetation.json')).then(r=>r.json()),
+    generated?generatedCanopy(generated.landcover):textureLoader.loadAsync(asset('canopy.png')),
+    mountain.pack==='whistler'?textureLoader.loadAsync(asset('satellite.jpg')).catch(error=>{
+      console.warn('Satellite surface unavailable',error);return null;
+    }):null,
+  ]);
+  hasSatellite=!!satellite;
+  if(hasSatellite){$('imagery-credit').classList.remove('hidden');$('map-layer').textContent='卫星图';}
+  const centerE=terrain.originUTM[0]+(terrain.width-1)*terrain.spacing/2,centerN=terrain.originUTM[1]-(terrain.height-1)*terrain.spacing/2;
+  const {extent}=landcover;
+  aerialBounds={minX:extent.xmin-centerE,maxX:extent.xmax-centerE,minZ:centerN-extent.ymax,maxZ:centerN-extent.ymin};
+  addDetailedGround(scene,terrain,renderer,canopy,extent,satellite);
+  powder=new PowderSurface(scene,terrain,renderer);
+  if(!generated)routes.forEach(r=>{r.spawn=liftExitSpawn(terrain,r,infrastructure);});
+  const forestRoutes=isVirtual?routes:[...mappedRoutes.filter(r=>!isCrystal||r.id!=='lucky-shot'),...routes];
+  treePositions=addForest(scene,terrain,[...forestRoutes,...routes.flatMap(r=>r.branches??[])],landcover,firTexture,vegetation,stationAreas);
+  if(!generated){
+    resortUpdate=addResort(scene,terrain,infrastructure,stationAreas);
+    addStationStructures(scene,terrain,infrastructure,stationAreas,resortUpdate.serviceStops);
+  }
+  structures=new StructureWorld(scene);
+  for(const run of routes)if(run.branches){
+    run.branches=run.branches.filter(branch=>branch.points.every(p=>!structures.blocked(p.x,p.z,terrain.surface(p.x,p.z),false)));
+  }
+  kick=new SkierKick(yAt,patrolSpawnClear);
+  if(!generated){
+    const terminals=scene.userData.liftTerminals||[];
+    alignLiftServiceStops(terminals,resortUpdate.allCarriers,routes,liftWalkClear);
+    addLiftServiceMarkers(scene,terrain,terminals);
+    powder.setStationStops(terminals.flatMap(terminal=>terminal.service?[terminal.service]:[]));
+  }
+  challengeRenderer=new ChallengeRenderer(scene,terrain);
+  addAlpineDetails(scene,terrain,mappedRoutes,stationAreas);
+  await createAthlete();snowEffects=new SnowEffects(scene,isCrystal?terrain:{...terrain,surface:(x,z)=>powder.surface(x,z)});
+  if(isCrystal)snowEffects.spraySurface=(x,z)=>powder.surface(x,z);
+  createMapBackground();
+  speedRenderer=new SpeedRenderer(renderer,scene,camera);
+  if(generated){
+    const scenery=addContextTerrain(scene,generated.context,terrain);
+    scenery.name='Whitepeak distant ridges';
+    $('scenery').disabled=false;
+  }else{
+    aerialImage=new Image();aerialImage.onload=()=>{if(skier)drawMap();};aerialImage.src=asset(hasSatellite?'satellite.jpg':'aerial.jpg');
+    loadMappedScenery();
+  }
   createSkiTraffic(scene,{...terrain,surface:(x,z)=>powder.surface(x,z)},{stationAreas,infrastructure,crystal:isCrystal,
     clearSite:isCrystal?p=>!structures.blocked(p.x,p.z,terrain.surface(p.x,p.z))&&!(treePositions.nearby?.(p.x,p.z)||[]).some(t=>Math.hypot(t.x-p.x,t.z-p.z)<1.3):undefined,
     onStructuresChanged:()=>structures.rebuild()}).then(t=>{traffic=t;traffic.reset(route,skier,regularTrafficRoutes());weather.prepareMaterials();}).catch(error=>console.warn('Other skiers unavailable',error));
-  createStationLife(scene,scene.userData.liftTerminals||[],(x,z)=>terrain.surface(x,z),isCrystal).then(s=>{stationLife=s;weather.prepareMaterials();}).catch(error=>console.warn('Station staff unavailable',error));
-  createLiftPassengers(scene,resortUpdate).then(p=>{liftPassengers=p;p.select(route.liftId);weather.prepareMaterials();}).catch(error=>console.warn('Lift riders unavailable',error));
+  if(!generated)createStationLife(scene,scene.userData.liftTerminals||[],(x,z)=>terrain.surface(x,z),isCrystal).then(s=>{stationLife=s;weather.prepareMaterials();}).catch(error=>console.warn('Station staff unavailable',error));
+  if(!generated)createLiftPassengers(scene,resortUpdate).then(p=>{liftPassengers=p;p.select(route.liftId);weather.prepareMaterials();}).catch(error=>console.warn('Lift riders unavailable',error));
   const requestedRoute=routes.find(r=>r.id===resolveChaseRoute(new URLSearchParams(location.search).get('route')));
-  selectRoute(requestedRoute?.id||route.id);weather.update(0,camera,athlete.position);weather.snowfall.mesh.visible=true;speedRenderer.prepare();weather.snowfall.mesh.visible=false;$('loading').classList.add('hidden'); $('start').disabled=false;$('challenge').disabled=false;
+  selectRoute(requestedRoute?.id||route.id);weather.update(0,camera,athlete.position);weather.snowfall.mesh.visible=true;speedRenderer.prepare();weather.snowfall.mesh.visible=false;$('loading').classList.add('hidden'); $('start').disabled=false;$('challenge').disabled=isVirtual;
   if(import.meta.env.DEV&&new URLSearchParams(location.search).has('visual-qa')){
     const panel=document.createElement('div');Object.assign(panel.style,{position:'fixed',left:'350px',top:'95px',zIndex:40,display:'flex',gap:'6px'});
     for(const [id,label,routeId,fraction] of [['slope','QA：坡面','green-valley',.38],['forest','QA：林间','mr-magoo',.48],['queens','QA：Queens','queens-run',.30],['hop','QA：跳跃','queens-run',.25]]){
@@ -445,7 +499,7 @@ function finishRun(caught=false){
   $('ghost-result').textContent=best?'本机最佳轨迹已保存'
     :previous?`本机最佳 ${previous.time.toFixed(1)} 秒${patrol?` · 生命 ${Math.ceil(previous.health)}/100`:''}`:'';
   $('board-result').hidden=!lift;
-  $('lift-route-note').textContent=caught?'':lift
+  $('lift-route-note').textContent=caught||isVirtual?'':lift
     ?`${lift.lower.name} · 靠站后自动登乘，行程可跳过。${lift.destination?'':'到站后选择下一条线路。'}`
     :'此处没有可登乘的缆车，可直接重开或选线。';
   $('result').showModal();
@@ -747,7 +801,7 @@ function drawMap(){
     points.forEach((p,i)=>{const m=point(p);if(i&&!p.break)ctx.lineTo(m.x,m.y);else ctx.moveTo(m.x,m.y);});
     ctx.strokeStyle=color;ctx.lineWidth=size;ctx.setLineDash(dash);ctx.stroke();ctx.setLineDash([]);
   }
-  for(const other of routes)if(other!==route&&!other.patrolOnly)line(other.points,aerial?'#9ebdcc':'#94ac8b',1.4,[4,4]);
+  for(const other of routes)if(other!==route&&(isVirtual||!other.patrolOnly))line(other.points,aerial?'#9ebdcc':'#94ac8b',1.4,[4,4]);
   line(route.points,aerial?'#ddfaab':'#2e5847',4);
   for(const branch of route.branches??[])line(branch.points,'#cc8e34',2,[4,4]);
   if(ghostEnabled&&bestGhostLine)line(bestGhostLine,'#53b8d2',1.5,[3,4]);
@@ -1091,20 +1145,30 @@ function updateUpgradeButton(){
 }
 $('upgrade-choice').addEventListener('change',updateUpgradeButton);
 function updateShopButton(){
-  const id=$('shop-item').value;
-  const full=!canStoreItem(riderProgress.supplies,id);
-  const affordable=riderProgress.coins>=ITEM_UPGRADES[id].price;
+  const id=$('shop-item').value,quantity=$('shop-quantity');
+  const stock=shopStock(riderProgress,id),listed=Number(quantity.value)||1;
+  quantity.innerHTML=Array.from({length:ITEM_STACK_LIMIT},(_,i)=>{
+    const count=i+1;
+    return `<option value="${count}"${count>stock.max?' disabled':''}>${count} 件</option>`;
+  }).join('');
+  quantity.disabled=!stock.max;
+  quantity.value=stock.max?String(Math.min(listed,stock.max)):'';
   const rank=upgradeRank(riderProgress.upgrades,id);
   const upgrade=rank?` · 强化 ${rank} 级：${describeUpgrade(id,rank)}`:'';
   $('shop-description').textContent=PATROL_ITEMS[id].description+upgrade;
+  const owned=riderProgress.supplies.filter(type=>type===id).length;
   const button=$('buy-supply');
-  button.disabled=full||!affordable;
-  button.textContent=full?'该道具放不下':affordable?'购买':'金币不足';
+  button.disabled=!stock.max;
+  button.textContent=stock.max
+    ?`购买 ${quantity.value} 件 · ${Number(quantity.value)*ITEM_UPGRADES[id].price} 金币`
+    :!stock.room?(owned?'此道具已叠满':'三个格子均已占用'):'金币不足';
 }
 $('shop-item').addEventListener('change',()=>{
   $('shop-status').textContent='';
+  $('shop-quantity').value='1';
   updateShopButton();
 });
+$('shop-quantity').addEventListener('change',updateShopButton);
 function openProgress(fromResult=false){
   const dialog=$('progress-dialog');
   $('shop-status').textContent='';
@@ -1130,15 +1194,16 @@ $('choose-upgrade').addEventListener('click',()=>{
 });
 $('buy-supply').addEventListener('click',()=>{
   const id=$('shop-item').value;
-  if(!buyItem(riderProgress,id)){
+  const quantity=Number($('shop-quantity').value);
+  if(!buyItem(riderProgress,id,quantity)){
     updateShopButton();
     return;
   }
   saveProgress(progressStorage,riderProgress);
   renderProgress();
-  $('shop-status').textContent=`已买入 ${PATROL_ITEMS[id].name}`;
+  $('shop-status').textContent=`已买入 ${PATROL_ITEMS[id].name} ×${quantity}`;
 });
-$('mountain').addEventListener('change',e=>{const url=new URL(location.href);url.searchParams.set('mountain',resolveMountain(e.target.value));url.searchParams.delete('visual-qa');url.searchParams.delete('record-demo');location.assign(url.href);});
+$('mountain').addEventListener('change',e=>{const url=new URL(location.href);url.searchParams.set('mountain',resolveMountain(e.target.value));url.searchParams.delete('route');url.searchParams.delete('visual-qa');url.searchParams.delete('record-demo');location.assign(url.href);});
 $('start').addEventListener('click',startRun);$('again').addEventListener('click',startRun);$('choose').addEventListener('click',goIntro);
 $('pause').addEventListener('click',pauseRun);$('resume').addEventListener('click',resumeRun);$('pause-restart').addEventListener('click',startRun);$('pause-exit').addEventListener('click',goIntro);
 $('pause-dialog').addEventListener('cancel',e=>{e.preventDefault();resumeRun();});

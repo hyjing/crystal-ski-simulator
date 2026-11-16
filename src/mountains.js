@@ -1,4 +1,5 @@
 export const MOUNTAINS={
+ 'whitepeak':{name:'白岬雪山',coordinates:'虚拟雪场',brand:'WHITEPEAK',elevationLabel:'原创地形',virtual:true},
  'whistler':{name:'Whistler Mountain',coordinates:'50.059° N / 122.957° W',pack:'whistler',area:'whistler',elevationLabel:'Mapzen Terrain Tiles',context:'data/whistler/context/dem.json',referenceMap:true},
  'blackcomb':{name:'Blackcomb Mountain',coordinates:'50.091° N / 122.880° W',pack:'whistler',area:'blackcomb',elevationLabel:'Mapzen Terrain Tiles',context:'data/whistler/context/dem.json',referenceMap:true},
  crystal:{name:'Crystal Mountain',coordinates:'46.935° N / 121.474° W',prefix:'data/crystal-',context:'data/context-dem.json',contextAerial:'data/context-aerial.jpg',rainier:true},
@@ -8,4 +9,4 @@ export const MOUNTAINS={
  'snoqualmie-alpental':{name:'Snoqualmie · Alpental',coordinates:'47.440° N / 121.435° W',area:'alpental'},
 };
 export const resolveMountain=id=>Object.hasOwn(MOUNTAINS,id)?id:'crystal';
-export function mountainAsset(id,name){const m=MOUNTAINS[resolveMountain(id)];if(m.pack==='whistler'){const aliases={'trails.json':'network.json','trail-network.json':'network.json','lift-runs.json':'runs.json'};return `data/whistler/${(aliases[name]||name==='infrastructure.json')?m.area:'shared'}/${aliases[name]||name}`;}if(!m.area)return `${m.prefix}${name}`;const aliases={'trails.json':'network.json','trail-network.json':'network.json','lift-runs.json':'runs.json'};return `data/snoqualmie/${m.area}/${aliases[name]||name}`;}
+export function mountainAsset(id,name){const m=MOUNTAINS[resolveMountain(id)];if(m.virtual)return null;if(m.pack==='whistler'){const aliases={'trails.json':'network.json','trail-network.json':'network.json','lift-runs.json':'runs.json'};return `data/whistler/${(aliases[name]||name==='infrastructure.json')?m.area:'shared'}/${aliases[name]||name}`;}if(!m.area)return `${m.prefix}${name}`;const aliases={'trails.json':'network.json','trail-network.json':'network.json','lift-runs.json':'runs.json'};return `data/snoqualmie/${m.area}/${aliases[name]||name}`;}

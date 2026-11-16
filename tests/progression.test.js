@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {RunExperience,levelProgress,readProgress,saveProgress,chooseUpgrade,upgradePoints,upgradeRank,buyItem,itemStacks} from '../src/progression.js';
+import {RunExperience,levelProgress,readProgress,saveProgress,chooseUpgrade,upgradePoints,upgradeRank,buyItem,itemStacks,shopStock} from '../src/progression.js';
 import {PatrolRun} from '../src/patrol-mode.js';
 import {SkierKick} from '../src/kick.js';
 
@@ -132,4 +132,22 @@ test('higher ranks reach item counts, area, duration, and attribute effects in t
   const kick=new SkierKick(()=>0,()=>true);
   kick.reset(upgrades);
   assert.equal(kick.baseCooldown,2.75);
+});
+
+test('bulk purchases stack in a full three-kind loadout and reject over-budget orders atomically',()=>{
+  const profile={coins:24,supplies:['shield','boost','banana']};
+  assert.deepEqual(shopStock(profile,'banana'),{room:2,affordable:2,max:2});
+  assert.equal(shopStock(profile,'pulse').room,0);
+  for(const blocked of [0,1.5,3]){
+    assert.equal(buyItem(profile,'banana',blocked),false);
+    assert.deepEqual(profile,{coins:24,supplies:['shield','boost','banana']});
+  }
+  assert.ok(buyItem(profile,'banana',2));
+  assert.equal(profile.coins,0);
+  assert.deepEqual(itemStacks(profile.supplies),[
+    {type:'shield',count:1},{type:'boost',count:1},{type:'banana',count:3},
+  ]);
+  profile.coins=100;
+  assert.equal(buyItem(profile,'banana'),false);
+  assert.equal(buyItem(profile,'pulse'),false);
 });

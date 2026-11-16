@@ -382,7 +382,7 @@ test('the quantity specialty throws two snowballs that slow pursuers without lau
 });
 
 test('each additional ski area exposes its longest mapped run as a shareable chase',()=>{
-  for(const id of Object.keys(MOUNTAINS).filter(id=>id!=='crystal')){
+  for(const id of Object.keys(MOUNTAINS).filter(id=>id!=='crystal'&&!MOUNTAINS[id].virtual)){
     const read=name=>JSON.parse(fs.readFileSync(new URL('../public/'+mountainAsset(id,name),import.meta.url)));
     const raw=createTerrain(read('dem.json')),data=read('lift-runs.json'),infrastructure=read('infrastructure.json');
     const terrain=prepareStationTerrain(preparePisteTerrain(raw,read('trail-network.json')),getLiftRuns(raw,data),infrastructure).terrain;
