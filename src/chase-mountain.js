@@ -51,14 +51,33 @@ function routeElevation(trail,t){
 }
 
 const skyline=[
-  [-5100,3900,2400,1850,1900,.38],[-6800,5200,1900,2100,1610,-.23],
-  [-2600,6200,1900,2400,1500,-.31],[-800,7200,1750,2290,1780,.31],
-  [1900,7800,2700,2050,2390,.4],[4050,7400,2150,2010,1650,-.40],
-  [6700,4800,2300,1700,2080,-.40],[9100,6500,2700,2000,2470,.55],
-  [-8400,-1900,2400,2850,2350,.25],[-5000,-4500,2110,1880,2180,-.5],
-  [5700,-5700,2480,2130,2500,.38],[12700,8800,3000,2410,3130,-.3],
-  [-11500,10200,2450,2510,2770,.20],[3900,13100,2800,3200,2730,.18],
+  // Dark foothills leave a low opening toward the main faces.
+  [-5300,4600,2400,2950,1750,.30],[-7500,6200,2770,3600,2250,-.26],
+  [6100,6500,2550,2900,1750,-.4],[9500,7300,2940,3450,2350,.55],
+  [-7200,-4300,2800,3700,2550,.26],[5900,-6000,2510,3500,2100,-.42],
+  // The southern range has a central high massif, flanked by sharper spurs.
+  [-13500,15100,5300,5500,3700,.30],[-9250,16700,6240,6000,4200,-.27],
+  [-4950,17200,7620,5900,4200,-.29],[-2100,17800,5520,5600,4550,.32],
+  [320,18400,8330,6100,4670,.37],[3300,17700,7080,5400,4200,-.32],
+  [7400,16800,5830,5400,3790,-.33],[10900,17200,7310,6200,4470,.47],
+  [16000,18700,5480,5800,4650,.26],[21200,20000,5870,5500,4300,-.25],
+  // A high ridge also fills the up-valley view and the opening panorama.
+  [-11800,-13800,5250,5900,4450,.36],[-7300,-16900,6920,6050,4900,-.27],
+  [-3100,-17750,7710,5800,4650,-.38],[750,-17400,6520,5800,4440,.32],
+  [3210,-18250,8070,6200,4980,.37],[7350,-16900,6450,6000,4250,-.26],
+  [13000,-15300,5720,5750,4500,.42],
+  // Distant side walls and high summits recede behind the first range.
+  [-17900,3400,6250,4970,5150,.45],[17600,1900,6650,5200,5700,-.31],
+  [-19500,21900,6460,5750,4520,-.32],[5100,24200,7170,5610,4010,.24],
+  [14300,-22500,6550,5850,4270,-.23],[-2550,-23300,6350,5700,4000,.28],
 ].map(([x,z,height,w,d,angle])=>({x,z,height,w,d,c:Math.cos(angle),s:Math.sin(angle)}));
+
+export function whitepeakGlacier(x,z){
+  const south=hill(z-14300,4100)*hill(x+4200-720*Math.sin(z/2650),650);
+  const eastern=hill(z-13700,4300)*hill(x-6600+610*Math.cos(z/2680),570);
+  const north=hill(z+14100,3950)*hill(x-3200-900*Math.sin(z/2680),570);
+  return Math.max(south,eastern,north);
+}
 
 function mountainRanges(x,z){
   if(Math.max(Math.abs(x),Math.abs(z))<3150)return 0;
@@ -69,11 +88,12 @@ function mountainRanges(x,z){
     const radius=Math.hypot(a,b);
     if(radius>=1)continue;
     const angle=Math.atan2(b,a),rib=.07*Math.sin(angle*5+radius*4)+.045*Math.sin(angle*9-radius*9);
-    const cone=Math.max(0,1-radius+rib*radius*(1-radius));
+    const cone=Math.max(0,1-radius+2.4*rib*radius*(1-radius));
     const gullies=(.06*Math.sin(x/240+z/410)+.035*Math.sin(x/110-z/185))*Math.sin(Math.PI*radius);
-    height=Math.max(height,peak.height*(cone**1.1+gullies));
+    height=Math.max(height,peak.height*(cone**1.02+gullies));
   }
-  return height*smooth((Math.max(Math.abs(x),Math.abs(z))-3150)/950);
+  const trough=whitepeakGlacier(x,z)*500*smooth(height/1450)*(1-smooth((height-4600)/2800));
+  return (height-trough)*smooth((Math.max(Math.abs(x),Math.abs(z))-3150)/950);
 }
 
 function alpineBase(x,z,t){
@@ -141,6 +161,6 @@ export function createChaseMountain(){
   const [xmin,ymax]=local.originUTM;
   const extent={xmin,ymax,xmax:xmin+(WIDTH-1)*SPACING,ymin:ymax-(HEIGHT-1)*SPACING};
   const landcover={width:WIDTH,height:HEIGHT,extent,values:local.values};
-  const context=topography(257,257,128);
-  return {terrain,routes,landcover,context,infrastructure:emptyInfrastructure};
+  const context=topography(385,385,144);
+  return {terrain,routes,landcover,context,glacier:whitepeakGlacier,infrastructure:emptyInfrastructure};
 }

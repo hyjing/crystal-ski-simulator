@@ -266,7 +266,7 @@ async function init(){
   createMapBackground();
   speedRenderer=new SpeedRenderer(renderer,scene,camera);
   if(generated){
-    addWhitepeakBackdrop(scene,generated.context,terrain);
+    addWhitepeakBackdrop(scene,generated.context,terrain,generated.glacier);
     $('scenery').disabled=false;
   }else{
     aerialImage=new Image();aerialImage.onload=()=>{if(skier)drawMap();};aerialImage.src=asset(hasSatellite?'satellite.jpg':'aerial.jpg');
@@ -731,15 +731,25 @@ function updateCamera(dt,snap=false){
     if(droneMode==='free'){
       const key=(a,b)=>Number(keys.has(a))-Number(keys.has(b));
       flyDrone(drone,{forward:key('KeyW','KeyS')+key('ArrowUp','ArrowDown'),right:key('KeyD','KeyA')+key('ArrowRight','ArrowLeft'),up:key('KeyE','KeyQ'),fast:keys.has('ShiftLeft')||keys.has('ShiftRight')},scene.userData.droneTerrain||terrain,dt);
-      camera.position.set(drone.x,drone.y,drone.z);camera.lookAt(drone.x+Math.sin(drone.yaw)*Math.cos(drone.pitch)*100,drone.y+Math.sin(drone.pitch)*100,drone.z+Math.cos(drone.yaw)*Math.cos(drone.pitch)*100);displayLook.copy(camera.position);camera.fov=58;camera.updateProjectionMatrix();return;
+      camera.position.set(drone.x,drone.y,drone.z);camera.lookAt(drone.x+Math.sin(drone.yaw)*Math.cos(drone.pitch)*100,drone.y+Math.sin(drone.pitch)*100,drone.z+Math.cos(drone.yaw)*Math.cos(drone.pitch)*100);displayLook.copy(camera.position);camera.fov=isVirtual?67:58;camera.updateProjectionMatrix();return;
     }
     const heading=skier.speed>1?Math.atan2(skier.vx,skier.vz):skier.heading,angle=heading+lookYaw,distance=clamp(48+lookDistance*3,22,90);
     targetCamera.set(p.x-Math.sin(angle)*distance,p.y+clamp(28+lookPitch*45,10,65),p.z-Math.cos(angle)*distance);targetCamera.y=Math.max(targetCamera.y,yAt(targetCamera.x,targetCamera.z)+8);lookTarget.copy(p);lookTarget.y+=1;
+    if(isVirtual){
+      lookTarget.x+=Math.sin(angle)*36;lookTarget.z+=Math.cos(angle)*36;
+      lookTarget.y+=17+lookPitch*30;
+    }
   }else if(mode==='intro'){
     // View from the valley back toward the ridge. The panel occupies the left third.
     const mid=route.points[Math.floor(route.points.length/2)];
-    targetCamera.set(mid.x+780,yAt(mid.x,mid.z)+670,mid.z+680);
-    lookTarget.set(mid.x-120,yAt(mid.x,mid.z)+40,mid.z-100);
+    if(isVirtual){
+      const elevation=yAt(mid.x,mid.z);
+      targetCamera.set(mid.x+520,elevation+480,mid.z+1150);
+      lookTarget.set(mid.x-260,elevation+270,mid.z-4200);
+    }else{
+      targetCamera.set(mid.x+780,yAt(mid.x,mid.z)+670,mid.z+680);
+      lookTarget.set(mid.x-120,yAt(mid.x,mid.z)+40,mid.z-100);
+    }
   }else if(view==='overview'){
     const start=route.points[0],goal=route.points.at(-1),station=Math.hypot(p.x-start.x,p.z-start.z)<150?start:Math.hypot(p.x-goal.x,p.z-goal.z)<150?goal:null;
     if(station){targetCamera.set(station.x+75,yAt(station.x,station.z)+52,station.z+75);lookTarget.set(station.x,yAt(station.x,station.z)+3,station.z);}else{targetCamera.set(p.x+180,p.y+460,p.z+280);lookTarget.copy(p);}
@@ -780,7 +790,9 @@ function updateCamera(dt,snap=false){
   }else camera.position.lerp(targetCamera,a);
   displayLook.lerp(lookTarget,a);
   if(!liftView()&&crestCamera>.05&&!sceneryView&&view==='follow'&&mode!=='intro')camera.position.y=Math.max(camera.position.y,clearCameraSight(terrain,camera.position,displayLook));camera.lookAt(displayLook);if(!liftView()&&!sceneryView&&mode!=='intro'&&view==='follow')camera.rotateZ(-skier.turn*skier.edge*.022);
-  const fov=sceneryView?58:58+(mode==='intro'?0:Math.min(skier.speed*.28,11)+skier.tuck*2);
+  const panorama=isVirtual&&(sceneryView||mode==='intro');
+  const baseFov=panorama?68:isVirtual&&view==='follow'&&mode!=='equipment'?62:58;
+  const fov=baseFov+(mode==='intro'||sceneryView?0:Math.min(skier.speed*.28,11)+skier.tuck*2);
   camera.fov=THREE.MathUtils.lerp(camera.fov,fov,a);camera.updateProjectionMatrix();
 }
 

@@ -75,20 +75,27 @@ export function addContextTerrain(scene,context,local,texture,rainier,regional){
   return addGrid(scene,context,local,texture,exclude,{x:-7500,z:4000,halfX:6500,halfZ:4000});
 }
 
-export function addWhitepeakBackdrop(scene,context,local){
-  const mesh=addContextTerrain(scene,context,local);
+export function addWhitepeakBackdrop(scene,context,local,glacier=()=>0){
+  const halfX=(local.width-1)*local.spacing/2,halfZ=(local.height-1)*local.spacing/2;
+  const exclude=[{west:-halfX+180,east:halfX-180,north:-halfZ+180,south:halfZ-180}];
+  const ridgeDetail=[{x:500,z:17400,halfX:10000,halfZ:4200},{x:0,z:-16500,halfX:8900,halfZ:4200}];
+  const mesh=addGrid(scene,context,local,null,exclude,ridgeDetail);
   mesh.name='Whitepeak granite ridges and snowfields';
   const geometry=mesh.geometry,positions=geometry.attributes.position,normals=geometry.attributes.normal;
   const colors=new Float32Array(positions.count*3);
-  const stone=new THREE.Color('#536779'),snow=new THREE.Color('#e3f0f8'),valley=new THREE.Color('#667c8b');
+  const stone=new THREE.Color('#455568'),snow=new THREE.Color('#eef8ff');
+  const valley=new THREE.Color('#546a70'),ice=new THREE.Color('#a7d7e7'),veils=new THREE.Color('#91aeca');
   const rock=new THREE.Color(),shade=new THREE.Color();
   for(let i=0;i<positions.count;i++){
     const x=positions.getX(i),z=positions.getZ(i),elevation=positions.getY(i)+1200;
-    const slope=1-normals.getY(i),ridge=Math.sin(x*.003+z*.002)*120+Math.sin(z*.008-x*.005)*55;
-    const exposed=THREE.MathUtils.smoothstep(slope,.17,.40);
-    const snowCover=THREE.MathUtils.smoothstep(elevation+ridge,2040,3120)*(1-.80*exposed);
+    const slope=1-normals.getY(i),ridge=Math.sin(x*.003+z*.002)*240+Math.sin(z*.008-x*.005)*105;
+    const exposed=THREE.MathUtils.smoothstep(slope,.24,.50);
+    const snowCover=THREE.MathUtils.smoothstep(elevation+ridge,2750,4900)*(1-.77*exposed);
+    const iceField=glacier(x,z)*THREE.MathUtils.smoothstep(elevation,2050,3350)*(1-exposed*.76);
     rock.copy(valley).lerp(stone,exposed);
-    shade.copy(rock).lerp(snow,snowCover);
+    shade.copy(rock).lerp(snow,snowCover).lerp(ice,iceField*.86);
+    const far=THREE.MathUtils.smoothstep(Math.hypot(x,z),6500,24500);
+    shade.lerp(veils,far*(.28-.20*snowCover));
     shade.toArray(colors,i*3);
   }
   geometry.setAttribute('color',new THREE.BufferAttribute(colors,3));

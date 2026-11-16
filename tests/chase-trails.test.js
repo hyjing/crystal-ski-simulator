@@ -71,11 +71,16 @@ test('frost and fire trigger a one-time thermal hit, and mirage feeds a separate
   assert.equal(target.mirage,null);
 });
 
-test('Whitepeak has a broad skyline and vertex-colored distant snowfields',()=>{
-  const {terrain,context}=createChaseMountain();
-  assert.ok((context.width-1)*context.spacing>=32000);
-  assert.ok(context.heights.some(elevation=>elevation>4200));
-  const backdrop=addWhitepeakBackdrop(new THREE.Scene(),context,terrain);
+test('Whitepeak frames monumental north and south faces with tinted snowfields',()=>{
+  const {terrain,context,glacier}=createChaseMountain();
+  assert.ok((context.width-1)*context.spacing>=55000);
+  const middle=Math.floor(context.height/2)*context.width;
+  assert.ok(context.heights.subarray(0,middle).some(elevation=>elevation>9250));
+  assert.ok(context.heights.subarray(middle).some(elevation=>elevation>9500));
+  const foreground=terrain.sample(0,0);
+  assert.ok(foreground<2400);
+  assert.ok(glacier(-4200,14300)>.45);
+  const backdrop=addWhitepeakBackdrop(new THREE.Scene(),context,terrain,glacier);
   assert.equal(backdrop.material.vertexColors,true);
   const colors=backdrop.geometry.attributes.color;
   assert.equal(colors.count,backdrop.geometry.attributes.position.count);
